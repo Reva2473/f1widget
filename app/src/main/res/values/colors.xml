@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="apex_bg_primary">#0B0B0E</color>
+    <color name="apex_surface_card">#16161A</color>
+    <color name="apex_surface_elevated">#1E1E24</color>
+    <color name="apex_surface_inner">#121216</color>
+    <color name="apex_border_subtle">#2A2A32</color>
+
+    <color name="apex_crimson">#E1251B</color>
+    <color name="apex_crimson_glow">#581313</color>
+
+    <color name="apex_text_primary">#F5F5F7</color>
+    <color name="apex_text_secondary">#9A9AA6</color>
+    <color name="apex_text_muted">#686873</color>
+
+    <!-- Sector / Timing Colors -->
+    <color name="apex_sector_purple">#B855FF</color>
+    <color name="apex_sector_green">#2CE580</color>
+    <color name="apex_sector_yellow">#F5C518</color>
+    <color name="apex_sector_inactive">#3A3A44</color>
+    <color name="apex_track_clear_bg">#103321</color>
+    <color name="apex_gold">#F5C518</color>
+    <color name="apex_silver">#C0C0C8</color>
+    <color name="apex_bronze">#D97B29</color>
+</resources>

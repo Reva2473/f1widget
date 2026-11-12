@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">ApexGrid</string>
+
+    <!-- Widget Titles and Descriptions -->
+    <string name="widget_next_race_title">Next Grand Prix</string>
+    <string name="widget_next_race_desc">Countdown, circuit outline and live timing readiness for the upcoming Grand Prix.</string>
+
+    <string name="widget_weekend_schedule_title">Weekend Schedule</string>
+    <string name="widget_weekend_schedule_desc">Full Friday to Sunday session schedule (FP1, FP2, Quali, Race) in local track time.</string>
+
+    <string name="widget_driver_standings_title">Driver Standings (WDC)</string>
+    <string name="widget_driver_standings_desc">Top World Drivers championship ranking, points, wins, and gaps.</string>
+
+    <string name="widget_constructor_standings_title">Constructor Standings (WCC)</string>
+    <string name="widget_constructor_standings_desc">World Constructors Championship standings, points breakdown, and gap to P1.</string>
+
+    <string name="widget_favorite_driver_title">Favourite Driver</string>
+    <string name="widget_favorite_driver_desc">Quick glance at your chosen driver: championship standing, points, and recent race results.</string>
+
+    <string name="widget_favorite_team_title">Favourite Team</string>
+    <string name="widget_favorite_team_desc">Constructor standing, driver breakdown, and season win count for your chosen team.</string>
+
+    <string name="widget_last_race_podium_title">Last Race Podium</string>
+    <string name="widget_last_race_podium_desc">P1-P3 podium finishers, winning gap, and tyre stint sequence from the most recent Grand Prix.</string>
+
+    <string name="widget_loading">Loading race data…</string>
+</resources>

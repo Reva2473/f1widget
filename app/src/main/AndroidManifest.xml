@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ApexGrid">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ApexGrid"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Glance AppWidget 1: Next Race Countdown & Circuit Outline -->
+        <receiver
+            android:name=".widget.NextRaceCountdownWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_next_race_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_next_race" />
+        </receiver>
+
+        <!-- Glance AppWidget 2: Weekend Session Schedule -->
+        <receiver
+            android:name=".widget.WeekendScheduleWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_weekend_schedule_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_weekend_schedule" />
+        </receiver>
+
+        <!-- Glance AppWidget 3: Driver Standings (WDC) -->
+        <receiver
+            android:name=".widget.DriverStandingsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_driver_standings_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_driver_standings" />
+        </receiver>
+
+        <!-- Glance AppWidget 4: Constructor Standings (WCC) -->
+        <receiver
+            android:name=".widget.ConstructorStandingsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_constructor_standings_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_constructor_standings" />
+        </receiver>
+
+        <!-- Glance AppWidget 5: Favorite Driver Card -->
+        <receiver
+            android:name=".widget.FavoriteDriverWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_favorite_driver_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_favorite_driver" />
+        </receiver>
+
+        <!-- Glance AppWidget 6: Favorite Team Garage -->
+        <receiver
+            android:name=".widget.FavoriteTeamWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_favorite_team_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_favorite_team" />
+        </receiver>
+
+        <!-- Glance AppWidget 7: Last Race Podium & Stints -->
+        <receiver
+            android:name=".widget.LastRacePodiumWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_last_race_podium_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_last_race_podium" />
+        </receiver>
+
+    </application>
+
+</manifest>
