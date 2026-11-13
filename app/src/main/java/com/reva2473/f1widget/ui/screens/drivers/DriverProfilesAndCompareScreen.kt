@@ -15,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
@@ -34,6 +36,8 @@ import androidx.compose.ui.window.Dialog
 import com.reva2473.f1widget.domain.model.DriverCareerComparison
 import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
+import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
+import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
 
@@ -86,7 +90,7 @@ fun DriverProfilesScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
                         )
@@ -95,7 +99,7 @@ fun DriverProfilesScreen(
                 actions = {
                     IconButton(onClick = onNavigateToCompare) {
                         Icon(
-                            imageVector = Icons.Default.CompareArrows,
+                            imageVector = Icons.AutoMirrored.Filled.CompareArrows,
                             contentDescription = "Compare Drivers",
                             tint = Color.White
                         )
@@ -212,11 +216,15 @@ fun DriverProfilesScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "📅",
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(end = 8.dp)
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                tint = P1TColors.AccentRed,
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .size(16.dp)
                             )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "View all years (1950-present)",
                                 color = P1TColors.AccentRed,
@@ -311,22 +319,12 @@ private fun DriverRowCard(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Driver Circle Portrait with team color ring
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(Color(driver.team.secondaryHex))
-                    .border(2.dp, Color(driver.team.colorHex), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = driver.code,
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
+            // Real Driver Portrait Avatar
+            DriverPortraitAvatar(
+                driverCodeOrName = driver.code,
+                teamColor = Color(driver.team.colorHex),
+                size = 46.dp
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -334,9 +332,12 @@ private fun DriverRowCard(
             Column(modifier = Modifier.weight(1f)) {
                 // Top subtitle / wins
                 val subtitle = when {
-                    driver.position == 1 -> "${driver.wins} wins"
-                    driver.gapToLeader != null -> "${driver.wins} wins · ${driver.gapToLeader.replace("-", "")} to P1"
-                    else -> "${driver.wins} wins"
+                    driver.position == 1 || driver.gapToLeader.isNullOrBlank() || driver.gapToLeader.equals("Leader", true) ->
+                        "${driver.wins} wins · Championship Leader"
+                    driver.gapToLeader.contains("to leader", ignoreCase = true) || driver.gapToLeader.contains("to P1", ignoreCase = true) ->
+                        "${driver.wins} wins · ${driver.gapToLeader.removePrefix("-")}"
+                    else ->
+                        "${driver.wins} wins · -${driver.gapToLeader.removePrefix("-")} to P1"
                 }
 
                 Text(
@@ -398,8 +399,8 @@ private fun DriverRowCard(
                             contentDescription = "Podium",
                             tint = trophyTint,
                             modifier = Modifier
-                                .size(16.dp)
                                 .padding(end = 3.dp)
+                                .size(16.dp)
                         )
                     }
 
@@ -536,7 +537,7 @@ fun CompareDriversScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
                         )
@@ -595,6 +596,7 @@ fun CompareDriversScreen(
         DriverPickerDialog(
             availableDrivers = availableDrivers,
             currentSelectedCode = if (slot == 1) driver1.code else driver2.code,
+            oppositeSelectedCode = if (slot == 1) driver2.code else driver1.code,
             onSelect = { selected ->
                 if (slot == 1) onSelectDriver1(selected) else onSelectDriver2(selected)
                 showDriverPickerForSlot = null
@@ -639,35 +641,53 @@ private fun SplitHeroBanner(
                         )
                     )
                     .clickable(onClick = onPickDriver1)
-                    .padding(14.dp),
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Column {
-                    Text(
-                        text = driver1.code,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DriverPortraitAvatar(
+                        driverCodeOrName = driver1.code,
+                        teamColor = Color(driver1.team.colorHex),
+                        size = 46.dp,
+                        useFullCutout = true
                     )
-                    Text(
-                        text = "${driver1.firstName} ${driver1.lastName.uppercase()}",
-                        color = Color.White,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = driver1.nationality,
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 11.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Tap to change ▾",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 9.sp
-                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
+                        Text(
+                            text = driver1.code,
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = "${driver1.firstName} ${driver1.lastName.uppercase()}",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = driver1.nationality,
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 10.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Tap to change ▾",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 9.sp
+                        )
+                    }
                 }
             }
 
@@ -685,35 +705,54 @@ private fun SplitHeroBanner(
                         )
                     )
                     .clickable(onClick = onPickDriver2)
-                    .padding(14.dp),
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = driver2.code,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                    Text(
-                        text = "${driver2.firstName} ${driver2.lastName.uppercase()}",
-                        color = Color.White,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.End
-                    )
-                    Text(
-                        text = driver2.nationality,
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 11.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "▾ Tap to change",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 9.sp
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp)
+                    ) {
+                        Text(
+                            text = driver2.code,
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = "${driver2.firstName} ${driver2.lastName.uppercase()}",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.End
+                        )
+                        Text(
+                            text = driver2.nationality,
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 10.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "▾ Tap to change",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 9.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    DriverPortraitAvatar(
+                        driverCodeOrName = driver2.code,
+                        teamColor = Color(driver2.team.colorHex),
+                        size = 46.dp,
+                        useFullCutout = true
                     )
                 }
             }
@@ -722,7 +761,7 @@ private fun SplitHeroBanner(
         // Center VS circle badge
         Box(
             modifier = Modifier
-                .size(38.dp)
+                .size(34.dp)
                 .align(Alignment.Center)
                 .clip(CircleShape)
                 .background(Color(0xFF0F0F14))
@@ -929,12 +968,26 @@ private fun ComparisonStatRow(
     color2: Color,
     lowerIsBetter: Boolean = false
 ) {
-    val total = if (val1 + val2 == 0.0) 1.0 else (val1 + val2)
-    val ratio1 = (val1 / total).toFloat().coerceIn(0.08f, 0.92f)
-    val ratio2 = (val2 / total).toFloat().coerceIn(0.08f, 0.92f)
+    val clean1 = if (val1.isNaN() || val1.isInfinite()) 0.0 else val1
+    val clean2 = if (val2.isNaN() || val2.isInfinite()) 0.0 else val2
+    val total = if (clean1 + clean2 == 0.0) 1.0 else (clean1 + clean2)
+    val rawRatio1 = (clean1 / total).toFloat()
+    val rawRatio2 = (clean2 / total).toFloat()
 
-    val is1Better = if (lowerIsBetter) val1 < val2 else val1 > val2
-    val is2Better = if (lowerIsBetter) val2 < val1 else val2 > val1
+    val ratio1 = if (lowerIsBetter) {
+        if (clean1 == clean2) 0.5f else (1f - rawRatio1).coerceIn(0.08f, 0.92f)
+    } else {
+        rawRatio1.coerceIn(0.08f, 0.92f)
+    }
+
+    val ratio2 = if (lowerIsBetter) {
+        if (clean1 == clean2) 0.5f else (1f - rawRatio2).coerceIn(0.08f, 0.92f)
+    } else {
+        rawRatio2.coerceIn(0.08f, 0.92f)
+    }
+
+    val is1Better = if (lowerIsBetter) clean1 < clean2 else clean1 > clean2
+    val is2Better = if (lowerIsBetter) clean2 < clean1 else clean2 > clean1
 
     Column(modifier = Modifier.padding(vertical = 5.dp)) {
         // Values and Label Row
@@ -1018,6 +1071,7 @@ private fun ComparisonStatRow(
 private fun DriverPickerDialog(
     availableDrivers: List<DriverCareerComparison>,
     currentSelectedCode: String,
+    oppositeSelectedCode: String? = null,
     onSelect: (DriverCareerComparison) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1063,15 +1117,23 @@ private fun DriverPickerDialog(
                 ) {
                     items(availableDrivers) { drv ->
                         val isCurrent = drv.code == currentSelectedCode
+                        val isOpposite = drv.code == oppositeSelectedCode
+                        val isEnabled = !isOpposite
+
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = if (isCurrent) Color(0xFF282834) else P1TColors.SurfaceElevated,
-                            border = if (isCurrent) {
-                                androidx.compose.foundation.BorderStroke(1.dp, Color(drv.team.colorHex))
-                            } else null,
+                            color = when {
+                                isCurrent -> Color(0xFF282834)
+                                isOpposite -> Color(0xFF14141A)
+                                else -> P1TColors.SurfaceElevated
+                            },
+                            border = when {
+                                isCurrent -> androidx.compose.foundation.BorderStroke(1.dp, Color(drv.team.colorHex))
+                                else -> null
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelect(drv) }
+                                .clickable(enabled = isEnabled) { onSelect(drv) }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -1083,25 +1145,25 @@ private fun DriverPickerDialog(
                                     modifier = Modifier
                                         .size(10.dp)
                                         .clip(CircleShape)
-                                        .background(Color(drv.team.colorHex))
+                                        .background(if (isOpposite) Color(drv.team.colorHex).copy(alpha = 0.35f) else Color(drv.team.colorHex))
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = drv.code,
-                                    color = Color.White,
+                                    color = if (isOpposite) Color.White.copy(alpha = 0.4f) else Color.White,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "${drv.firstName} ${drv.lastName}",
-                                    color = P1TColors.TextSecondary,
+                                    text = if (isOpposite) "${drv.firstName} ${drv.lastName} (Opposite slot)" else "${drv.firstName} ${drv.lastName}",
+                                    color = if (isOpposite) P1TColors.TextMuted else P1TColors.TextSecondary,
                                     fontSize = 13.sp,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
                                     text = drv.team.shortCode,
-                                    color = P1TColors.TextMuted,
+                                    color = if (isOpposite) P1TColors.TextMuted.copy(alpha = 0.5f) else P1TColors.TextMuted,
                                     fontSize = 11.sp
                                 )
                             }

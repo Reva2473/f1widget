@@ -2,6 +2,12 @@ package com.reva2473.f1widget.data.remote
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -69,6 +75,26 @@ interface OpenF1ApiService {
     suspend fun getWeather(
         @Query("session_key") sessionKey: String
     ): List<OpenF1WeatherDto>
+
+    companion object {
+        fun create(
+            client: OkHttpClient = OkHttpClient.Builder().build(),
+            baseUrl: String = "https://api.openf1.org/v1/"
+        ): OpenF1ApiService {
+            val json = Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                coerceInputValues = true
+            }
+            val contentType = "application/json".toMediaType()
+            return Retrofit.Builder()
+                .baseUrl(baseUrl)
+                .client(client)
+                .addConverterFactory(json.asConverterFactory(contentType))
+                .build()
+                .create(OpenF1ApiService::class.java)
+        }
+    }
 }
 
 // ============================================================================
@@ -77,8 +103,8 @@ interface OpenF1ApiService {
 
 @Serializable
 data class OpenF1SessionDto(
-    @SerialName("session_key") val sessionKey: Int,
-    @SerialName("session_name") val sessionName: String,
+    @SerialName("session_key") val sessionKey: Int = 0,
+    @SerialName("session_name") val sessionName: String = "",
     @SerialName("session_type") val sessionType: String? = null,
     @SerialName("date_start") val dateStart: String? = null,
     @SerialName("date_end") val dateEnd: String? = null,
@@ -95,25 +121,31 @@ data class OpenF1SessionDto(
 @Serializable
 data class OpenF1PositionDto(
     val date: String? = null,
-    @SerialName("driver_number") val driverNumber: Int,
+    @SerialName("driver_number") val driverNumber: Int = 0,
     @SerialName("meeting_key") val meetingKey: Int? = null,
-    val position: Int,
-    @SerialName("session_key") val sessionKey: Int
+    val position: Int = 0,
+    @SerialName("session_key") val sessionKey: Int = 0
 )
 
 @Serializable
 data class OpenF1IntervalDto(
     val date: String? = null,
-    @SerialName("driver_number") val driverNumber: Int,
-    val gap_to_leader: Double? = null,
-    val interval: Double? = null,
-    @SerialName("session_key") val sessionKey: Int
-)
+    @SerialName("driver_number") val driverNumber: Int = 0,
+    @SerialName("gap_to_leader") val gapToLeader: JsonElement? = null,
+    val interval: JsonElement? = null,
+    @SerialName("session_key") val sessionKey: Int = 0
+) {
+    val gapToLeaderDouble: Double?
+        get() = runCatching { gapToLeader?.toString()?.trim('"')?.toDoubleOrNull() }.getOrNull()
+
+    val intervalDouble: Double?
+        get() = runCatching { interval?.toString()?.trim('"')?.toDoubleOrNull() }.getOrNull()
+}
 
 @Serializable
 data class OpenF1LapDto(
     val date_start: String? = null,
-    @SerialName("driver_number") val driverNumber: Int,
+    @SerialName("driver_number") val driverNumber: Int = 0,
     @SerialName("duration_sector_1") val durationSector1: Double? = null,
     @SerialName("duration_sector_2") val durationSector2: Double? = null,
     @SerialName("duration_sector_3") val durationSector3: Double? = null,
@@ -121,42 +153,42 @@ data class OpenF1LapDto(
     @SerialName("i2_speed") val i2Speed: Int? = null,
     @SerialName("is_pit_out_lap") val isPitOutLap: Boolean? = null,
     @SerialName("lap_duration") val lapDuration: Double? = null,
-    @SerialName("lap_number") val lapNumber: Int,
-    @SerialName("session_key") val sessionKey: Int,
+    @SerialName("lap_number") val lapNumber: Int = 0,
+    @SerialName("session_key") val sessionKey: Int = 0,
     @SerialName("st_speed") val stSpeed: Int? = null
 )
 
 @Serializable
 data class OpenF1StintDto(
-    @SerialName("compound") val compound: String, // SOFT, MEDIUM, HARD, INTERMEDIATE, WET
-    @SerialName("driver_number") val driverNumber: Int,
+    @SerialName("compound") val compound: String = "MEDIUM",
+    @SerialName("driver_number") val driverNumber: Int = 0,
     @SerialName("lap_end") val lapEnd: Int? = null,
-    @SerialName("lap_start") val lapStart: Int,
-    @SerialName("session_key") val sessionKey: Int,
-    @SerialName("stint_number") val stintNumber: Int,
+    @SerialName("lap_start") val lapStart: Int = 0,
+    @SerialName("session_key") val sessionKey: Int = 0,
+    @SerialName("stint_number") val stintNumber: Int = 1,
     @SerialName("tyre_age_at_start") val tyreAgeAtStart: Int? = null
 )
 
 @Serializable
 data class OpenF1TeamRadioDto(
-    val date: String,
-    @SerialName("driver_number") val driverNumber: Int,
+    val date: String = "",
+    @SerialName("driver_number") val driverNumber: Int = 0,
     @SerialName("recording_url") val recordingUrl: String? = null,
-    @SerialName("session_key") val sessionKey: Int,
+    @SerialName("session_key") val sessionKey: Int = 0,
     val transcript: String? = null
 )
 
 @Serializable
 data class OpenF1RaceControlDto(
-    val category: String? = null, // "Flag", "SafetyCar", "CarEvent", etc.
-    val date: String,
+    val category: String? = null,
+    val date: String = "",
     @SerialName("driver_number") val driverNumber: Int? = null,
-    val flag: String? = null, // "GREEN", "YELLOW", "RED", "CHEQUERED", "CLEAR"
+    val flag: String? = null,
     val lap_number: Int? = null,
-    val message: String,
+    val message: String = "",
     val scope: String? = null,
     val sector: Int? = null,
-    @SerialName("session_key") val sessionKey: Int
+    @SerialName("session_key") val sessionKey: Int = 0
 )
 
 @Serializable
@@ -172,13 +204,13 @@ data class OpenF1OvertakeDto(
 
 @Serializable
 data class OpenF1WeatherDto(
-    @SerialName("air_temperature") val airTemperature: Double,
-    val date: String,
-    val humidity: Double,
-    val pressure: Double,
-    val rainfall: Int,
-    @SerialName("session_key") val sessionKey: Int,
-    @SerialName("track_temperature") val trackTemperature: Double,
-    @SerialName("wind_direction") val windDirection: Int,
-    @SerialName("wind_speed") val windSpeed: Double
+    @SerialName("air_temperature") val airTemperature: Double = 0.0,
+    val date: String = "",
+    val humidity: Double = 0.0,
+    val pressure: Double = 0.0,
+    val rainfall: Double = 0.0,
+    @SerialName("session_key") val sessionKey: Int = 0,
+    @SerialName("track_temperature") val trackTemperature: Double = 0.0,
+    @SerialName("wind_direction") val windDirection: Double = 0.0,
+    @SerialName("wind_speed") val windSpeed: Double = 0.0
 )

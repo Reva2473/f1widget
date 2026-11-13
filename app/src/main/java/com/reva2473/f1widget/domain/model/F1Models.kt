@@ -24,10 +24,28 @@ enum class F1TeamId(
 
     companion object {
         fun fromName(name: String): F1TeamId {
-            val lower = name.lowercase()
-            return entries.firstOrNull {
-                lower.contains(it.displayName.lowercase()) || lower.contains(it.constructorId)
-            } ?: FERRARI
+            val lower = name.lowercase().trim()
+            return when {
+                lower.contains("red bull") || lower.contains("red_bull") || lower == "rbr" -> RED_BULL
+                lower.contains("racing bulls") || lower.contains("vcarb") || lower.contains("alphatauri") ||
+                    lower.contains("alpha tauri") || lower.contains("toro rosso") || lower == "rb" ||
+                    lower.contains("rb f1") || lower.contains("racing bull") ||
+                    lower.contains("cash app") || Regex("""\brb\b""").containsMatchIn(lower) -> RACING_BULLS
+                lower.contains("mercedes") || lower.contains("brawn") -> MERCEDES
+                lower.contains("ferrari") -> FERRARI
+                lower.contains("mclaren") -> MCLAREN
+                lower.contains("aston martin") || lower.contains("aston_martin") || lower.contains("force india") ||
+                    lower.contains("racing point") || lower.contains("jordan") || lower.contains("lotus") -> ASTON_MARTIN
+                lower.contains("alpine") || lower.contains("renault") || lower.contains("benetton") || lower.contains("enstone") -> ALPINE
+                lower.contains("williams") || lower.contains("tyrrell") -> WILLIAMS
+                lower.contains("haas") -> HAAS
+                lower.contains("sauber") || lower.contains("audi") || lower.contains("alfa romeo") || lower.contains("alfa") -> AUDI_SAUBER
+                lower.contains("cadillac") || lower.contains("andretti") -> CADILLAC
+                else -> entries.firstOrNull {
+                    lower.contains(it.displayName.lowercase()) ||
+                        (it.constructorId != "rb" && lower.contains(it.constructorId))
+                } ?: FERRARI
+            }
         }
     }
 }
@@ -105,6 +123,14 @@ data class ConstructorDriverPoints(
 )
 
 @Serializable
+data class TeamRaceFormColumn(
+    val grandPrixName: String = "",
+    val positionText: String = "",
+    val pointsText: String = "",
+    val position: Int = 1
+)
+
+@Serializable
 data class ConstructorStanding(
     val position: Int,
     val team: F1TeamId,
@@ -113,7 +139,8 @@ data class ConstructorStanding(
     val gapToP1: String?,       // e.g. "160 to P1"
     val gapToPrev: String?,     // e.g. "72 to P2"
     val drivers: List<ConstructorDriverPoints>,
-    val seasonWins: List<ConstructorWinItem>
+    val seasonWins: List<ConstructorWinItem>,
+    val recentTeamForm: List<TeamRaceFormColumn> = emptyList()
 )
 
 @Serializable
@@ -133,10 +160,10 @@ data class RaceDriverResult(
     val team: F1TeamId,
     val finishTimeOrGap: String, // e.g. "2:06:54.430" or "+19.477"
     val points: Int,
-    val qualifyingPosition: String = "P1",
-    val qualifyingTime: String = "1:23.445",
-    val fastestLapPosition: String = "P1",
-    val fastestLapTime: String = "1:26.993",
+    val qualifyingPosition: String = "",
+    val qualifyingTime: String = "",
+    val fastestLapPosition: String = "",
+    val fastestLapTime: String = "",
     val totalLaps: Int = 58,
     val stints: List<TyreStint> = emptyList()
 )
@@ -164,6 +191,7 @@ data class RaceWeekend(
     val speedTrapNormalizedX: Float = 0.24f,
     val speedTrapNormalizedY: Float = 0.27f,
     val circuitType: String = "SEPANG", // "SEPANG", "INTERLAGOS", "YAS_MARINA", "BAHRAIN"
+    val circuitId: String = "SEPANG",
     val sessions: List<SessionScheduleItem>,
     val results: List<RaceDriverResult> = emptyList(),
     val isSprintWeekend: Boolean = false
@@ -202,6 +230,7 @@ data class LiveDriverTiming(
     val intervalToAhead: String,    // e.g. "Leader" or "+0.118"
     val isOverallBest: Boolean = false,
     val isInPit: Boolean = false,
+    val isOutLap: Boolean = false,
     val tyreCompound: TyreCompound = TyreCompound.SOFT,
     val tyreAgeLaps: Int = 2,
     val sector1Status: SectorStatus = SectorStatus.NORMAL,
@@ -267,6 +296,7 @@ data class LiveSessionState(
     val sector1LengthKm: String = "1.4 km",
     val sector2LengthKm: String = "1.8 km",
     val sector3LengthKm: String = "2.3 km",
+    val circuitId: String = "SEPANG",
     val drivers: List<LiveDriverTiming>,
     val latestRadio: TeamRadioClip,
     val radioClips: List<TeamRadioClip>,
@@ -280,7 +310,7 @@ enum class WidgetStyleType(val title: String, val subtitle: String, val sizeLabe
     NEXT_GP_COUNTDOWN("Next Grand Prix & Circuit", "Countdown, circuit outline & session schedule", "4×2 Medium"),
     WEEKEND_SESSIONS("Weekend Session Schedule", "FP1, FP2, FP3, Qualifying & Race in local time", "4×2 Medium"),
     WDC_STANDINGS("Driver Standings (WDC)", "Top 5 championship contenders with team bars", "4×3 Large"),
-    WCC_STANDINGS("Constructor Standings (WCC)", "Top constructors with points & gap to P1", "4×2 Medium"),
+    WCC_STANDINGS("Constructor Standings (WCC)", "Top constructors with points & gap to P1", "4×3 Large"),
     FAVORITE_DRIVER("Favourite Driver Card", "Live position, points, wins & recent 3-race form", "2×2 Small"),
     FAVORITE_TEAM("Favourite Team Garage", "Constructor points, drivers & season wins", "2×2 Small"),
     LAST_RACE_PODIUM("Last Race Podium & Stints", "P1–P3 finishers, winning time & fastest lap", "4×2 Medium")

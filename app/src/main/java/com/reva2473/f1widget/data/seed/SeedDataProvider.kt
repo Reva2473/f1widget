@@ -16,6 +16,7 @@ import com.reva2473.f1widget.domain.model.RaceRecentResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
 import com.reva2473.f1widget.domain.model.SectorStatus
 import com.reva2473.f1widget.domain.model.SessionScheduleItem
+import com.reva2473.f1widget.domain.model.TeamRaceFormColumn
 import com.reva2473.f1widget.domain.model.TeamRadioClip
 import com.reva2473.f1widget.domain.model.TyreCompound
 import com.reva2473.f1widget.domain.model.TyreStint
@@ -131,36 +132,14 @@ object SeedDataProvider {
             circuitType = "INTERLAGOS",
             sessions = listOf(
                 SessionScheduleItem(
-                    shortName = "Race",
-                    fullName = "Race",
-                    dayOfWeek = "Sun",
-                    fullDayName = "Sunday",
-                    dateDay = "08",
+                    shortName = "FP1",
+                    fullName = "Free Practice 1",
+                    dayOfWeek = "Fri",
+                    fullDayName = "Friday",
+                    dateDay = "06",
                     dateMonth = "Nov",
-                    localTime = "17:00",
-                    countdownBadge = "Race in 36 days",
-                    isRace = true
-                ),
-                SessionScheduleItem(
-                    shortName = "Qualifying",
-                    fullName = "Qualifying",
-                    dayOfWeek = "Sat",
-                    fullDayName = "Saturday",
-                    dateDay = "07",
-                    dateMonth = "Nov",
-                    localTime = "18:00",
-                    countdownBadge = "35 days",
-                    isRace = false
-                ),
-                SessionScheduleItem(
-                    shortName = "FP3",
-                    fullName = "Free Practice 3",
-                    dayOfWeek = "Sat",
-                    fullDayName = "Saturday",
-                    dateDay = "07",
-                    dateMonth = "Nov",
-                    localTime = "14:30",
-                    countdownBadge = "35 days",
+                    localTime = "15:30",
+                    countdownBadge = "34 days",
                     isRace = false
                 ),
                 SessionScheduleItem(
@@ -175,15 +154,37 @@ object SeedDataProvider {
                     isRace = false
                 ),
                 SessionScheduleItem(
-                    shortName = "FP1",
-                    fullName = "Free Practice 1",
-                    dayOfWeek = "Fri",
-                    fullDayName = "Friday",
-                    dateDay = "06",
+                    shortName = "FP3",
+                    fullName = "Free Practice 3",
+                    dayOfWeek = "Sat",
+                    fullDayName = "Saturday",
+                    dateDay = "07",
                     dateMonth = "Nov",
-                    localTime = "15:30",
-                    countdownBadge = "34 days",
+                    localTime = "14:30",
+                    countdownBadge = "35 days",
                     isRace = false
+                ),
+                SessionScheduleItem(
+                    shortName = "Quali",
+                    fullName = "Qualifying",
+                    dayOfWeek = "Sat",
+                    fullDayName = "Saturday",
+                    dateDay = "07",
+                    dateMonth = "Nov",
+                    localTime = "18:00",
+                    countdownBadge = "35 days",
+                    isRace = false
+                ),
+                SessionScheduleItem(
+                    shortName = "Race",
+                    fullName = "Race",
+                    dayOfWeek = "Sun",
+                    fullDayName = "Sunday",
+                    dateDay = "08",
+                    dateMonth = "Nov",
+                    localTime = "17:00",
+                    countdownBadge = "Race in 36 days",
+                    isRace = true
                 )
             ),
             results = emptyList(),
@@ -332,6 +333,8 @@ object SeedDataProvider {
                     points = 6,
                     qualifyingPosition = "P3",
                     qualifyingTime = "1:24.111",
+                    fastestLapPosition = "P7",
+                    fastestLapTime = "1:22.500",
                     totalLaps = 69
                 ),
                 RaceDriverResult(
@@ -343,6 +346,8 @@ object SeedDataProvider {
                     points = 4,
                     qualifyingPosition = "P8",
                     qualifyingTime = "1:24.686",
+                    fastestLapPosition = "P5",
+                    fastestLapTime = "1:21.900",
                     totalLaps = 69
                 ),
                 RaceDriverResult(
@@ -354,6 +359,8 @@ object SeedDataProvider {
                     points = 2,
                     qualifyingPosition = "P5",
                     qualifyingTime = "1:24.484",
+                    fastestLapPosition = "P9",
+                    fastestLapTime = "1:22.900",
                     totalLaps = 69
                 ),
                 RaceDriverResult(
@@ -365,6 +372,8 @@ object SeedDataProvider {
                     points = 1,
                     qualifyingPosition = "P14",
                     qualifyingTime = "1:26.110",
+                    fastestLapPosition = "P8",
+                    fastestLapTime = "1:22.800",
                     totalLaps = 69
                 )
             ),
@@ -578,11 +587,11 @@ object SeedDataProvider {
                 racesCount = 18,
                 gapToLeader = "-116 to leader",
                 gapToPrev = "13 pts to P3",
-                last3Summary = "P4, P2, P4 (40 pts)",
+                last3Summary = "P2, P3, P4 (45 pts)",
                 recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P4", "(12pts)", 4),
                     RaceRecentResult("Spanish Grand Prix", "P2", "(18pts)", 2),
-                    RaceRecentResult("Italian Grand Prix", "P4", "(12pts)", 4)
+                    RaceRecentResult("Italian Grand Prix", "P3", "(15pts)", 3),
+                    RaceRecentResult("Azerbaijan Grand Prix", "P4", "(12pts)", 4)
                 )
             ),
             DriverStanding(
@@ -972,6 +981,13 @@ object SeedDataProvider {
         )
     }
 
+    fun getHistoricalDriverStandings(season: Int): List<DriverStanding> {
+        return when (season) {
+            2026 -> getDriverStandings2026()
+            else -> emptyList()
+        }
+    }
+
     // ========================================================================
     // 6. Constructor Standings 2026
     // Matches constructor-standings-1080.webp
@@ -1001,6 +1017,11 @@ object SeedDataProvider {
                     ConstructorWinItem("Italian Grand Prix", "Andrea Kimi Antonelli"),
                     ConstructorWinItem("Spanish Grand Prix", "Andrea Kimi Antonelli"),
                     ConstructorWinItem("Azerbaijan Grand Prix", "George Russell")
+                ),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P1", "25pts", 1),
+                    TeamRaceFormColumn("Spanish GP", "P1", "25pts", 1),
+                    TeamRaceFormColumn("Azerbaijan GP", "P1", "25pts", 1)
                 )
             ),
             ConstructorStanding(
@@ -1017,6 +1038,11 @@ object SeedDataProvider {
                 seasonWins = listOf(
                     ConstructorWinItem("Bahrain Grand Prix", "Charles Leclerc"),
                     ConstructorWinItem("British Grand Prix", "Lewis Hamilton")
+                ),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P2", "18pts", 2),
+                    TeamRaceFormColumn("Spanish GP", "P3", "15pts", 3),
+                    TeamRaceFormColumn("Azerbaijan GP", "P2", "18pts", 2)
                 )
             ),
             ConstructorStanding(
@@ -1033,6 +1059,11 @@ object SeedDataProvider {
                 seasonWins = listOf(
                     ConstructorWinItem("Hungarian Grand Prix", "Lando Norris"),
                     ConstructorWinItem("Dutch Grand Prix", "Lando Norris")
+                ),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P3", "15pts", 3),
+                    TeamRaceFormColumn("Spanish GP", "P2", "18pts", 2),
+                    TeamRaceFormColumn("Azerbaijan GP", "P4", "12pts", 4)
                 )
             ),
             ConstructorStanding(
@@ -1046,7 +1077,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Max Verstappen", 163.0),
                     ConstructorDriverPoints("Isack Hadjar", 86.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P4", "12pts", 4),
+                    TeamRaceFormColumn("Spanish GP", "P4", "12pts", 4),
+                    TeamRaceFormColumn("Azerbaijan GP", "P3", "15pts", 3)
+                )
             ),
             ConstructorStanding(
                 position = 5,
@@ -1059,7 +1095,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Fernando Alonso", 62.0),
                     ConstructorDriverPoints("Lance Stroll", 24.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P6", "8pts", 6),
+                    TeamRaceFormColumn("Spanish GP", "P7", "6pts", 7),
+                    TeamRaceFormColumn("Azerbaijan GP", "P5", "10pts", 5)
+                )
             ),
             ConstructorStanding(
                 position = 6,
@@ -1072,7 +1113,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Pierre Gasly", 48.0),
                     ConstructorDriverPoints("Franco Colapinto", 16.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P8", "4pts", 8),
+                    TeamRaceFormColumn("Spanish GP", "P8", "4pts", 8),
+                    TeamRaceFormColumn("Azerbaijan GP", "P7", "6pts", 7)
+                )
             ),
             ConstructorStanding(
                 position = 7,
@@ -1085,7 +1131,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Alex Albon", 32.0),
                     ConstructorDriverPoints("Carlos Sainz", 30.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P7", "6pts", 7),
+                    TeamRaceFormColumn("Spanish GP", "P6", "8pts", 6),
+                    TeamRaceFormColumn("Azerbaijan GP", "P8", "4pts", 8)
+                )
             ),
             ConstructorStanding(
                 position = 8,
@@ -1098,7 +1149,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Esteban Ocon", 36.0),
                     ConstructorDriverPoints("Oliver Bearman", 12.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P9", "2pts", 9),
+                    TeamRaceFormColumn("Spanish GP", "P9", "2pts", 9),
+                    TeamRaceFormColumn("Azerbaijan GP", "P9", "2pts", 9)
+                )
             ),
             ConstructorStanding(
                 position = 9,
@@ -1111,7 +1167,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Liam Lawson", 20.0),
                     ConstructorDriverPoints("Arvid Lindblad", 2.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P10", "1pt", 10),
+                    TeamRaceFormColumn("Spanish GP", "P11", "0pts", 11),
+                    TeamRaceFormColumn("Azerbaijan GP", "P10", "1pt", 10)
+                )
             ),
             ConstructorStanding(
                 position = 10,
@@ -1124,7 +1185,12 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Nico Hülkenberg", 8.0),
                     ConstructorDriverPoints("Gabriel Bortoleto", 1.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P11", "0pts", 11),
+                    TeamRaceFormColumn("Spanish GP", "P10", "1pt", 10),
+                    TeamRaceFormColumn("Azerbaijan GP", "P12", "0pts", 12)
+                )
             ),
             ConstructorStanding(
                 position = 11,
@@ -1137,9 +1203,21 @@ object SeedDataProvider {
                     ConstructorDriverPoints("Valtteri Bottas", 4.0),
                     ConstructorDriverPoints("Sergio Perez", 0.0)
                 ),
-                seasonWins = emptyList()
+                seasonWins = emptyList(),
+                recentTeamForm = listOf(
+                    TeamRaceFormColumn("Italian GP", "P12", "0pts", 12),
+                    TeamRaceFormColumn("Spanish GP", "P12", "0pts", 12),
+                    TeamRaceFormColumn("Azerbaijan GP", "P11", "0pts", 11)
+                )
             )
         )
+    }
+
+    fun getHistoricalConstructorStandings(season: Int): List<ConstructorStanding> {
+        return when (season) {
+            2026 -> getConstructorStandings2026()
+            else -> emptyList()
+        }
     }
 
     // ========================================================================
@@ -1361,10 +1439,453 @@ object SeedDataProvider {
     }
 
     // ========================================================================
-    // 8. Live Session State (Qualifying · Q1, Bahrain Sepang)
-    // Matches live-timing-1080.webp and live-driver-720.webp
+    // 8. Live Session State
+    // Default: São Paulo Grand Prix (FP1)
+    // Archive/Test: Bahrain Grand Prix (Qualifying Q1)
     // ========================================================================
-    fun getLiveSessionState(): LiveSessionState {
+    fun getLiveSessionState(sessionKey: String = "SAO_PAULO"): LiveSessionState {
+        return if (sessionKey.equals("BAHRAIN", ignoreCase = true) || sessionKey.equals("Q1", ignoreCase = true)) {
+            getBahrainLiveSessionState()
+        } else {
+            getSaoPauloLiveSessionState()
+        }
+    }
+
+    fun getBahrainQ1LiveSessionState(): LiveSessionState = getBahrainLiveSessionState()
+
+    fun getSaoPauloLiveSessionState(): LiveSessionState {
+        val radio1 = TeamRadioClip(
+            id = "r1",
+            driverCode = "SLA",
+            driverName = "Freddie Slater",
+            team = F1TeamId.AUDI_SAUBER,
+            timestamp = "15:43:57",
+            transcript = "Front grip is coming in nicely through Sector 2, balance feels good.",
+            durationSeconds = 6
+        )
+        val timingTower = listOf(
+                LiveDriverTiming(
+                    position = 1,
+                    code = "VER",
+                    fullName = "Max Verstappen",
+                    team = F1TeamId.RED_BULL,
+                    bestLapTime = "1:12.959",
+                    lastLapTime = "1:12.959",
+                    gapToLeader = "Leader",
+                    intervalToAhead = "Leader",
+                    isOverallBest = true,
+                    isInPit = true,
+                    isOutLap = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 6,
+                    sector1Status = SectorStatus.PERSONAL_BEST,
+                    sector2Status = SectorStatus.INACTIVE,
+                    sector3Status = SectorStatus.INACTIVE,
+                    sector1Time = "18.421",
+                    sector2Time = "35.120",
+                    sector3Time = "19.418",
+                    trackProgress = 0.0f
+                ),
+                LiveDriverTiming(
+                    position = 2,
+                    code = "ANT",
+                    fullName = "Andrea Kimi Antonelli",
+                    team = F1TeamId.MERCEDES,
+                    bestLapTime = "1:13.044",
+                    lastLapTime = "1:13.044",
+                    gapToLeader = "+0.085",
+                    intervalToAhead = "+0.085",
+                    isOverallBest = false,
+                    isInPit = false,
+                    isOutLap = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 8,
+                    sector1Status = SectorStatus.OVERALL_BEST,
+                    sector2Status = SectorStatus.PERSONAL_BEST,
+                    sector3Status = SectorStatus.NORMAL,
+                    sector1Time = "18.390",
+                    sector2Time = "35.210",
+                    sector3Time = "19.444",
+                    trackProgress = 0.65f
+                ),
+                LiveDriverTiming(
+                    position = 3,
+                    code = "HAM",
+                    fullName = "Lewis Hamilton",
+                    team = F1TeamId.FERRARI,
+                    bestLapTime = "1:13.298",
+                    lastLapTime = "1:13.298",
+                    gapToLeader = "+0.339",
+                    intervalToAhead = "+0.254",
+                    isOverallBest = false,
+                    isInPit = false,
+                    isOutLap = true,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 7,
+                    sector1Status = SectorStatus.NORMAL,
+                    sector2Status = SectorStatus.NORMAL,
+                    sector3Status = SectorStatus.NORMAL,
+                    sector1Time = "18.510",
+                    sector2Time = "35.320",
+                    sector3Time = "19.468",
+                    trackProgress = 0.15f
+                ),
+                LiveDriverTiming(
+                    position = 4,
+                    code = "NOR",
+                    fullName = "Lando Norris",
+                    team = F1TeamId.MCLAREN,
+                    bestLapTime = "1:13.420",
+                    lastLapTime = "1:13.420",
+                    gapToLeader = "+0.461",
+                    intervalToAhead = "+0.122",
+                    isOverallBest = false,
+                    isInPit = false,
+                    isOutLap = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 8,
+                    sector1Status = SectorStatus.NORMAL,
+                    sector2Status = SectorStatus.NORMAL,
+                    sector3Status = SectorStatus.NORMAL,
+                    sector1Time = "18.550",
+                    sector2Time = "35.390",
+                    sector3Time = "19.480",
+                    trackProgress = 0.45f
+                ),
+                LiveDriverTiming(
+                    position = 5,
+                    code = "RUS",
+                    fullName = "George Russell",
+                    team = F1TeamId.MERCEDES,
+                    bestLapTime = "1:13.617",
+                    lastLapTime = "1:13.617",
+                    gapToLeader = "+0.658",
+                    intervalToAhead = "+0.197",
+                    isOverallBest = false,
+                    isInPit = false,
+                    isOutLap = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 7,
+                    sector1Status = SectorStatus.NORMAL,
+                    sector2Status = SectorStatus.NORMAL,
+                    sector3Status = SectorStatus.NORMAL,
+                    sector1Time = "18.610",
+                    sector2Time = "35.480",
+                    sector3Time = "19.527",
+                    trackProgress = 0.55f
+                ),
+                LiveDriverTiming(
+                    position = 6,
+                    code = "HAD",
+                    fullName = "Isack Hadjar",
+                    team = F1TeamId.RED_BULL,
+                    bestLapTime = "1:13.750",
+                    lastLapTime = "1:13.750",
+                    gapToLeader = "+0.791",
+                    intervalToAhead = "+0.133",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 5,
+                    trackProgress = 0.72f
+                ),
+                LiveDriverTiming(
+                    position = 7,
+                    code = "BOR",
+                    fullName = "Gabriel Bortoleto",
+                    team = F1TeamId.AUDI_SAUBER,
+                    bestLapTime = "1:13.880",
+                    lastLapTime = "1:13.880",
+                    gapToLeader = "+0.921",
+                    intervalToAhead = "+0.130",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.SOFT,
+                    tyreAgeLaps = 4,
+                    trackProgress = 0.81f
+                ),
+                LiveDriverTiming(
+                    position = 8,
+                    code = "BRO",
+                    fullName = "Luke Browning",
+                    team = F1TeamId.WILLIAMS,
+                    bestLapTime = "1:13.990",
+                    lastLapTime = "1:13.990",
+                    gapToLeader = "+1.031",
+                    intervalToAhead = "+0.110",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 6,
+                    trackProgress = 0.38f
+                ),
+                LiveDriverTiming(
+                    position = 9,
+                    code = "HER",
+                    fullName = "Colton Herta",
+                    team = F1TeamId.CADILLAC,
+                    bestLapTime = "1:14.050",
+                    lastLapTime = "1:14.050",
+                    gapToLeader = "+1.091",
+                    intervalToAhead = "+0.060",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 5,
+                    trackProgress = 0.92f
+                ),
+                LiveDriverTiming(
+                    position = 10,
+                    code = "ALO",
+                    fullName = "Fernando Alonso",
+                    team = F1TeamId.ASTON_MARTIN,
+                    bestLapTime = "1:14.120",
+                    lastLapTime = "1:14.120",
+                    gapToLeader = "+1.161",
+                    intervalToAhead = "+0.070",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 9,
+                    trackProgress = 0.40f
+                ),
+                LiveDriverTiming(
+                    position = 11,
+                    code = "LIN",
+                    fullName = "Arvid Lindblad",
+                    team = F1TeamId.RACING_BULLS,
+                    bestLapTime = "1:14.190",
+                    lastLapTime = "1:14.190",
+                    gapToLeader = "+1.231",
+                    intervalToAhead = "+0.070",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 5,
+                    trackProgress = 0.84f
+                ),
+                LiveDriverTiming(
+                    position = 12,
+                    code = "OCO",
+                    fullName = "Esteban Ocon",
+                    team = F1TeamId.HAAS,
+                    bestLapTime = "1:14.280",
+                    lastLapTime = "1:14.280",
+                    gapToLeader = "+1.321",
+                    intervalToAhead = "+0.090",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 7,
+                    trackProgress = 0.28f
+                ),
+                LiveDriverTiming(
+                    position = 13,
+                    code = "STR",
+                    fullName = "Lance Stroll",
+                    team = F1TeamId.ASTON_MARTIN,
+                    bestLapTime = "1:14.340",
+                    lastLapTime = "1:14.340",
+                    gapToLeader = "+1.381",
+                    intervalToAhead = "+0.060",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 6,
+                    trackProgress = 0.48f
+                ),
+                LiveDriverTiming(
+                    position = 14,
+                    code = "LAW",
+                    fullName = "Liam Lawson",
+                    team = F1TeamId.RACING_BULLS,
+                    bestLapTime = "1:14.410",
+                    lastLapTime = "1:14.410",
+                    gapToLeader = "+1.451",
+                    intervalToAhead = "+0.070",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 8,
+                    trackProgress = 0.60f
+                ),
+                LiveDriverTiming(
+                    position = 15,
+                    code = "COL",
+                    fullName = "Franco Colapinto",
+                    team = F1TeamId.ALPINE,
+                    bestLapTime = "1:14.490",
+                    lastLapTime = "1:14.490",
+                    gapToLeader = "+1.531",
+                    intervalToAhead = "+0.080",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.SOFT,
+                    tyreAgeLaps = 4,
+                    trackProgress = 0.76f
+                ),
+                LiveDriverTiming(
+                    position = 16,
+                    code = "BEA",
+                    fullName = "Oliver Bearman",
+                    team = F1TeamId.HAAS,
+                    bestLapTime = "1:14.560",
+                    lastLapTime = "1:14.560",
+                    gapToLeader = "+1.601",
+                    intervalToAhead = "+0.070",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 7,
+                    trackProgress = 0.32f
+                ),
+                LiveDriverTiming(
+                    position = 17,
+                    code = "ALB",
+                    fullName = "Alex Albon",
+                    team = F1TeamId.WILLIAMS,
+                    bestLapTime = "1:14.620",
+                    lastLapTime = "1:14.620",
+                    gapToLeader = "+1.661",
+                    intervalToAhead = "+0.060",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 8,
+                    trackProgress = 0.35f
+                ),
+                LiveDriverTiming(
+                    position = 18,
+                    code = "CAM",
+                    fullName = "Rafael Camara",
+                    team = F1TeamId.CADILLAC,
+                    bestLapTime = "1:14.710",
+                    lastLapTime = "1:14.710",
+                    gapToLeader = "+1.751",
+                    intervalToAhead = "+0.090",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 5,
+                    trackProgress = 0.95f
+                ),
+                LiveDriverTiming(
+                    position = 19,
+                    code = "LEC",
+                    fullName = "Charles Leclerc",
+                    team = F1TeamId.FERRARI,
+                    bestLapTime = "1:14.790",
+                    lastLapTime = "1:14.790",
+                    gapToLeader = "+1.831",
+                    intervalToAhead = "+0.080",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.MEDIUM,
+                    tyreAgeLaps = 6,
+                    trackProgress = 0.22f
+                ),
+                LiveDriverTiming(
+                    position = 20,
+                    code = "PIA",
+                    fullName = "Oscar Piastri",
+                    team = F1TeamId.MCLAREN,
+                    bestLapTime = "1:14.850",
+                    lastLapTime = "1:14.850",
+                    gapToLeader = "+1.891",
+                    intervalToAhead = "+0.060",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 9,
+                    trackProgress = 0.50f
+                ),
+                LiveDriverTiming(
+                    position = 21,
+                    code = "GAS",
+                    fullName = "Pierre Gasly",
+                    team = F1TeamId.ALPINE,
+                    bestLapTime = "1:14.920",
+                    lastLapTime = "1:14.920",
+                    gapToLeader = "+1.961",
+                    intervalToAhead = "+0.070",
+                    isOverallBest = false,
+                    isInPit = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 7,
+                    trackProgress = 0.70f
+                ),
+                LiveDriverTiming(
+                    position = 22,
+                    code = "SAI",
+                    fullName = "Carlos Sainz",
+                    team = F1TeamId.WILLIAMS,
+                    bestLapTime = "1:15.010",
+                    lastLapTime = "1:15.010",
+                    gapToLeader = "+2.051",
+                    intervalToAhead = "+0.090",
+                    isOverallBest = false,
+                    isInPit = true,
+                    isOutLap = false,
+                    tyreCompound = TyreCompound.HARD,
+                    tyreAgeLaps = 8,
+                    trackProgress = 0.0f
+                )
+        )
+        return LiveSessionState(
+            grandPrixName = "São Paulo Grand Prix",
+            sessionName = "FP1",
+            shortSessionCode = "FP1",
+            timeRemaining = "38:29",
+            bestLapDriverCode = "VER",
+            bestLapTime = "1:12.959",
+            carsOnTrack = timingTower.count { !it.isInPit },
+            trackStatusText = "Track Clear",
+            sector1LengthKm = "T1-T3  1.2 km",
+            sector2LengthKm = "T4-T11  1.9 km",
+            sector3LengthKm = "T12-T15  1.1 km",
+            circuitId = "INTERLAGOS",
+            drivers = timingTower,
+            latestRadio = radio1,
+            radioClips = listOf(
+                radio1,
+                TeamRadioClip(
+                    id = "r2",
+                    driverCode = "VER",
+                    driverName = "Max Verstappen",
+                    team = F1TeamId.RED_BULL,
+                    timestamp = "15:41:20",
+                    transcript = "Box this lap, balance is fine for first run.",
+                    durationSeconds = 4
+                ),
+                TeamRadioClip(
+                    id = "r3",
+                    driverCode = "HAM",
+                    driverName = "Lewis Hamilton",
+                    team = F1TeamId.FERRARI,
+                    timestamp = "15:39:05",
+                    transcript = "Starting our push lap now.",
+                    durationSeconds = 5
+                )
+            ),
+            raceControlMessages = listOf(
+                RaceControlMessage("rc_1", "SESSION STARTED", "15:30:00", "INFO"),
+                RaceControlMessage("rc_2", "GREEN FLAG", "15:30:00", "FLAG"),
+                RaceControlMessage("rc_3", "TRACK CLEAR", "15:32:10", "INFO")
+            ),
+            overtakes = emptyList(),
+            weather = WeatherSnapshot(
+                trackTempC = 41.2,
+                airTempC = 26.5,
+                humidityPercent = 62,
+                windSpeedKmh = 14.8,
+                windDirection = "SSE",
+                rainfallPercent = 0,
+                pressureMbar = 1018.0
+            )
+        )
+    }
+
+    fun getBahrainLiveSessionState(): LiveSessionState {
         return LiveSessionState(
             grandPrixName = "Bahrain Grand Prix",
             sessionName = "Qualifying · Q1",
@@ -1377,6 +1898,7 @@ object SeedDataProvider {
             sector1LengthKm = "1.4 km",
             sector2LengthKm = "1.8 km",
             sector3LengthKm = "2.3 km",
+            circuitId = "BAHRAIN",
             drivers = listOf(
                 LiveDriverTiming(
                     position = 1,
@@ -1863,8 +2385,6 @@ object SeedDataProvider {
 
     private fun get2026FullSchedule(): List<RaceWeekend> {
         return listOf(
-            getNextRaceWeekend(),
-            getBrazilianGpWeekend2026(),
             RaceWeekend(
                 season = 2026,
                 round = 1,
@@ -1878,6 +2398,7 @@ object SeedDataProvider {
                 totalLaps = 58,
                 totalCorners = 14,
                 circuitType = "ALBERT_PARK",
+                circuitId = "MELBOURNE",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "15", "Mar", "06:00", "Final", isRace = true)
                 )
@@ -1895,6 +2416,7 @@ object SeedDataProvider {
                 totalLaps = 56,
                 totalCorners = 16,
                 circuitType = "SHANGHAI",
+                circuitId = "SHANGHAI",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Mar", "08:00", "Final", isRace = true)
                 )
@@ -1912,6 +2434,7 @@ object SeedDataProvider {
                 totalLaps = 53,
                 totalCorners = 18,
                 circuitType = "SUZUKA",
+                circuitId = "SUZUKA",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "12", "Apr", "06:00", "Final", isRace = true)
                 )
@@ -1929,6 +2452,7 @@ object SeedDataProvider {
                 totalLaps = 57,
                 totalCorners = 15,
                 circuitType = "BAHRAIN",
+                circuitId = "BAHRAIN",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "26", "Apr", "16:00", "Final", isRace = true)
                 )
@@ -1936,6 +2460,24 @@ object SeedDataProvider {
             RaceWeekend(
                 season = 2026,
                 round = 5,
+                grandPrixName = "Saudi Arabian Grand Prix",
+                circuitName = "Jeddah Corniche Circuit",
+                location = "Jeddah, Saudi Arabia",
+                countryFlagEmoji = "🇸🇦",
+                dateRangeText = "FRI 01 MAY - SUN 03 MAY",
+                daysToGo = 0,
+                circuitLengthKm = "6.174",
+                totalLaps = 50,
+                totalCorners = 27,
+                circuitType = "JEDDAH",
+                circuitId = "JEDDAH",
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "03", "May", "18:00", "Final", isRace = true)
+                )
+            ),
+            RaceWeekend(
+                season = 2026,
+                round = 6,
                 grandPrixName = "Miami Grand Prix",
                 circuitName = "Miami International Autodrome",
                 location = "Miami, USA",
@@ -1946,13 +2488,32 @@ object SeedDataProvider {
                 totalLaps = 57,
                 totalCorners = 19,
                 circuitType = "MIAMI",
+                circuitId = "MIAMI",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "10", "May", "20:30", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 6,
+                round = 7,
+                grandPrixName = "Emilia Romagna Grand Prix",
+                circuitName = "Autodromo Enzo e Dino Ferrari",
+                location = "Imola, Italy",
+                countryFlagEmoji = "🇮🇹",
+                dateRangeText = "FRI 15 MAY - SUN 17 MAY",
+                daysToGo = 0,
+                circuitLengthKm = "4.909",
+                totalLaps = 63,
+                totalCorners = 19,
+                circuitType = "IMOLA",
+                circuitId = "IMOLA",
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "17", "May", "14:00", "Final", isRace = true)
+                )
+            ),
+            RaceWeekend(
+                season = 2026,
+                round = 8,
                 grandPrixName = "Monaco Grand Prix",
                 circuitName = "Circuit de Monaco",
                 location = "Monte Carlo, Monaco",
@@ -1963,13 +2524,14 @@ object SeedDataProvider {
                 totalLaps = 78,
                 totalCorners = 19,
                 circuitType = "MONACO",
+                circuitId = "MONACO",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "24", "May", "14:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 7,
+                round = 9,
                 grandPrixName = "Spanish Grand Prix",
                 circuitName = "Circuit de Barcelona-Catalunya",
                 location = "Barcelona, Spain",
@@ -1980,13 +2542,14 @@ object SeedDataProvider {
                 totalLaps = 66,
                 totalCorners = 14,
                 circuitType = "BARCELONA",
+                circuitId = "CATALUNYA",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "07", "Jun", "14:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 8,
+                round = 10,
                 grandPrixName = "Canadian Grand Prix",
                 circuitName = "Circuit Gilles Villeneuve",
                 location = "Montreal, Canada",
@@ -1997,13 +2560,14 @@ object SeedDataProvider {
                 totalLaps = 70,
                 totalCorners = 14,
                 circuitType = "MONTREAL",
+                circuitId = "MONTREAL",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "21", "Jun", "19:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 9,
+                round = 11,
                 grandPrixName = "Austrian Grand Prix",
                 circuitName = "Red Bull Ring",
                 location = "Spielberg, Austria",
@@ -2014,13 +2578,14 @@ object SeedDataProvider {
                 totalLaps = 71,
                 totalCorners = 10,
                 circuitType = "RED_BULL_RING",
+                circuitId = "SPIELBERG",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "05", "Jul", "14:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 10,
+                round = 12,
                 grandPrixName = "British Grand Prix",
                 circuitName = "Silverstone Circuit",
                 location = "Silverstone, UK",
@@ -2031,13 +2596,14 @@ object SeedDataProvider {
                 totalLaps = 52,
                 totalCorners = 18,
                 circuitType = "SILVERSTONE",
+                circuitId = "SILVERSTONE",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "19", "Jul", "15:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 11,
+                round = 13,
                 grandPrixName = "Belgian Grand Prix",
                 circuitName = "Circuit de Spa-Francorchamps",
                 location = "Spa, Belgium",
@@ -2048,13 +2614,14 @@ object SeedDataProvider {
                 totalLaps = 44,
                 totalCorners = 19,
                 circuitType = "SPA",
+                circuitId = "SPA",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "02", "Aug", "14:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 12,
+                round = 14,
                 grandPrixName = "Hungarian Grand Prix",
                 circuitName = "Hungaroring",
                 location = "Budapest, Hungary",
@@ -2065,13 +2632,14 @@ object SeedDataProvider {
                 totalLaps = 70,
                 totalCorners = 14,
                 circuitType = "HUNGARORING",
+                circuitId = "HUNGARORING",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "16", "Aug", "14:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 13,
+                round = 15,
                 grandPrixName = "Dutch Grand Prix",
                 circuitName = "Circuit Zandvoort",
                 location = "Zandvoort, Netherlands",
@@ -2082,13 +2650,15 @@ object SeedDataProvider {
                 totalLaps = 72,
                 totalCorners = 14,
                 circuitType = "ZANDVOORT",
+                circuitId = "ZANDVOORT",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "30", "Aug", "14:00", "Final", isRace = true)
                 )
             ),
+            getNextRaceWeekend(), // Round 16: Sepang
             RaceWeekend(
                 season = 2026,
-                round = 14,
+                round = 17,
                 grandPrixName = "Italian Grand Prix",
                 circuitName = "Autodromo Nazionale Monza",
                 location = "Monza, Italy",
@@ -2099,30 +2669,105 @@ object SeedDataProvider {
                 totalLaps = 53,
                 totalCorners = 11,
                 circuitType = "MONZA",
+                circuitId = "MONZA",
                 sessions = listOf(
                     SessionScheduleItem("Race", "Race", "Sun", "Sunday", "06", "Sep", "14:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
-                round = 15,
+                round = 18,
                 grandPrixName = "Azerbaijan Grand Prix",
                 circuitName = "Baku City Circuit",
                 location = "Baku, Azerbaijan",
                 countryFlagEmoji = "🇦🇿",
-                dateRangeText = "FRI 11 SEP - SUN 13 SEP",
+                dateRangeText = "FRI 18 SEP - SUN 20 SEP",
                 daysToGo = 0,
                 circuitLengthKm = "6.003",
                 totalLaps = 51,
                 totalCorners = 20,
                 circuitType = "BAKU",
+                circuitId = "BAKU",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "13", "Sep", "12:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "20", "Sep", "12:00", "Final", isRace = true)
+                )
+            ),
+            RaceWeekend(
+                season = 2026,
+                round = 19,
+                grandPrixName = "Singapore Grand Prix",
+                circuitName = "Marina Bay Street Circuit",
+                location = "Marina Bay, Singapore",
+                countryFlagEmoji = "🇸🇬",
+                dateRangeText = "FRI 02 OCT - SUN 04 OCT",
+                daysToGo = 0,
+                circuitLengthKm = "4.940",
+                totalLaps = 62,
+                totalCorners = 19,
+                circuitType = "SINGAPORE",
+                circuitId = "SINGAPORE",
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "04", "Oct", "13:00", "Final", isRace = true)
+                )
+            ),
+            getBrazilianGpWeekend2026(), // Round 20: São Paulo
+            RaceWeekend(
+                season = 2026,
+                round = 21,
+                grandPrixName = "United States Grand Prix",
+                circuitName = "Circuit of the Americas",
+                location = "Austin, USA",
+                countryFlagEmoji = "🇺🇸",
+                dateRangeText = "FRI 23 OCT - SUN 25 OCT",
+                daysToGo = 0,
+                circuitLengthKm = "5.513",
+                totalLaps = 56,
+                totalCorners = 20,
+                circuitType = "COTA",
+                circuitId = "COTA",
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "25", "Oct", "19:00", "Final", isRace = true)
                 )
             ),
             RaceWeekend(
                 season = 2026,
                 round = 22,
+                grandPrixName = "Mexico City Grand Prix",
+                circuitName = "Autódromo Hermanos Rodríguez",
+                location = "Mexico City, Mexico",
+                countryFlagEmoji = "🇲🇽",
+                dateRangeText = "FRI 30 OCT - SUN 01 NOV",
+                daysToGo = 0,
+                circuitLengthKm = "4.304",
+                totalLaps = 71,
+                totalCorners = 17,
+                circuitType = "MEXICO",
+                circuitId = "MEXICO",
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "01", "Nov", "20:00", "Final", isRace = true)
+                )
+            ),
+            RaceWeekend(
+                season = 2026,
+                round = 23,
+                grandPrixName = "Las Vegas Grand Prix",
+                circuitName = "Las Vegas Strip Circuit",
+                location = "Las Vegas, USA",
+                countryFlagEmoji = "🇺🇸",
+                dateRangeText = "THU 19 NOV - SAT 21 NOV",
+                daysToGo = 49,
+                circuitLengthKm = "6.201",
+                totalLaps = 50,
+                totalCorners = 17,
+                circuitType = "LAS_VEGAS",
+                circuitId = "LAS_VEGAS",
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sat", "Saturday", "21", "Nov", "22:00", "In 49 days", isRace = true)
+                )
+            ),
+            RaceWeekend(
+                season = 2026,
+                round = 24,
                 grandPrixName = "Abu Dhabi Grand Prix",
                 circuitName = "Yas Marina Circuit",
                 location = "Abu Dhabi, UAE",
@@ -2133,8 +2778,9 @@ object SeedDataProvider {
                 totalLaps = 58,
                 totalCorners = 16,
                 circuitType = "YAS_MARINA",
+                circuitId = "YAS_MARINA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Nov", "16:00", "57 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Nov", "16:00", "In 57 days", isRace = true)
                 )
             )
         )
@@ -2211,6 +2857,10 @@ object SeedDataProvider {
                         team = F1TeamId.FERRARI,
                         finishTimeOrGap = "2:13:23.6",
                         points = 9,
+                        qualifyingPosition = "P1",
+                        qualifyingTime = "1:50.8",
+                        fastestLapPosition = "P1",
+                        fastestLapTime = "1:50.6",
                         totalLaps = 70
                     )
                 )

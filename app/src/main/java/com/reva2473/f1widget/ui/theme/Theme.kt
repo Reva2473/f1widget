@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -118,6 +119,7 @@ fun F1WidgetTheme(
 
     val accentColor = if (useTeamAccent) Color(teamAccent.colorHex) else P1TColors.AccentRed
     val glowColor = if (useTeamAccent) Color(teamAccent.secondaryHex) else P1TColors.HeaderCrimsonGlow
+    val onPrimaryColor = if (accentColor.luminance() > 0.45f) Color.Black else Color.White
 
     val colorScheme = if (isDark) {
         darkColorScheme(
@@ -127,7 +129,7 @@ fun F1WidgetTheme(
             background = P1TColors.BackgroundPrimary,
             surface = P1TColors.SurfaceCard,
             surfaceVariant = P1TColors.SurfaceElevated,
-            onPrimary = Color.White,
+            onPrimary = onPrimaryColor,
             onBackground = P1TColors.TextPrimary,
             onSurface = P1TColors.TextPrimary,
             onSurfaceVariant = P1TColors.TextSecondary,
@@ -141,7 +143,7 @@ fun F1WidgetTheme(
             background = P1TColors.BackgroundLight,
             surface = P1TColors.SurfaceCardLight,
             surfaceVariant = Color(0xFFEEEEF4),
-            onPrimary = Color.White,
+            onPrimary = onPrimaryColor,
             onBackground = Color(0xFF111116),
             onSurface = Color(0xFF111116),
             onSurfaceVariant = Color(0xFF5A5A66),

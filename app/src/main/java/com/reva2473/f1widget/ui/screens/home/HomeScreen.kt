@@ -1,5 +1,7 @@
 package com.reva2473.f1widget.ui.screens.home
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -26,12 +29,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,32 +54,53 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reva2473.f1widget.domain.model.ConstructorStanding
+import com.reva2473.f1widget.ui.theme.LocalF1Accent
+import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.domain.model.LiveDriverTiming
 import com.reva2473.f1widget.domain.model.LiveSessionState
+import com.reva2473.f1widget.domain.model.RaceDriverResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
 import com.reva2473.f1widget.domain.model.SessionScheduleItem
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
+import com.reva2473.f1widget.ui.components.CircuitOutlineCanvas
+import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
 import com.reva2473.f1widget.ui.components.LiveTrackMapCanvas
 import com.reva2473.f1widget.ui.components.P1TRadialBackground
 import com.reva2473.f1widget.ui.components.SepangOutlineCanvas
+import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
 import com.reva2473.f1widget.ui.theme.P1TColors
+
+private val RaceWeekend.countdownBadge: String
+    get() = sessions.firstOrNull { it.isRace }?.countdownBadge ?: ""
+
+private val LiveSessionState.sessionType: String
+    get() = shortSessionCode.ifBlank { sessionName }
+
+private val LiveSessionState.trackStatus: String
+    get() = trackStatusText
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     weekend: RaceWeekend? = null,
     liveSession: LiveSessionState? = null,
+    driverStandings: List<DriverStanding>? = null,
+    constructorStandings: List<ConstructorStanding>? = null,
+    lastRaceResults: List<RaceDriverResult>? = null,
     onNavigateToLiveTiming: () -> Unit = {},
     onNavigateToStandings: () -> Unit = {},
     onNavigateToWeekend: () -> Unit = {},
     onNavigateToExplore: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     onTabSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -98,13 +126,34 @@ fun HomeScreen(
 
     val activeLiveDrivers = liveSession?.drivers ?: sampleLiveDrivers
 
+    val defaultWeekend = RaceWeekend(
+        season = 2026,
+        round = 16,
+        grandPrixName = "Bahrain Grand Prix in Malaysia",
+        circuitName = "Sepang International Circuit",
+        location = "Kuala Lumpur, Malaysia",
+        countryFlagEmoji = "🇲🇾",
+        dateRangeText = "FRI 6 NOV - SUN 8 NOV",
+        daysToGo = 1,
+        circuitLengthKm = "5.543",
+        totalLaps = 56,
+        totalCorners = 15,
+        circuitType = "SEPANG",
+        circuitId = "SEPANG",
+        sessions = defaultSessions
+    )
+    val activeWeekend = weekend ?: defaultWeekend
+
     P1TRadialBackground(modifier = modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
         ) {
             // 1. TOP BAR
-            HomeTopBar()
+            HomeTopBar(
+                onNavigateToSettings = onNavigateToSettings
+            )
 
             // SCROLLABLE BODY
             Column(
@@ -115,7 +164,13 @@ fun HomeScreen(
             ) {
                 // 2. HERO HORIZONTAL PAGER (5 slides)
                 HomeHeroPager(
-                    sessions = weekend?.sessions ?: defaultSessions,
+                    weekend = activeWeekend,
+                    sessions = activeWeekend.sessions,
+                    driverLeader = driverStandings?.firstOrNull(),
+                    constructorLeader = constructorStandings?.firstOrNull(),
+                    driverStandings = driverStandings,
+                    liveSession = liveSession,
+                    lastRaceResults = lastRaceResults ?: activeWeekend.results,
                     onSlideTap = { onNavigateToWeekend() }
                 )
 
@@ -128,6 +183,8 @@ fun HomeScreen(
 
                 // 4. LIVE SESSION TRACK MAP CARD
                 LiveTrackSummaryCard(
+                    liveSession = liveSession,
+                    weekend = activeWeekend,
                     drivers = activeLiveDrivers,
                     onOpenLiveTiming = onNavigateToLiveTiming
                 )
@@ -135,7 +192,13 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 // 5. BENTO RACE WEEKEND SUMMARY CARD
-                HomeBentoCard(onClick = onNavigateToWeekend)
+                HomeBentoCard(
+                    weekend = activeWeekend,
+                    driverStandings = driverStandings,
+                    liveSession = liveSession,
+                    lastRaceResults = lastRaceResults ?: activeWeekend.results,
+                    onClick = onNavigateToWeekend
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -147,7 +210,8 @@ fun HomeScreen(
             onSelectTab = { tab ->
                 when (tab) {
                     "Season" -> onNavigateToWeekend()
-                    "Settings", "Standings" -> onNavigateToStandings()
+                    "Standings" -> onNavigateToStandings()
+                    "Settings" -> onNavigateToSettings()
                     else -> onTabSelected(tab)
                 }
             },
@@ -157,10 +221,12 @@ fun HomeScreen(
 }
 
 /**
- * Top bar: Left circular green verified shield badge button, centered "Home" title, right circular notification bell button.
+ * Top bar: Left circular green verified shield badge button (Settings), centered "Home" title, right circular settings gear button.
  */
 @Composable
-private fun HomeTopBar() {
+private fun HomeTopBar(
+    onNavigateToSettings: () -> Unit = {}
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -168,12 +234,12 @@ private fun HomeTopBar() {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Shield badge button with green check
-        CircularHeaderButton(onClick = {}) {
+        // Shield badge button with green check wired to Settings
+        CircularHeaderButton(onClick = onNavigateToSettings) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.Security,
-                    contentDescription = "Verified",
+                    contentDescription = "Settings & Widgets",
                     tint = Color(0xFF2CE580),
                     modifier = Modifier.size(19.dp)
                 )
@@ -190,11 +256,11 @@ private fun HomeTopBar() {
             )
         )
 
-        // Notification Bell
-        CircularHeaderButton(onClick = {}) {
+        // Settings Gear Icon
+        CircularHeaderButton(onClick = onNavigateToSettings) {
             Icon(
-                imageVector = Icons.Default.Notifications,
-                contentDescription = "Notifications",
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Settings",
                 tint = Color(0xFFF5F5F7),
                 modifier = Modifier.size(20.dp)
             )
@@ -208,7 +274,13 @@ private fun HomeTopBar() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeHeroPager(
+    weekend: RaceWeekend,
     sessions: List<SessionScheduleItem>,
+    driverLeader: DriverStanding? = null,
+    constructorLeader: ConstructorStanding? = null,
+    driverStandings: List<DriverStanding>? = null,
+    liveSession: LiveSessionState? = null,
+    lastRaceResults: List<RaceDriverResult>? = null,
     onSlideTap: () -> Unit
 ) {
     val pagerState = rememberPagerState(pageCount = { 5 })
@@ -223,11 +295,17 @@ private fun HomeHeroPager(
             modifier = Modifier.fillMaxWidth()
         ) { page ->
             when (page) {
-                0 -> HeroSlideNextRace(sessions = sessions, onClick = onSlideTap)
+                0 -> HeroSlideNextRace(weekend = weekend, sessions = sessions, onClick = onSlideTap)
                 1 -> HeroSlideApexGridWelcome(onClick = onSlideTap)
-                2 -> HeroSlideWdcLeader()
-                3 -> HeroSlideWccLeader()
-                4 -> HeroSlideLastRaceWinner()
+                2 -> HeroSlideWdcLeader(leader = driverLeader, onClick = onSlideTap)
+                3 -> HeroSlideWccLeader(leader = constructorLeader, onClick = onSlideTap)
+                4 -> HeroSlideLastRaceWinner(
+                    weekend = weekend,
+                    driverStandings = driverStandings,
+                    liveSession = liveSession,
+                    lastRaceResults = lastRaceResults,
+                    onClick = onSlideTap
+                )
             }
         }
 
@@ -239,6 +317,7 @@ private fun HomeHeroPager(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val primaryAccent = LocalF1Accent.current.primaryAccent
             repeat(5) { index ->
                 val isSelected = pagerState.currentPage == index
                 Box(
@@ -247,7 +326,7 @@ private fun HomeHeroPager(
                         .height(5.dp)
                         .width(if (isSelected) 22.dp else 5.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(if (isSelected) P1TColors.AccentRed else Color(0xFF383844))
+                        .background(if (isSelected) primaryAccent else Color(0xFF383844))
                 )
             }
         }
@@ -261,9 +340,18 @@ private fun HomeHeroPager(
  */
 @Composable
 private fun HeroSlideNextRace(
-    sessions: List<SessionScheduleItem>,
+    weekend: RaceWeekend,
+    sessions: List<SessionScheduleItem> = weekend.sessions,
     onClick: () -> Unit
 ) {
+    val countdownText = if (weekend.countdownBadge.isNotBlank()) {
+        weekend.countdownBadge.uppercase()
+    } else {
+        "IN ${weekend.daysToGo} DAY${if (weekend.daysToGo == 1) "" else "S"}"
+    }
+    val topBadge = "ROUND ${weekend.round}  ·  $countdownText"
+    val circuitId = weekend.circuitId.ifBlank { weekend.circuitType }
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
@@ -277,10 +365,12 @@ private fun HeroSlideNextRace(
                 .fillMaxWidth()
                 .padding(18.dp)
         ) {
-            // "ROUND 16 · IN 1 DAY"
+            val primaryAccent = LocalF1Accent.current.primaryAccent
+
+            // "ROUND X · IN Y DAYS"
             Text(
-                text = "ROUND 16 · IN 1 DAY",
-                color = P1TColors.AccentRed,
+                text = topBadge,
+                color = primaryAccent,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.2.sp
@@ -290,7 +380,7 @@ private fun HeroSlideNextRace(
 
             // Grand Prix Name
             Text(
-                text = "Bahrain Grand Prix in Malaysia",
+                text = weekend.grandPrixName,
                 color = P1TColors.TextPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Black
@@ -298,20 +388,20 @@ private fun HeroSlideNextRace(
 
             // Circuit & Location
             Text(
-                text = "Sepang International Circuit",
+                text = weekend.circuitName,
                 color = P1TColors.TextSecondary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Kuala Lumpur, Malaysia",
+                text = weekend.location,
                 color = P1TColors.TextMuted,
                 fontSize = 12.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Left session schedule table beside SepangOutlineCanvas
+            // Left session schedule table beside Circuit Outline Canvas
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -324,6 +414,7 @@ private fun HeroSlideNextRace(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     sessions.take(5).forEach { session ->
+                        val primaryAccent = LocalF1Accent.current.primaryAccent
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -331,14 +422,14 @@ private fun HeroSlideNextRace(
                         ) {
                             Text(
                                 text = session.shortName,
-                                color = if (session.isRace) P1TColors.AccentRed else P1TColors.TextSecondary,
+                                color = if (session.isRace) primaryAccent else P1TColors.TextSecondary,
                                 fontSize = 12.sp,
                                 fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.Medium,
                                 modifier = Modifier.width(42.dp)
                             )
                             Text(
                                 text = "${session.dayOfWeek} ${session.localTime}",
-                                color = if (session.isRace) P1TColors.AccentRed else P1TColors.TextPrimary,
+                                color = if (session.isRace) primaryAccent else P1TColors.TextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.SemiBold
                             )
@@ -348,18 +439,40 @@ private fun HeroSlideNextRace(
 
                 Spacer(modifier = Modifier.width(14.dp))
 
-                // Sepang Outline Canvas on right
+                // Circuit Outline Canvas on right
                 Box(
                     modifier = Modifier
                         .weight(1.3f)
                         .fillMaxHeight(),
                     contentAlignment = Alignment.Center
                 ) {
-                    SepangOutlineCanvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(4.dp)
-                    )
+                    when {
+                        circuitId.contains("INTERLAGOS", ignoreCase = true) ||
+                            weekend.circuitName.contains("Pace", ignoreCase = true) -> {
+                            CircuitOutlineCanvas(
+                                circuitType = "INTERLAGOS",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp)
+                            )
+                        }
+                        circuitId.contains("YAS", ignoreCase = true) ||
+                            weekend.circuitName.contains("Yas", ignoreCase = true) -> {
+                            CircuitOutlineCanvas(
+                                circuitType = "YAS_MARINA",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp)
+                            )
+                        }
+                        else -> {
+                            SepangOutlineCanvas(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -376,13 +489,16 @@ private fun HeroSlideNextRace(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                StatPillColumn(label = "1 DAY", sub = "TO GO")
+                StatPillColumn(
+                    label = weekend.daysToGo.toString(),
+                    sub = if (weekend.daysToGo == 1) "DAY TO GO" else "DAYS TO GO"
+                )
                 Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0xFF2E2E38)))
-                StatPillColumn(label = "5.543", sub = "KM")
+                StatPillColumn(label = weekend.circuitLengthKm, sub = "KM")
                 Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0xFF2E2E38)))
-                StatPillColumn(label = "56", sub = "LAPS")
+                StatPillColumn(label = weekend.totalLaps.toString(), sub = "LAPS")
                 Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color(0xFF2E2E38)))
-                StatPillColumn(label = "15", sub = "CORNERS")
+                StatPillColumn(label = weekend.totalCorners.toString(), sub = "CORNERS")
             }
         }
     }
@@ -421,6 +537,9 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
             .border(1.dp, P1TColors.BorderSubtle, RoundedCornerShape(22.dp))
             .clickable { onClick() }
     ) {
+        val primaryAccent = LocalF1Accent.current.primaryAccent
+        val context = LocalContext.current
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -428,7 +547,7 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
         ) {
             Text(
                 text = "FORMULA 1 DATA",
-                color = P1TColors.AccentRed,
+                color = primaryAccent,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.2.sp
@@ -449,14 +568,14 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
                         fontWeight = FontWeight.Black
                     )
 
-                    // Red Accent Bar
+                    // Accent Bar
                     Box(
                         modifier = Modifier
                             .padding(top = 4.dp, bottom = 10.dp)
                             .width(36.dp)
                             .height(3.dp)
                             .clip(RoundedCornerShape(1.5.dp))
-                            .background(P1TColors.AccentRed)
+                            .background(primaryAccent)
                     )
 
                     Text(
@@ -492,7 +611,7 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
                             lineTo(w * 0.25f, h * 0.65f)
                             close()
                         }
-                        drawPath(carPath, color = Color(0xFFE1251B).copy(alpha = 0.85f))
+                        drawPath(carPath, color = primaryAccent.copy(alpha = 0.85f))
                         // Wheels
                         drawCircle(Color(0xFF2A2A34), radius = 10.dp.toPx(), center = Offset(w * 0.3f, h * 0.68f))
                         drawCircle(Color(0xFF2A2A34), radius = 10.dp.toPx(), center = Offset(w * 0.8f, h * 0.68f))
@@ -508,6 +627,14 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF22222A))
                     .border(1.dp, Color(0xFF383844), RoundedCornerShape(20.dp))
+                    .clickable {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://reddit.com/r/formula1"))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            onClick()
+                        }
+                    }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -520,7 +647,7 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
                 )
                 Text(
                     text = "↗",
-                    color = P1TColors.AccentRed,
+                    color = primaryAccent,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -530,68 +657,112 @@ private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
 }
 
 /**
- * Slide 2: WDC Leader (Kimi Antonelli 302 PTS)
+ * Slide 2: WDC Leader (Dynamically bound to driverStandings.firstOrNull())
  */
 @Composable
-private fun HeroSlideWdcLeader() {
+private fun HeroSlideWdcLeader(
+    leader: DriverStanding? = null,
+    onClick: () -> Unit = {}
+) {
+    val teamColor = leader?.team?.let { Color(it.colorHex) } ?: Color(F1TeamId.MERCEDES.colorHex)
+    val driverName = leader?.fullName ?: "Kimi Antonelli"
+    val teamName = leader?.team?.displayName ?: "Mercedes AMG Petronas"
+    val positionText = if (leader != null) "P${leader.position}" else "P1"
+    val pointsText = if (leader != null) "${leader.points.toInt()} PTS" else "302 PTS"
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, P1TColors.BorderSubtle, RoundedCornerShape(22.dp))
+            .clickable { onClick() }
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Text(
                 text = "WORLD DRIVERS' CHAMPIONSHIP",
-                color = Color(F1TeamId.MERCEDES.colorHex),
+                color = teamColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.2.sp
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(text = "Kimi Antonelli", color = P1TColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    Text(text = "Mercedes AMG Petronas · P1", color = P1TColors.TextSecondary, fontSize = 13.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    DriverPortraitAvatar(
+                        driverCodeOrName = leader?.code ?: "ANT",
+                        teamColor = teamColor,
+                        size = 50.dp,
+                        positionBadge = "P1"
+                    )
+                    Column {
+                        Text(text = driverName, color = P1TColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                        Text(text = "$teamName · $positionText", color = P1TColors.TextSecondary, fontSize = 12.5.sp)
+                    }
                 }
                 Text(
-                    text = "302 PTS",
-                    color = Color(F1TeamId.MERCEDES.colorHex),
+                    text = pointsText,
+                    color = teamColor,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Black
                 )
             }
             Spacer(modifier = Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(text = "🏆 8 Wins", color = P1TColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(text = "📊 12 Podiums", color = P1TColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(text = "⏱️ +66 Lead", color = Color(0xFF2CE580), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color(0xFF85858B), modifier = Modifier.size(15.dp))
+                    Text(text = "${leader?.wins ?: 8} Wins", color = P1TColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Leaderboard, contentDescription = null, tint = Color(0xFF85858B), modifier = Modifier.size(15.dp))
+                    Text(text = "${leader?.podiums ?: 12} Podiums", color = P1TColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.History, contentDescription = null, tint = Color(0xFF85858B), modifier = Modifier.size(15.dp))
+                    Text(text = if (leader != null) "${leader.poles} Poles" else "+66 Lead", color = Color(0xFF2CE580), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
 }
 
 /**
- * Slide 3: WCC Leader (Mercedes 538 PTS)
+ * Slide 3: WCC Leader (Dynamically bound to constructorStandings.firstOrNull())
  */
 @Composable
-private fun HeroSlideWccLeader() {
+private fun HeroSlideWccLeader(
+    leader: ConstructorStanding? = null,
+    onClick: () -> Unit = {}
+) {
+    val teamColor = leader?.team?.let { Color(it.colorHex) } ?: Color(F1TeamId.MERCEDES.colorHex)
+    val teamName = leader?.team?.displayName ?: "Mercedes"
+    val driversText = if (leader != null && leader.drivers.isNotEmpty()) {
+        leader.drivers.joinToString(" & ") { it.fullName.substringAfterLast(" ") }
+    } else {
+        "Antonelli & Russell"
+    }
+    val pointsText = if (leader != null) "${leader.points.toInt()} PTS" else "538 PTS"
+    val gapText = if (leader != null && leader.gapToP1 != null) "-${leader.gapToP1}" else "P1 Leader"
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, P1TColors.BorderSubtle, RoundedCornerShape(22.dp))
+            .clickable { onClick() }
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Text(
                 text = "CONSTRUCTORS' CHAMPIONSHIP",
-                color = Color(F1TeamId.MERCEDES.colorHex),
+                color = teamColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.2.sp
@@ -602,43 +773,74 @@ private fun HeroSlideWccLeader() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(text = "Mercedes", color = P1TColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    Text(text = "Antonelli & Russell", color = P1TColors.TextSecondary, fontSize = 13.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = teamName, color = P1TColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(text = driversText, color = P1TColors.TextSecondary, fontSize = 13.sp)
                 }
                 Text(
-                    text = "538 PTS",
-                    color = Color(F1TeamId.MERCEDES.colorHex),
+                    text = pointsText,
+                    color = teamColor,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Black
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(text = "🏆 11 Wins", color = P1TColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(text = "🥈 Ferrari (378 PTS)", color = P1TColors.TextMuted, fontSize = 12.sp)
-                Text(text = "+160 to P2", color = Color(0xFF2CE580), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(10.dp))
+            TeamCarShowcaseImage(
+                team = leader?.team ?: F1TeamId.MERCEDES,
+                modifier = Modifier.fillMaxWidth().height(42.dp)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color(0xFF85858B), modifier = Modifier.size(15.dp))
+                    Text(text = "${leader?.wins ?: 11} Wins", color = P1TColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Text(text = gapText, color = P1TColors.TextMuted, fontSize = 12.sp)
+                Text(text = "Championship P1", color = Color(0xFF2CE580), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 /**
- * Slide 4: Last Race Winner (Max Verstappen)
+ * Slide 4: Last Race Winner
  */
 @Composable
-private fun HeroSlideLastRaceWinner() {
+private fun HeroSlideLastRaceWinner(
+    weekend: RaceWeekend? = null,
+    driverStandings: List<DriverStanding>? = null,
+    liveSession: LiveSessionState? = null,
+    lastRaceResults: List<RaceDriverResult>? = null,
+    onClick: () -> Unit = {}
+) {
+    val results = lastRaceResults?.ifEmpty { null } ?: weekend?.results.orEmpty()
+    val winner = results.firstOrNull { it.position == 1 } ?: results.firstOrNull()
+
+    val winnerName = winner?.driverFullName ?: "Max Verstappen"
+    val winnerTeam = winner?.team ?: F1TeamId.RED_BULL
+    val raceName = if (weekend != null && weekend.grandPrixName.isNotBlank()) {
+        weekend.grandPrixName
+    } else {
+        "São Paulo GP"
+    }
+    val teamSubtitle = "${winnerTeam.displayName} · $raceName"
+    val finishTime = winner?.finishTimeOrGap?.ifBlank { "2:06:54.430" } ?: "2:06:54.430"
+    val fastestLapTime = winner?.fastestLapTime?.ifBlank { "1:26.993" } ?: "1:26.993"
+    val pointsText = "${winner?.points ?: 26} PTS"
+    val teamColor = Color(winnerTeam.colorHex)
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, P1TColors.BorderSubtle, RoundedCornerShape(22.dp))
+            .clickable { onClick() }
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Text(
                 text = "LAST GRAND PRIX WINNER",
-                color = Color(F1TeamId.RED_BULL.colorHex),
+                color = teamColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.2.sp
@@ -650,11 +852,20 @@ private fun HeroSlideLastRaceWinner() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(text = "Max Verstappen", color = P1TColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    Text(text = "Red Bull Racing · São Paulo GP", color = P1TColors.TextSecondary, fontSize = 13.sp)
+                    Text(
+                        text = winnerName,
+                        color = P1TColors.TextPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = teamSubtitle,
+                        color = P1TColors.TextSecondary,
+                        fontSize = 13.sp
+                    )
                 }
                 Text(
-                    text = "2:06:54.430",
+                    text = finishTime,
                     color = P1TColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -662,8 +873,18 @@ private fun HeroSlideLastRaceWinner() {
             }
             Spacer(modifier = Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(text = "⚡ Fastest Lap: 1:26.993", color = P1TColors.SectorPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text(text = "26 PTS", color = Color(F1TeamId.RED_BULL.colorHex), fontSize = 12.sp, fontWeight = FontWeight.Black)
+                Text(
+                    text = "⚡ Fastest Lap: $fastestLapTime",
+                    color = P1TColors.SectorPurple,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = pointsText,
+                    color = teamColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black
+                )
             }
         }
     }
@@ -690,47 +911,24 @@ private fun ExploreF1StatsCard(onClick: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 3 Overlapping Circular Icons
+            // 3 Overlapping Driver Avatars
             Box(
                 modifier = Modifier
-                    .width(52.dp)
+                    .width(62.dp)
                     .height(32.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                // Circle 3 (Red)
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(P1TColors.AccentRed)
-                        .border(2.dp, P1TColors.SurfaceCard, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "🏎️", fontSize = 12.sp)
+                // Driver 1 (VER)
+                Box(modifier = Modifier.size(28.dp)) {
+                    DriverPortraitAvatar("VER", Color(0xFF3671C6), size = 28.dp)
                 }
-                // Circle 2 (Cyan)
-                Box(
-                    modifier = Modifier
-                        .padding(start = 12.dp)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF00D2BE))
-                        .border(2.dp, P1TColors.SurfaceCard, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "🏆", fontSize = 12.sp)
+                // Driver 2 (HAM)
+                Box(modifier = Modifier.padding(start = 16.dp).size(28.dp)) {
+                    DriverPortraitAvatar("HAM", Color(0xFFE8002D), size = 28.dp)
                 }
-                // Circle 1 (Yellow)
-                Box(
-                    modifier = Modifier
-                        .padding(start = 24.dp)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFFFD100))
-                        .border(2.dp, P1TColors.SurfaceCard, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "⏱️", fontSize = 12.sp)
+                // Driver 3 (NOR)
+                Box(modifier = Modifier.padding(start = 32.dp).size(28.dp)) {
+                    DriverPortraitAvatar("NOR", Color(0xFFFF8000), size = 28.dp)
                 }
             }
 
@@ -753,7 +951,7 @@ private fun ExploreF1StatsCard(onClick: () -> Unit) {
 
             // Chevron >
             Icon(
-                imageVector = Icons.Default.KeyboardArrowRight,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Explore",
                 tint = P1TColors.TextMuted,
                 modifier = Modifier.size(24.dp)
@@ -769,9 +967,30 @@ private fun ExploreF1StatsCard(onClick: () -> Unit) {
  */
 @Composable
 private fun LiveTrackSummaryCard(
-    drivers: List<LiveDriverTiming>,
+    liveSession: LiveSessionState? = null,
+    weekend: RaceWeekend? = null,
+    drivers: List<LiveDriverTiming> = liveSession?.drivers.orEmpty(),
     onOpenLiveTiming: () -> Unit
 ) {
+    val sessionBadge = liveSession?.sessionType?.ifBlank { "FP1" } ?: "FP1"
+    val timeRemaining = liveSession?.timeRemaining.orEmpty()
+    val timeRemainingText = if (timeRemaining.isBlank()) {
+        "· 9:56 left"
+    } else if (timeRemaining.contains("left", ignoreCase = true)) {
+        "· $timeRemaining"
+    } else {
+        "· $timeRemaining left"
+    }
+    val trackStatus = liveSession?.trackStatus?.ifBlank { "Track Clear" } ?: "Track Clear"
+    val isClear = trackStatus.contains("Clear", ignoreCase = true)
+    val statusColor = if (isClear) P1TColors.SectorGreen else P1TColors.SectorYellow
+    val statusBg = if (isClear) P1TColors.TrackClearBg else Color(0xFF2E2A14)
+    val statusBorder = if (isClear) Color(0xFF1E5B37) else Color(0xFF6B5A18)
+
+    val circuitId = liveSession?.circuitId?.ifBlank {
+        weekend?.circuitId?.ifBlank { "INTERLAGOS" } ?: "INTERLAGOS"
+    } ?: weekend?.circuitId?.ifBlank { "INTERLAGOS" } ?: "INTERLAGOS"
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
@@ -813,13 +1032,13 @@ private fun LiveTrackSummaryCard(
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "Q1",
+                        text = sessionBadge,
                         color = P1TColors.TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = "· 9:56 left",
+                        text = timeRemainingText,
                         color = P1TColors.TextSecondary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
@@ -830,8 +1049,8 @@ private fun LiveTrackSummaryCard(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(P1TColors.TrackClearBg)
-                        .border(1.dp, Color(0xFF1E5B37), RoundedCornerShape(12.dp))
+                        .background(statusBg)
+                        .border(1.dp, statusBorder, RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -840,18 +1059,18 @@ private fun LiveTrackSummaryCard(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(P1TColors.SectorGreen)
+                            .background(statusColor)
                     )
                     Text(
-                        text = "Track Clear",
-                        color = P1TColors.SectorGreen,
+                        text = trackStatus,
+                        color = statusColor,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "Open",
-                        tint = P1TColors.SectorGreen,
+                        tint = statusColor,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -926,6 +1145,8 @@ private fun LiveTrackSummaryCard(
                 ) {
                     LiveTrackMapCanvas(
                         drivers = drivers,
+                        circuitType = circuitId,
+                        onDriverTap = null,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -940,7 +1161,54 @@ private fun LiveTrackSummaryCard(
  * + bottom headline "Leclerc sets the pace in FP2" and "🇲🇾 Bahrain GP in Malaysia · Round 16 · so far".
  */
 @Composable
-private fun HomeBentoCard(onClick: () -> Unit) {
+private fun HomeBentoCard(
+    weekend: RaceWeekend? = null,
+    driverStandings: List<DriverStanding>? = null,
+    liveSession: LiveSessionState? = null,
+    lastRaceResults: List<RaceDriverResult>? = null,
+    onClick: () -> Unit = {}
+) {
+    // Column 1: WEEKEND
+    val fastestLiveDriver = liveSession?.drivers?.minByOrNull { it.position }
+    val sessionName = liveSession?.shortSessionCode?.ifBlank { liveSession.sessionName }?.ifBlank { "FP2" } ?: "FP2"
+    val weekendColText = if (fastestLiveDriver != null) {
+        "${fastestLiveDriver.code} fastest in $sessionName"
+    } else {
+        "LEC fastest in FP2"
+    }
+
+    // Column 2: TITLE (e.g. P1 leader gap over P2: +${(p1.points - p2.points).toInt()} and "${p1.lastName} leads")
+    val p1 = driverStandings?.getOrNull(0)
+    val p2 = driverStandings?.getOrNull(1)
+    val titleColText = if (p1 != null && p2 != null) {
+        val gap = (p1.points - p2.points).toInt()
+        "+$gap ${p1.lastName} leads"
+    } else if (p1 != null) {
+        "${p1.lastName} leads"
+    } else {
+        "+66 Antonelli leads"
+    }
+
+    // Column 3: RACE
+    val raceSession = weekend?.sessions?.firstOrNull { it.isRace } ?: weekend?.sessions?.lastOrNull()
+    val raceColText = if (raceSession != null) {
+        "${raceSession.localTime} ${raceSession.dayOfWeek}"
+    } else {
+        "08:00 Sun"
+    }
+
+    // Bottom Headline & Subheadline
+    val headline = if (fastestLiveDriver != null) {
+        "${fastestLiveDriver.fullName} sets the pace in $sessionName"
+    } else {
+        "Leclerc sets the pace in FP2"
+    }
+
+    val flag = weekend?.countryFlagEmoji?.takeIf { it.isNotBlank() } ?: "🇲🇾"
+    val gpName = weekend?.grandPrixName?.takeIf { it.isNotBlank() } ?: "Bahrain GP in Malaysia"
+    val roundText = if (weekend != null && weekend.round > 0) "Round ${weekend.round}" else "Round 16"
+    val subHeadline = "$flag $gpName · $roundText · so far"
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
@@ -962,6 +1230,8 @@ private fun HomeBentoCard(onClick: () -> Unit) {
                     .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val primaryAccent = LocalF1Accent.current.primaryAccent
+
                 // Column 1: WEEKEND
                 Box(
                     modifier = Modifier
@@ -970,26 +1240,26 @@ private fun HomeBentoCard(onClick: () -> Unit) {
                         .background(P1TColors.SurfaceInnerCard)
                         .border(1.dp, Color(0xFF24242C), RoundedCornerShape(12.dp))
                 ) {
-                    // Red top border accent line
+                    // Accent top border line
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp)
-                            .background(P1TColors.AccentRed)
+                            .background(primaryAccent)
                     )
                     Column(
                         modifier = Modifier.padding(10.dp)
                     ) {
                         Text(
                             text = "WEEKEND",
-                            color = P1TColors.AccentRed,
+                            color = primaryAccent,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 1.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "LEC fastest in FP2",
+                            text = weekendColText,
                             color = P1TColors.TextPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -1017,7 +1287,7 @@ private fun HomeBentoCard(onClick: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "+66 Antonelli leads",
+                            text = titleColText,
                             color = P1TColors.TextPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -1045,7 +1315,7 @@ private fun HomeBentoCard(onClick: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "08:00 Sun",
+                            text = raceColText,
                             color = P1TColors.TextPrimary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -1059,14 +1329,14 @@ private fun HomeBentoCard(onClick: () -> Unit) {
 
             // Bottom Headline
             Text(
-                text = "Leclerc sets the pace in FP2",
+                text = headline,
                 color = P1TColors.TextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "🇲🇾 Bahrain GP in Malaysia · Round 16 · so far",
+                text = subHeadline,
                 color = P1TColors.TextSecondary,
                 fontSize = 12.sp
             )

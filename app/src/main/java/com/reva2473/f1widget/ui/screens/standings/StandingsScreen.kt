@@ -11,22 +11,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,8 +64,10 @@ import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.domain.model.RaceRecentResult
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
+import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
 import com.reva2473.f1widget.ui.components.P1TRadialBackground
+import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
 import com.reva2473.f1widget.ui.theme.P1TColors
 
 enum class StandingsTab {
@@ -68,12 +78,13 @@ enum class StandingsTab {
 fun StandingsScreen(
     driverStandings: List<DriverStanding>? = null,
     constructorStandings: List<ConstructorStanding>? = null,
+    selectedYear: Int = 2026,
+    onYearSelected: (Int) -> Unit = {},
     onBackClick: () -> Unit = {},
     onTabSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(StandingsTab.DRIVERS) }
-    var selectedYear by remember { mutableIntStateOf(2026) }
     var yearDropdownExpanded by remember { mutableStateOf(false) }
 
     // Mock/Sample Driver Standings matching driver-standings-1080.webp
@@ -311,9 +322,11 @@ fun StandingsScreen(
     val activeDrivers = driverStandings ?: sampleDrivers
     val activeConstructors = constructorStandings ?: sampleConstructors
 
-    P1TRadialBackground(modifier = modifier) {
+    P1TRadialBackground(modifier = modifier.background(Color(0xFF141415))) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
         ) {
             // HEADER BAR: <, Title & Year Picker, •••
             StandingsTopBar(
@@ -321,8 +334,11 @@ fun StandingsScreen(
                 selectedYear = selectedYear,
                 yearDropdownExpanded = yearDropdownExpanded,
                 onYearDropdownChange = { yearDropdownExpanded = it },
-                onYearSelect = { selectedYear = it },
-                onBackClick = onBackClick
+                onYearSelect = onYearSelected,
+                onBackClick = onBackClick,
+                onToggleTab = {
+                    selectedTab = if (selectedTab == StandingsTab.DRIVERS) StandingsTab.CONSTRUCTORS else StandingsTab.DRIVERS
+                }
             )
 
             // TOGGLE PILL: "Driver Standings" / "Constructor Standings"
@@ -370,11 +386,13 @@ fun StandingsScreen(
 
         // Floating Pill Bottom Bar
         FloatingPillBottomBar(
-            currentTab = "Settings",
+            currentTab = "Standings",
             onSelectTab = { tab ->
                 when (tab) {
                     "Home" -> onBackClick()
                     "Season" -> onTabSelected("Season")
+                    "Standings" -> Unit
+                    "Settings" -> onTabSelected("Settings")
                     else -> onTabSelected(tab)
                 }
             },
@@ -393,8 +411,11 @@ private fun StandingsTopBar(
     yearDropdownExpanded: Boolean,
     onYearDropdownChange: (Boolean) -> Unit,
     onYearSelect: (Int) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onToggleTab: (() -> Unit)? = null
 ) {
+    var moreMenuExpanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -405,7 +426,7 @@ private fun StandingsTopBar(
         // Back Button
         CircularHeaderButton(onClick = onBackClick) {
             Icon(
-                imageVector = Icons.Default.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
                 tint = P1TColors.TextPrimary,
                 modifier = Modifier.size(20.dp)
@@ -443,7 +464,7 @@ private fun StandingsTopBar(
                 onDismissRequest = { onYearDropdownChange(false) },
                 modifier = Modifier.background(P1TColors.SurfaceElevated)
             ) {
-                (2026 downTo 2018).forEach { year ->
+                (2026 downTo 1950).forEach { year ->
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -462,13 +483,34 @@ private fun StandingsTopBar(
         }
 
         // More Options •••
-        CircularHeaderButton(onClick = {}) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "Options",
-                tint = P1TColors.TextPrimary,
-                modifier = Modifier.size(20.dp)
-            )
+        Box {
+            CircularHeaderButton(onClick = { moreMenuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Options",
+                    tint = P1TColors.TextPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            DropdownMenu(
+                expanded = moreMenuExpanded,
+                onDismissRequest = { moreMenuExpanded = false },
+                modifier = Modifier.background(P1TColors.SurfaceElevated)
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = if (selectedTab == StandingsTab.DRIVERS) "Switch to Constructors" else "Switch to Drivers",
+                            color = P1TColors.TextPrimary
+                        )
+                    },
+                    onClick = {
+                        moreMenuExpanded = false
+                        onToggleTab?.invoke()
+                    }
+                )
+            }
         }
     }
 }
@@ -531,30 +573,34 @@ private fun StandingsToggleBar(
 }
 
 /**
- * Expandable Driver Standing card matching driver-standings-1080.webp:
- * Left team-color stripe, avatar + P1/P2/P3 pill, team name in team color, driver name, gap to leader/prev,
- * large points in team color (302 PTS), 🏆 8 Wins 📊 12 Podiums,
- * inner team-bordered box (Avg Per Race, expandable Last 3 Races with Azerbaijan P5 (10pts), etc., and Pole Positions).
+ * Unslopped Driver Standing card:
+ * Graphite surface ramp: #19191B outer card, 1.dp hairline border Color.White.copy(alpha = 0.07f),
+ * 4.dp left team accent bar, real DriverPortraitAvatar with headshot and position badge,
+ * TeamCarShowcaseImage, crisp Material Icons in #85858B tint, and #141415 inner stats container.
  */
 @Composable
 private fun DriverStandingCard(driver: DriverStanding) {
-    var isExpanded by remember { mutableStateOf(driver.position <= 2) }
+    var isExpanded by rememberSaveable(driver.driverId) { mutableStateOf(driver.position <= 2) }
     val teamColor = Color(driver.team.colorHex)
 
     Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF19191B)),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, P1TColors.BorderSubtle, RoundedCornerShape(18.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(16.dp))
             .clickable { isExpanded = !isExpanded }
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left Team-Color Stripe
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            // 4.dp Left Team Accent Bar
             Box(
                 modifier = Modifier
-                    .width(5.dp)
-                    .height(if (isExpanded) 220.dp else 100.dp)
+                    .width(4.dp)
+                    .fillMaxHeight()
                     .background(teamColor)
             )
 
@@ -563,7 +609,7 @@ private fun DriverStandingCard(driver: DriverStanding) {
                     .weight(1f)
                     .padding(14.dp)
             ) {
-                // Top Row: Avatar + Position Pill, Name & Team, Points
+                // Top Row: Driver Portrait Avatar + Details, Points & Expand Icon
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -571,57 +617,47 @@ private fun DriverStandingCard(driver: DriverStanding) {
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Position Pill
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when (driver.position) {
-                                        1 -> Color(0xFFF5C518)
-                                        2 -> Color(0xFFC0C0C8)
-                                        3 -> Color(0xFFD97B29)
-                                        else -> Color(0xFF24242E)
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "P${driver.position}",
-                                color = if (driver.position <= 3) Color.Black else P1TColors.TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
+                        // Real Driver Portrait Avatar with position badge
+                        DriverPortraitAvatar(
+                            driverCodeOrName = driver.code,
+                            teamColor = teamColor,
+                            size = 52.dp,
+                            positionBadge = "P${driver.position}"
+                        )
 
                         // Driver Details
                         Column {
                             Text(
-                                text = driver.team.displayName.uppercase(),
+                                text = driver.team.displayName,
                                 color = teamColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.sp
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = driver.fullName,
-                                color = P1TColors.TextPrimary,
+                                color = Color(0xFFF5F5F7),
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.Black
+                                fontWeight = FontWeight.Bold
                             )
                             if (driver.gapToLeader != null) {
+                                val gapText = buildString {
+                                    append(driver.gapToLeader)
+                                    if (!driver.gapToPrev.isNullOrBlank()) {
+                                        append(" · ").append(driver.gapToPrev)
+                                    }
+                                }
                                 Text(
-                                    text = "${driver.gapToLeader} · ${driver.gapToPrev}",
-                                    color = P1TColors.TextMuted,
-                                    fontSize = 10.sp
+                                    text = gapText,
+                                    color = Color(0xFF85858B),
+                                    fontSize = 11.sp
                                 )
                             }
                         }
                     }
 
-                    // Large Points in team color
+                    // Points in team color
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = "${driver.points.toInt()} PTS",
@@ -631,8 +667,8 @@ private fun DriverStandingCard(driver: DriverStanding) {
                         )
                         Icon(
                             imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Expand",
-                            tint = P1TColors.TextMuted,
+                            contentDescription = if (isExpanded) "Collapse" else "Expand",
+                            tint = Color(0xFF85858B),
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -640,33 +676,68 @@ private fun DriverStandingCard(driver: DriverStanding) {
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Stats Bar: 🏆 8 Wins  📊 12 Podiums
+                // Stats Bar: Crisp Material Icons in #85858B tint (NO emoji strings)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "🏆 ${driver.wins} Wins",
-                        color = P1TColors.TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "📊 ${driver.podiums} Podiums",
-                        color = P1TColors.TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "⏱️ ${driver.poles} Poles",
-                        color = P1TColors.TextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = "Wins",
+                            tint = Color(0xFF85858B),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "${driver.wins} Wins",
+                            color = Color(0xFFF5F5F7),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Leaderboard,
+                            contentDescription = "Podiums",
+                            tint = Color(0xFF85858B),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "${driver.podiums} Podiums",
+                            color = Color(0xFFF5F5F7),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "Poles",
+                            tint = Color(0xFF85858B),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "${driver.poles} Poles",
+                            color = Color(0xFF9A9AA6),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
 
-                // Inner Expandable Team-Bordered Box
+                // Inner Expandable Stats Container: #141415 with 1.dp border Color.White.copy(alpha = 0.06f)
                 AnimatedVisibility(
                     visible = isExpanded,
                     enter = fadeIn() + expandVertically(),
@@ -677,23 +748,35 @@ private fun DriverStandingCard(driver: DriverStanding) {
                             .fillMaxWidth()
                             .padding(top = 12.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(P1TColors.SurfaceInnerCard)
-                            .border(1.dp, teamColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF141415))
+                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
-                        // Avg Per Race
+                        // Team Car Cutout Showcase
+                        TeamCarShowcaseImage(
+                            team = driver.team,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .padding(vertical = 2.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Avg Points Per Race
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Avg Points Per Race",
-                                color = P1TColors.TextSecondary,
+                                text = "Avg points per race",
+                                color = Color(0xFF9A9AA6),
                                 fontSize = 12.sp
                             )
                             Text(
-                                text = String.format("%.2f", driver.avgPtsPerRace),
-                                color = P1TColors.TextPrimary,
+                                text = String.format(java.util.Locale.US, "%.2f", driver.avgPtsPerRace),
+                                color = Color(0xFFF5F5F7),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -703,9 +786,9 @@ private fun DriverStandingCard(driver: DriverStanding) {
 
                         // Last 3 Races Summary Header
                         Text(
-                            text = "Last 3 Races (${driver.last3Summary})",
+                            text = "Last 3 races (${driver.last3Summary})",
                             color = teamColor,
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
 
@@ -720,14 +803,25 @@ private fun DriverStandingCard(driver: DriverStanding) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = r.grandPrixName,
-                                    color = P1TColors.TextPrimary,
-                                    fontSize = 11.sp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Flag,
+                                        contentDescription = null,
+                                        tint = Color(0xFF85858B),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = r.grandPrixName,
+                                        color = Color(0xFFF5F5F7),
+                                        fontSize = 11.sp
+                                    )
+                                }
                                 Text(
                                     text = "${r.positionText} ${r.pointsText}",
-                                    color = if (r.position == 1) Color(0xFFF5C518) else P1TColors.TextSecondary,
+                                    color = if (r.position == 1) Color(0xFFF5C518) else Color(0xFF9A9AA6),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -741,29 +835,34 @@ private fun DriverStandingCard(driver: DriverStanding) {
 }
 
 /**
- * Expandable Constructor Standing cards matching constructor-standings-1080.webp:
- * Mercedes 538 PTS, Ferrari 378 PTS, McLaren 306 PTS
- * with Team Drivers and expandable Race Wins (11 wins listing all 11 Grands Prix and winning driver in team color).
+ * Unslopped Constructor Standing card:
+ * Graphite surface ramp: #19191B outer card, 1.dp hairline border Color.White.copy(alpha = 0.07f),
+ * 4.dp left team accent bar, real TeamCarShowcaseImage cutout, DriverPortraitAvatar for teammates,
+ * crisp Material Icons in #85858B tint, and #141415 inner stats container.
  */
 @Composable
 private fun ConstructorStandingCard(constructor: ConstructorStanding) {
-    var isExpanded by remember { mutableStateOf(constructor.position <= 2) }
+    var isExpanded by rememberSaveable(constructor.team.constructorId) { mutableStateOf(constructor.position <= 2) }
     val teamColor = Color(constructor.team.colorHex)
 
     Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = P1TColors.SurfaceCard),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF19191B)),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, P1TColors.BorderSubtle, RoundedCornerShape(18.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(16.dp))
             .clickable { isExpanded = !isExpanded }
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left Team-Color Stripe
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            // 4.dp Left Team Accent Bar
             Box(
                 modifier = Modifier
-                    .width(5.dp)
-                    .height(if (isExpanded) 240.dp else 100.dp)
+                    .width(4.dp)
+                    .fillMaxHeight()
                     .background(teamColor)
             )
 
@@ -772,7 +871,7 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding) {
                     .weight(1f)
                     .padding(14.dp)
             ) {
-                // Top Row: P1/P2/P3 Pill, Constructor Name, Points
+                // Top Row: P# Badge, Constructor Name, Real Car Cutout, Points
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -791,14 +890,14 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding) {
                                         1 -> Color(0xFFF5C518)
                                         2 -> Color(0xFFC0C0C8)
                                         3 -> Color(0xFFD97B29)
-                                        else -> Color(0xFF24242E)
+                                        else -> Color(0xFF232325)
                                     }
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "P${constructor.position}",
-                                color = if (constructor.position <= 3) Color.Black else P1TColors.TextPrimary,
+                                color = if (constructor.position <= 3) Color.Black else Color(0xFFF5F5F7),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Black
                             )
@@ -807,55 +906,79 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding) {
                         Column {
                             Text(
                                 text = constructor.team.displayName,
-                                color = P1TColors.TextPrimary,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Black
+                                color = Color(0xFFF5F5F7),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
                             )
                             if (constructor.gapToP1 != null) {
+                                val formattedGap = if (constructor.gapToP1.startsWith("-")) constructor.gapToP1 else "-${constructor.gapToP1}"
                                 Text(
-                                    text = "-${constructor.gapToP1}",
-                                    color = P1TColors.TextMuted,
+                                    text = formattedGap,
+                                    color = Color(0xFF85858B),
                                     fontSize = 11.sp
                                 )
                             }
                         }
                     }
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "${constructor.points.toInt()} PTS",
-                            color = teamColor,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Black
+                    // Car Cutout and Points
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        TeamCarShowcaseImage(
+                            team = constructor.team,
+                            modifier = Modifier
+                                .width(88.dp)
+                                .height(34.dp)
                         )
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Expand",
-                            tint = P1TColors.TextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "${constructor.points.toInt()} PTS",
+                                color = teamColor,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Icon(
+                                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                tint = Color(0xFF85858B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Team Drivers Strip
+                // Team Drivers Strip with real DriverPortraitAvatar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     constructor.drivers.forEach { driver ->
-                        Text(
-                            text = "${driver.fullName} (${driver.points.toInt()} pts)",
-                            color = P1TColors.TextSecondary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            DriverPortraitAvatar(
+                                driverCodeOrName = driver.fullName,
+                                teamColor = teamColor,
+                                size = 26.dp
+                            )
+                            Text(
+                                text = "${driver.fullName} (${driver.points.toInt()} pts)",
+                                color = Color(0xFF9A9AA6),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
 
-                // Inner Expandable Race Wins Box
+                // Inner Expandable Race Wins Container: #141415 with 1.dp border Color.White.copy(alpha = 0.06f)
                 AnimatedVisibility(
                     visible = isExpanded,
                     enter = fadeIn() + expandVertically(),
@@ -866,16 +989,27 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding) {
                             .fillMaxWidth()
                             .padding(top = 12.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(P1TColors.SurfaceInnerCard)
-                            .border(1.dp, teamColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF141415))
+                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
-                        Text(
-                            text = "Season Race Wins (${constructor.seasonWins.size} wins)",
-                            color = teamColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = Color(0xFF85858B),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Season race wins (${constructor.seasonWins.size} wins)",
+                                color = teamColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -887,11 +1021,22 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "🏆 ${win.grandPrixName}",
-                                    color = P1TColors.TextPrimary,
-                                    fontSize = 11.sp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.EmojiEvents,
+                                        contentDescription = null,
+                                        tint = Color(0xFF85858B),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = win.grandPrixName,
+                                        color = Color(0xFFF5F5F7),
+                                        fontSize = 11.sp
+                                    )
+                                }
                                 Text(
                                     text = win.winnerFullName,
                                     color = teamColor,
