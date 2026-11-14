@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_loading_bg"
+    android:orientation="vertical"
+    android:padding="12dp"
+    tools:ignore="Overdraw">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_schedule_gp"
+            android:textColor="#F5F5F7"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/preview_schedule_tag"
+            android:textColor="#E1251B"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_preview_elevated_bg"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/fp1_code"
+            android:layout_width="46dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:gravity="center"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_session_fp1_code"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fp1_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_session_fp1_time"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fp1_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/fp1_time"
+            android:text="@string/preview_session_fp1_date"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginHorizontal="8dp"
+            android:layout_toStartOf="@id/fp1_date"
+            android:layout_toEndOf="@id/fp1_code"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_session_fp1_name"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="5dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_preview_elevated_bg"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/fp2_code"
+            android:layout_width="46dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:gravity="center"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_session_fp2_code"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fp2_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_session_fp2_time"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fp2_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/fp2_time"
+            android:text="@string/preview_session_fp2_date"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginHorizontal="8dp"
+            android:layout_toStartOf="@id/fp2_date"
+            android:layout_toEndOf="@id/fp2_code"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_session_fp2_name"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="5dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_preview_elevated_bg"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/quali_code"
+            android:layout_width="46dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:gravity="center"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_session_quali_code"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/quali_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_session_quali_time"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/quali_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/quali_time"
+            android:text="@string/preview_session_quali_date"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginHorizontal="8dp"
+            android:layout_toStartOf="@id/quali_date"
+            android:layout_toEndOf="@id/quali_code"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_session_quali_name"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="5dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_preview_elevated_bg"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/race_code"
+            android:layout_width="46dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_red"
+            android:gravity="center"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_session_race_code"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/race_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_session_race_time"
+            android:textColor="#F5C518"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/race_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/race_time"
+            android:text="@string/preview_session_race_date"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginHorizontal="8dp"
+            android:layout_toStartOf="@id/race_date"
+            android:layout_toEndOf="@id/race_code"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_session_race_name"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+</LinearLayout>

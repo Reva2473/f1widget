@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,14 +25,18 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Run Unit Tests
-        run: gradle testDebugUnitTest
+        run: ./gradlew testDebugUnitTest
 
-      - name: Assemble Debug APK
-        run: gradle assembleDebug
+      - name: Run Android Lint
+        run: ./gradlew lintDebug
+
+      - name: Assemble Debug & Release APKs
+        run: ./gradlew assembleDebug assembleRelease
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

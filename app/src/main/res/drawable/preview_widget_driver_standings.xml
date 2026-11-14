@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="144dp"
+    android:viewportWidth="200"
+    android:viewportHeight="144">
+    <path
+        android:fillColor="#16161A"
+        android:pathData="M14,0 H186 A14,14 0 0,1 200,14 V130 A14,14 0 0,1 186,144 H14 A14,14 0 0,1 0,130 V14 A14,14 0 0,1 14,0 Z" />
+    <!-- Header -->
+    <path
+        android:fillColor="#E1251B"
+        android:pathData="M12,12 H116 V19 H12 Z" />
+    <path
+        android:fillColor="#9A9AA6"
+        android:pathData="M148,13 H188 V18 H148 Z" />
+    <!-- 5 Driver Standings rows -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M14,30 H24 V38 H14 Z" />
+    <path
+        android:fillColor="#E1251B"
+        android:pathData="M30,28 H34 V40 H30 Z M30,94 H34 V106 H30 Z" />
+    <path
+        android:fillColor="#FF8000"
+        android:pathData="M30,50 H34 V62 H30 Z M30,116 H34 V128 H30 Z" />
+    <path
+        android:fillColor="#3671C6"
+        android:pathData="M30,72 H34 V84 H30 Z" />
+    <path
+        android:fillColor="#9A9AA6"
+        android:pathData="M14,52 H24 V60 H14 Z M14,74 H24 V82 H14 Z M14,96 H24 V104 H14 Z M14,118 H24 V126 H14 Z" />
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M42,30 H126 V37 H42 Z M42,52 H120 V59 H42 Z M42,74 H130 V81 H42 Z M42,96 H122 V103 H42 Z M42,118 H116 V125 H42 Z" />
+    <path
+        android:fillColor="#1E1E24"
+        android:pathData="M150,28 H188 V40 H150 Z M150,50 H188 V62 H150 Z M150,72 H188 V84 H150 Z M150,94 H188 V106 H150 Z M150,116 H188 V128 H150 Z" />
+</vector>

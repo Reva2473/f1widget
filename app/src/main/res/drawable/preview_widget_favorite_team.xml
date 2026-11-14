@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:fillColor="#16161A"
+        android:pathData="M14,0 H106 A14,14 0 0,1 120,14 V106 A14,14 0 0,1 106,120 H14 A14,14 0 0,1 0,106 V14 A14,14 0 0,1 14,0 Z" />
+    <!-- Header -->
+    <path
+        android:fillColor="#E1251B"
+        android:pathData="M12,12 H52 V18 H12 Z" />
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M90,11 H108 V21 H90 Z" />
+    <!-- Team name + points -->
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M12,26 H76 V36 H12 Z" />
+    <path
+        android:fillColor="#9A9AA6"
+        android:pathData="M12,40 H94 V46 H12 Z" />
+    <!-- Car silhouette bar -->
+    <path
+        android:fillColor="#E1251B"
+        android:pathData="M18,58 H102 L94,65 H24 Z" />
+    <!-- Driver lineup split -->
+    <path
+        android:fillColor="#1E1E24"
+        android:pathData="M14,76 H106 A5,5 0 0,1 111,81 V106 A5,5 0 0,1 106,111 H14 A5,5 0 0,1 9,106 V81 A5,5 0 0,1 14,76 Z" />
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M18,83 H72 V89 H18 Z M18,98 H72 V104 H18 Z" />
+    <path
+        android:fillColor="#9A9AA6"
+        android:pathData="M82,83 H104 V89 H82 Z M82,98 H104 V104 H82 Z" />
+</vector>

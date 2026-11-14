@@ -5,9 +5,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,8 +35,7 @@ import com.reva2473.f1widget.ui.components.LiveTrackMapCanvas
 import com.reva2473.f1widget.ui.components.MiniSectorBars
 import com.reva2473.f1widget.ui.components.TeamLogoBadge
 import com.reva2473.f1widget.ui.components.TyreCompoundBadge
-import com.reva2473.f1widget.ui.theme.LocalF1Accent
-import com.reva2473.f1widget.ui.theme.P1TColors
+import com.reva2473.f1widget.ui.theme.P1TTheme
 import kotlinx.coroutines.delay
 
 /**
@@ -53,13 +54,19 @@ fun LiveTimingScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedDriverCode by remember { mutableStateOf<String?>("HAM") }
-    var selectedSubTab by remember { mutableStateOf("Track") }
-    var isIntervalMode by remember { mutableStateOf(false) } // false = Leader, true = Interval
-    var isAudioMuted by remember { mutableStateOf(false) }
+    var selectedDriverCode by rememberSaveable {
+        mutableStateOf(sessionState.drivers.firstOrNull { it.code == "HAM" }?.code)
+    }
+    var selectedSubTab by rememberSaveable { mutableStateOf("Track") }
+    var isIntervalMode by rememberSaveable { mutableStateOf(false) } // false = Leader, true = Interval
+    var isAudioMuted by rememberSaveable { mutableStateOf(false) }
     var isRadioPlaying by remember { mutableStateOf(false) }
     var activeRadioClipId by remember { mutableStateOf<String?>(null) }
     var radioProgress by remember { mutableFloatStateOf(0f) }
+
+    val validSelectedDriverCode = selectedDriverCode?.takeIf { code ->
+        sessionState.drivers.any { it.code == code }
+    }
 
     LaunchedEffect(activeRadioClipId, isRadioPlaying) {
         if (isRadioPlaying) {
@@ -70,7 +77,8 @@ fun LiveTimingScreen(
                 sessionState.radioClips.firstOrNull { it.id == clipId } ?: sessionState.latestRadio
             }
             val durationMs = (currentRadio.durationSeconds.coerceAtLeast(3)) * 1000L
-            val startTime = System.currentTimeMillis()
+            val initialOffsetMs = (radioProgress.coerceIn(0f, 1f) * durationMs).toLong()
+            val startTime = System.currentTimeMillis() - initialOffsetMs
             while (isRadioPlaying) {
                 val elapsed = System.currentTimeMillis() - startTime
                 val p = (elapsed.toFloat() / durationMs).coerceIn(0f, 1f)
@@ -82,8 +90,6 @@ fun LiveTimingScreen(
                 }
                 delay(16L)
             }
-        } else {
-            radioProgress = 0f
         }
     }
 
@@ -91,7 +97,7 @@ fun LiveTimingScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = P1TColors.BackgroundPrimary,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             val context = LocalContext.current
             LiveTimingTopBar(
@@ -101,7 +107,11 @@ fun LiveTimingScreen(
                 isAudioMuted = isAudioMuted,
                 onToggleMute = {
                     isAudioMuted = !isAudioMuted
-                    Toast.makeText(context, if (isAudioMuted) "Audio commentary muted" else "Audio commentary unmuted", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isAudioMuted) "Team radio & audio muted" else "Team radio & audio unmuted",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 },
                 onClose = onClose
             )
@@ -141,25 +151,29 @@ fun LiveTimingScreen(
                     item {
                         TrackMapCard(
                             sessionState = sessionState,
-                            selectedDriverCode = selectedDriverCode,
+                            selectedDriverCode = validSelectedDriverCode,
                             onDriverSelected = { code ->
-                                selectedDriverCode = if (selectedDriverCode == code) null else code
+                                selectedDriverCode = if (validSelectedDriverCode == code) null else code
                             }
                         )
                     }
 
                     // TEAM RADIO Card
                     item {
-                        val isPlayingTop = isRadioPlaying && (activeRadioClipId == sessionState.latestRadio.id || activeRadioClipId == null)
+                        val topRadioId = sessionState.latestRadio.id
+                        val isTopClipActive = activeRadioClipId == topRadioId
+                        val isPlayingTop = isRadioPlaying && isTopClipActive
                         TeamRadioCard(
                             radio = sessionState.latestRadio,
                             isPlaying = isPlayingTop,
-                            progress = if (isPlayingTop) radioProgress else 0f,
+                            progress = if (isTopClipActive) radioProgress else 0f,
+                            isMuted = isAudioMuted,
                             onTogglePlay = {
-                                if (activeRadioClipId == sessionState.latestRadio.id || (activeRadioClipId == null && isRadioPlaying)) {
+                                if (activeRadioClipId == topRadioId) {
                                     isRadioPlaying = !isRadioPlaying
                                 } else {
-                                    activeRadioClipId = sessionState.latestRadio.id
+                                    activeRadioClipId = topRadioId
+                                    radioProgress = 0f
                                     isRadioPlaying = true
                                 }
                             }
@@ -182,13 +196,16 @@ fun LiveTimingScreen(
                     }
 
                     // Timing Tower Driver Cards
-                    items(sessionState.drivers, key = { it.code }) { driver ->
+                    itemsIndexed(
+                        items = sessionState.drivers,
+                        key = { index, driver -> "${index}_${driver.code}" }
+                    ) { _, driver ->
                         TimingTowerDriverCard(
                             driver = driver,
                             isIntervalMode = isIntervalMode,
-                            isSelected = driver.code == selectedDriverCode,
+                            isSelected = driver.code == validSelectedDriverCode,
                             onClick = {
-                                selectedDriverCode = if (selectedDriverCode == driver.code) null else driver.code
+                                selectedDriverCode = if (validSelectedDriverCode == driver.code) null else driver.code
                             }
                         )
                     }
@@ -198,14 +215,17 @@ fun LiveTimingScreen(
                     item {
                         Text(
                             text = "RACE CONTROL LOG",
-                            color = P1TColors.TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
                             modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
                         )
                     }
-                    items(sessionState.raceControlMessages, key = { it.id }) { msg ->
+                    itemsIndexed(
+                        items = sessionState.raceControlMessages,
+                        key = { index, msg -> "${index}_${msg.id}" }
+                    ) { _, msg ->
                         RaceControlMessageCard(msg)
                     }
                 }
@@ -214,24 +234,30 @@ fun LiveTimingScreen(
                     item {
                         Text(
                             text = "TEAM RADIO TRANSMISSIONS",
-                            color = P1TColors.TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
                             modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
                         )
                     }
-                    items(sessionState.radioClips, key = { it.id }) { clip ->
-                        val isClipPlaying = isRadioPlaying && activeRadioClipId == clip.id
+                    itemsIndexed(
+                        items = sessionState.radioClips,
+                        key = { index, clip -> "${index}_${clip.id}" }
+                    ) { _, clip ->
+                        val isClipActive = activeRadioClipId == clip.id
+                        val isClipPlaying = isRadioPlaying && isClipActive
                         TeamRadioClipItem(
                             clip = clip,
                             isPlaying = isClipPlaying,
-                            progress = if (isClipPlaying) radioProgress else 0f,
+                            progress = if (isClipActive) radioProgress else 0f,
+                            isMuted = isAudioMuted,
                             onTogglePlay = {
                                 if (activeRadioClipId == clip.id) {
                                     isRadioPlaying = !isRadioPlaying
                                 } else {
                                     activeRadioClipId = clip.id
+                                    radioProgress = 0f
                                     isRadioPlaying = true
                                 }
                             }
@@ -243,7 +269,7 @@ fun LiveTimingScreen(
                     item {
                         Text(
                             text = "OVERTAKE TRACKER",
-                            color = P1TColors.TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
@@ -255,13 +281,16 @@ fun LiveTimingScreen(
                             val sessionDesc = sessionState.sessionName.ifBlank { sessionState.sessionType }.lowercase()
                             Text(
                                 text = "No overtakes recorded in this $sessionDesc session.",
-                                color = P1TColors.TextMuted,
+                                color = P1TTheme.textMuted,
                                 fontSize = 13.sp,
                                 modifier = Modifier.padding(vertical = 24.dp)
                             )
                         }
                     } else {
-                        items(sessionState.overtakes) { overtake ->
+                        itemsIndexed(
+                            items = sessionState.overtakes,
+                            key = { index, it -> "${index}_${it.lap}_${it.overtakingDriver}_${it.overtakenDriver}_${it.positionGained}" }
+                        ) { _, overtake ->
                             OvertakeEventCard(overtake)
                         }
                     }
@@ -295,7 +324,7 @@ private fun LiveTimingTopBar(
     onClose: () -> Unit
 ) {
     Surface(
-        color = P1TColors.BackgroundPrimary,
+        color = MaterialTheme.colorScheme.background,
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
@@ -306,30 +335,34 @@ private fun LiveTimingTopBar(
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Close button
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(P1TColors.SurfaceElevated)
-                    .clickable(onClick = onClose),
-                contentAlignment = Alignment.Center
+            // Close button with >=48dp touch target
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(48.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             // Title & Session
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = grandPrixName,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -343,44 +376,47 @@ private fun LiveTimingTopBar(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(P1TColors.AccentRed)
+                            .background(P1TTheme.accentRed)
                     )
                     Text(
                         text = sessionName,
-                        color = P1TColors.TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            // Audio mute button with >=40dp touch target
+            // Audio mute button with >=48dp touch target
             IconButton(
                 onClick = onToggleMute,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(48.dp)
             ) {
-                Icon(
-                    imageVector = if (isAudioMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = if (isAudioMuted) "Unmute Audio" else "Mute Audio",
-                    tint = P1TColors.TextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isAudioMuted) P1TTheme.redFlagBg else Color.Transparent
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isAudioMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = if (isAudioMuted) "Unmute Audio" else "Mute Audio",
+                        tint = if (isAudioMuted) P1TTheme.accentRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(4.dp))
 
             // Dynamic track status pill
-            val (statusBg, statusBorder, statusTint) = when {
-                trackStatusText.contains("Red", ignoreCase = true) ->
-                    Triple(Color(0xFF3B1214), P1TColors.AccentRed, P1TColors.AccentRed)
-                trackStatusText.contains("Yellow", ignoreCase = true) ||
-                trackStatusText.contains("SC", ignoreCase = true) ||
-                trackStatusText.contains("Safety", ignoreCase = true) ||
-                trackStatusText.contains("VSC", ignoreCase = true) ->
-                    Triple(Color(0xFF33290D), P1TColors.SectorYellow, P1TColors.SectorYellow)
-                else ->
-                    Triple(P1TColors.TrackClearBg, P1TColors.SectorGreen, P1TColors.SectorGreen)
-            }
+            val effectiveStatus = trackStatusText.ifBlank { "Track Clear" }
+            val (statusBg, statusBorder, statusTint) = resolveTrackStatusColors(effectiveStatus)
 
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -400,7 +436,7 @@ private fun LiveTimingTopBar(
                             .size(13.dp)
                     )
                     Text(
-                        text = trackStatusText,
+                        text = effectiveStatus,
                         color = statusTint,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -425,8 +461,8 @@ private fun LiveStatThreeColumnBox(
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF181820),
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -447,14 +483,14 @@ private fun LiveStatThreeColumnBox(
                 }
                 Text(
                     text = leftLabel,
-                    color = P1TColors.TextMuted,
+                    color = P1TTheme.textMuted,
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = timeRemaining,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -465,7 +501,7 @@ private fun LiveStatThreeColumnBox(
                 modifier = Modifier
                     .width(1.dp)
                     .height(26.dp)
-                    .background(P1TColors.BorderSubtle)
+                    .background(MaterialTheme.colorScheme.outline)
             )
 
             // Column 2: Best Lap (Purple)
@@ -475,14 +511,14 @@ private fun LiveStatThreeColumnBox(
             ) {
                 Text(
                     text = "BEST · $bestLapDriverCode",
-                    color = P1TColors.SectorPurple,
+                    color = P1TTheme.sectorPurple,
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = bestLapTime,
-                    color = P1TColors.SectorPurple,
+                    color = P1TTheme.sectorPurple,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Monospace
@@ -493,7 +529,7 @@ private fun LiveStatThreeColumnBox(
                 modifier = Modifier
                     .width(1.dp)
                     .height(26.dp)
-                    .background(P1TColors.BorderSubtle)
+                    .background(MaterialTheme.colorScheme.outline)
             )
 
             // Column 3: On Track
@@ -503,14 +539,14 @@ private fun LiveStatThreeColumnBox(
             ) {
                 Text(
                     text = "ON TRACK",
-                    color = P1TColors.TextMuted,
+                    color = P1TTheme.textMuted,
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = carsOnTrack.toString(),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -531,23 +567,29 @@ private fun LiveTimingSubTabBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         tabs.forEach { tab ->
             val isSelected = tab == selectedTab
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
                 modifier = Modifier
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .clickable { onSelectTab(tab) }
-                    .padding(vertical = 4.dp, horizontal = 2.dp)
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = tab,
-                    color = if (isSelected) Color.White else P1TColors.TextMuted,
+                    color = if (isSelected) MaterialTheme.colorScheme.onBackground else P1TTheme.textMuted,
                     fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    softWrap = false
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Box(
@@ -555,11 +597,22 @@ private fun LiveTimingSubTabBar(
                         .width(if (isSelected) 26.dp else 0.dp)
                         .height(2.5.dp)
                         .clip(RoundedCornerShape(1.dp))
-                        .background(if (isSelected) Color.White else Color.Transparent)
+                        .background(if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent)
                 )
             }
         }
     }
+}
+
+private fun formatSectorLength(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return "—"
+    val numericValue = trimmed.removeSuffix("km").removeSuffix("KM").trim().toDoubleOrNull()
+    if (numericValue != null) {
+        if (numericValue <= 0.0) return "—"
+        return if (trimmed.endsWith("km", ignoreCase = true)) trimmed else "$trimmed km"
+    }
+    return trimmed
 }
 
 /**
@@ -573,28 +626,19 @@ private fun TrackMapCard(
     onDriverSelected: (String) -> Unit
 ) {
     val circuitId = sessionState.circuitId.ifBlank { "INTERLAGOS" }
-    val isInterlagos = circuitId.contains("INTERLAGOS", ignoreCase = true) ||
-        circuitId.contains("BRAZIL", ignoreCase = true) ||
-        circuitId.contains("SAO_PAULO", ignoreCase = true)
-
-    val (s1Desc, s2Desc, s3Desc) = if (isInterlagos) {
-        Triple("T1-T3  1.2 km", "T4-T11  1.9 km", "T12-T15  1.1 km")
-    } else {
-        Triple(
-            "T1-T5  ${sessionState.sector1LengthKm.ifBlank { "1.4 km" }}",
-            "T6-T12  ${sessionState.sector2LengthKm.ifBlank { "1.8 km" }}",
-            "T13-T15  ${sessionState.sector3LengthKm.ifBlank { "2.3 km" }}"
-        )
-    }
+    val s1Desc = formatSectorLength(sessionState.sector1LengthKm)
+    val s2Desc = formatSectorLength(sessionState.sector2LengthKm)
+    val s3Desc = formatSectorLength(sessionState.sector3LengthKm)
+    val hasValidSelection = selectedDriverCode != null &&
+        sessionState.drivers.any { it.code == selectedDriverCode }
 
     val trackStatus = sessionState.trackStatus.ifBlank { "Track Clear" }
-    val isClear = trackStatus.contains("Clear", ignoreCase = true)
-    val statusColor = if (isClear) P1TColors.SectorGreen else P1TColors.SectorYellow
+    val (_, _, statusColor) = resolveTrackStatusColors(trackStatus)
 
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = P1TColors.SurfaceCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -606,7 +650,7 @@ private fun TrackMapCard(
             ) {
                 LiveTrackMapCanvas(
                     drivers = sessionState.drivers,
-                    selectedDriverCode = selectedDriverCode,
+                    selectedDriverCode = selectedDriverCode.takeIf { hasValidSelection },
                     onDriverTap = onDriverSelected,
                     circuitType = circuitId,
                     modifier = Modifier.fillMaxSize()
@@ -621,59 +665,17 @@ private fun TrackMapCard(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "S1",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = s1Desc,
-                        color = P1TColors.TextSecondary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                SectorLengthItem(label = "S1", value = s1Desc)
                 Text(
                     text = "·",
-                    color = P1TColors.TextMuted
+                    color = P1TTheme.textMuted
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "S2",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = s2Desc,
-                        color = P1TColors.TextSecondary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                SectorLengthItem(label = "S2", value = s2Desc)
                 Text(
                     text = "·",
-                    color = P1TColors.TextMuted
+                    color = P1TTheme.textMuted
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "S3",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = s3Desc,
-                        color = P1TColors.TextSecondary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                SectorLengthItem(label = "S3", value = s3Desc)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -702,8 +704,8 @@ private fun TrackMapCard(
                 }
 
                 Text(
-                    text = if (selectedDriverCode != null) "Tap again to clear" else "${sessionState.carsOnTrack} on track",
-                    color = P1TColors.TextMuted,
+                    text = if (hasValidSelection) "Tap again to clear" else "${sessionState.carsOnTrack} on track",
+                    color = P1TTheme.textMuted,
                     fontSize = 11.5.sp
                 )
             }
@@ -711,21 +713,45 @@ private fun TrackMapCard(
     }
 }
 
+@Composable
+private fun SectorLengthItem(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = value,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 /**
- * TEAM RADIO Card (🎧 TEAM RADIO in teal, Fernando Alonso, Aston Martin · 08:55:53,
- * large white circular Play/Pause button ▶ with progress bar at bottom)
+ * TEAM RADIO Card (🎧 TEAM RADIO in red, driver, timestamp,
+ * circular Play/Pause button ▶ with progress bar at bottom)
  */
 @Composable
 private fun TeamRadioCard(
     radio: TeamRadioClip,
     isPlaying: Boolean,
     progress: Float = 0f,
+    isMuted: Boolean = false,
     onTogglePlay: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = P1TColors.SurfaceCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -743,25 +769,56 @@ private fun TeamRadioCard(
                     Icon(
                         imageVector = Icons.Default.Headphones,
                         contentDescription = null,
-                        tint = Color(0xFFE1251B),
+                        tint = P1TTheme.accentRed,
                         modifier = Modifier
                             .padding(end = 4.dp)
                             .size(15.dp)
                     )
                     Text(
                         text = "TEAM RADIO",
-                        color = Color(0xFFE1251B),
+                        color = P1TTheme.accentRed,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
                 }
 
-                Text(
-                    text = radio.timestamp,
-                    color = P1TColors.TextMuted,
-                    fontSize = 11.sp
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isMuted) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = P1TTheme.redFlagBg,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, P1TTheme.redFlagBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                                    contentDescription = null,
+                                    tint = P1TTheme.accentRed,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    text = "MUTED",
+                                    color = P1TTheme.accentRed,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = radio.timestamp,
+                        color = P1TTheme.textMuted,
+                        fontSize = 11.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -777,62 +834,74 @@ private fun TeamRadioCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = radio.driverName,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     val teamName = if (radio.team == F1TeamId.AUDI_SAUBER) "Audi" else radio.team.displayName
                     Text(
                         text = "$teamName · ${radio.timestamp}",
-                        color = P1TColors.TextSecondary,
-                        fontSize = 12.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "\"${radio.transcript}\"",
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
                         fontSize = 12.5.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                // Play / Pause Circle Button
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .clickable(onClick = onTogglePlay),
-                    contentAlignment = Alignment.Center
+                // Play / Pause Circle Button with >=48dp touch target
+                IconButton(
+                    onClick = onTogglePlay,
+                    modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play radio",
-                        tint = Color.Black,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = when {
+                                isPlaying -> "Pause radio"
+                                isMuted -> "Play radio (muted)"
+                                else -> "Play radio"
+                            },
+                            tint = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Audio Progress Bar
+            // Audio Progress Bar (0f when idle/unstarted; preserves paused offset)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0xFF252530))
+                    .background(P1TTheme.dividerSubtle)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .fillMaxWidth(if (isPlaying) progress.coerceIn(0f, 1f) else 0.15f)
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
                         .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFFE1251B))
+                        .background(if (isMuted) P1TTheme.textMuted else P1TTheme.accentRed)
                 )
             }
         }
@@ -849,8 +918,8 @@ private fun SessionStartedBannerCard(
     val firstMsg = messages.firstOrNull() ?: RaceControlMessage("1", "SESSION STARTED", "09:00:00", "INFO")
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = Color(0xFF14141A),
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = P1TTheme.surfaceInnerCard,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -860,25 +929,31 @@ private fun SessionStartedBannerCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(P1TColors.SectorGreen)
+                        .background(P1TTheme.sectorGreen)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = firstMsg.title,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = firstMsg.timestamp,
-                color = P1TColors.TextMuted,
+                color = P1TTheme.textMuted,
                 fontSize = 11.5.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -902,14 +977,14 @@ private fun TimingTowerHeader(
     ) {
         Text(
             text = "POS",
-            color = P1TColors.TextMuted,
+            color = P1TTheme.textMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.width(32.dp)
         )
         Text(
             text = "DRIVER",
-            color = P1TColors.TextMuted,
+            color = P1TTheme.textMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f)
@@ -918,18 +993,18 @@ private fun TimingTowerHeader(
         // Segmented Toggle: Interval / Leader
         Surface(
             shape = RoundedCornerShape(14.dp),
-            color = Color(0xFF16161E),
-            border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle)
+            color = P1TTheme.surfaceInnerCard,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             Row(modifier = Modifier.padding(2.dp)) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isIntervalMode) Color(0xFF2C2C3A) else Color.Transparent,
+                    color = if (isIntervalMode) P1TTheme.pillSelectedBg else Color.Transparent,
                     modifier = Modifier.clickable { onToggleMode(true) }
                 ) {
                     Text(
                         text = "Interval",
-                        color = if (isIntervalMode) Color.White else P1TColors.TextMuted,
+                        color = if (isIntervalMode) MaterialTheme.colorScheme.onSurface else P1TTheme.textMuted,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -938,12 +1013,12 @@ private fun TimingTowerHeader(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (!isIntervalMode) Color(0xFF2C2C3A) else Color.Transparent,
+                    color = if (!isIntervalMode) P1TTheme.pillSelectedBg else Color.Transparent,
                     modifier = Modifier.clickable { onToggleMode(false) }
                 ) {
                     Text(
                         text = "Leader",
-                        color = if (!isIntervalMode) Color.White else P1TColors.TextMuted,
+                        color = if (!isIntervalMode) MaterialTheme.colorScheme.onSurface else P1TTheme.textMuted,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -968,11 +1043,13 @@ private fun TimingTowerDriverCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val borderColor = if (isSelected) Color(driver.team.colorHex) else P1TColors.BorderSubtle
+    val teamColor = Color(driver.team.colorHex)
+    val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+    val borderColor = if (isSelected) adaptiveTeamColor else MaterialTheme.colorScheme.outline
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = P1TColors.SurfaceCard,
+        color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderColor),
         modifier = Modifier
             .fillMaxWidth()
@@ -991,7 +1068,7 @@ private fun TimingTowerDriverCard(
                 // Position number
                 Text(
                     text = driver.position.toString(),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
                     modifier = Modifier.width(24.dp)
@@ -1000,7 +1077,7 @@ private fun TimingTowerDriverCard(
                 // Driver Avatar
                 DriverPortraitAvatar(
                     driverCodeOrName = driver.code,
-                    teamColor = Color(driver.team.colorHex),
+                    teamColor = if (driver.team == F1TeamId.OTHER) P1TTheme.textMuted else teamColor,
                     size = 28.dp
                 )
 
@@ -1010,34 +1087,42 @@ private fun TimingTowerDriverCard(
 
                 // Driver details
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = driver.code,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 14.sp,
-                            fontWeight = FontWeight.Black
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            softWrap = false
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = driver.fullName,
-                            color = P1TColors.TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
 
                         if (driver.isInPit) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = P1TColors.InPitBlue.copy(alpha = 0.25f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.InPitBlue)
+                                color = P1TTheme.inPitText.copy(alpha = if (P1TTheme.isDark) 0.22f else 0.12f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, P1TTheme.inPitText)
                             ) {
                                 Text(
                                     text = "IN PIT",
-                                    color = Color(0xFF64B5F6),
+                                    color = P1TTheme.inPitText,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                 )
                             }
@@ -1045,14 +1130,16 @@ private fun TimingTowerDriverCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFF202028),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF484858))
+                                color = P1TTheme.pillBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, P1TTheme.pillBorder)
                             ) {
                                 Text(
                                     text = "OUT LAP",
-                                    color = Color(0xFFA0A0B0),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                 )
                             }
@@ -1067,9 +1154,11 @@ private fun TimingTowerDriverCard(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "${driver.tyreAgeLaps}",
-                            color = P1TColors.TextMuted,
+                            color = P1TTheme.textMuted,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         MiniSectorBars(
@@ -1080,22 +1169,28 @@ private fun TimingTowerDriverCard(
                     }
                 }
 
+                Spacer(modifier = Modifier.width(8.dp))
+
                 // Right Column: Best Lap Time + Gap
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = driver.bestLapTime,
-                        color = if (driver.isOverallBest) P1TColors.SectorPurple else Color.White,
+                        color = if (driver.isOverallBest) P1TTheme.sectorPurple else MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        softWrap = false
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     val gapText = if (isIntervalMode) driver.intervalToAhead else driver.gapToLeader
                     Text(
                         text = gapText,
-                        color = P1TColors.TextMuted,
+                        color = P1TTheme.textMuted,
                         fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
@@ -1107,7 +1202,7 @@ private fun TimingTowerDriverCard(
                         .fillMaxWidth()
                         .padding(top = 10.dp)
                 ) {
-                    HorizontalDivider(color = P1TColors.BorderSubtle, thickness = 1.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp)
                     Spacer(modifier = Modifier.height(10.dp))
 
                     // Row 1: Sectors 1, 2, 3
@@ -1130,13 +1225,13 @@ private fun TimingTowerDriverCard(
                         TelemetryCell(label = "LAST LAP", value = driver.lastLapTime, modifier = Modifier.weight(1f))
                         TelemetryCell(
                             label = "BEST LAP",
-                            value = "${driver.bestLapTime} ${if (driver.gapToLeader != "Leader") driver.gapToLeader else ""}",
+                            value = driver.bestLapTime,
                             modifier = Modifier.weight(1f)
                         )
                         TelemetryCell(
                             label = "TYRE",
                             value = "(${driver.tyreCompound.code}) ${driver.tyreCompound.label} · ${driver.tyreAgeLaps}L",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1.1f)
                         )
                     }
                 }
@@ -1149,24 +1244,35 @@ private fun TimingTowerDriverCard(
 private fun TelemetryCell(
     label: String,
     value: String,
-    status: SectorStatus? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    status: SectorStatus? = null
 ) {
+    val valueColor = when (status) {
+        SectorStatus.OVERALL_BEST -> P1TTheme.sectorPurple
+        SectorStatus.PERSONAL_BEST -> P1TTheme.sectorGreen
+        SectorStatus.NORMAL -> P1TTheme.sectorYellow
+        SectorStatus.INACTIVE -> P1TTheme.textMuted
+        null -> MaterialTheme.colorScheme.onSurface
+    }
     Column(modifier = modifier) {
         Text(
             text = label,
-            color = P1TColors.TextMuted,
+            color = P1TTheme.textMuted,
             fontSize = 9.5.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
-            color = status?.let { Color(it.colorHex) } ?: Color.White,
-            fontSize = 12.sp,
+            color = valueColor,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -1176,8 +1282,8 @@ private fun TelemetryCell(
 private fun RaceControlMessageCard(msg: RaceControlMessage) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = P1TColors.SurfaceCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1187,30 +1293,36 @@ private fun RaceControlMessageCard(msg: RaceControlMessage) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
                         .background(
                             when (msg.category) {
-                                "FLAG" -> Color(0xFFF5C518)
-                                "SAFETY_CAR" -> Color(0xFFFF8000)
-                                else -> Color(0xFF2CE580)
+                                "FLAG" -> P1TTheme.sectorYellow
+                                "SAFETY_CAR" -> P1TTheme.adaptiveTeamText(Color(0xFFFF8000))
+                                else -> P1TTheme.sectorGreen
                             }
                         )
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = msg.title,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = msg.timestamp,
-                color = P1TColors.TextMuted,
+                color = P1TTheme.textMuted,
                 fontSize = 11.5.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -1223,12 +1335,16 @@ private fun TeamRadioClipItem(
     clip: TeamRadioClip,
     isPlaying: Boolean,
     progress: Float = 0f,
+    isMuted: Boolean = false,
     onTogglePlay: () -> Unit
 ) {
+    val teamColor = Color(clip.team.colorHex)
+    val adaptiveTeam = P1TTheme.adaptiveTeamText(teamColor)
+
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = P1TColors.SurfaceCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1240,24 +1356,32 @@ private fun TeamRadioClipItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(clip.team.colorHex).copy(alpha = 0.2f))
-                        .border(1.dp, Color(clip.team.colorHex), CircleShape)
-                        .clickable(onClick = onTogglePlay),
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = onTogglePlay,
+                    modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play",
-                        tint = Color(clip.team.colorHex),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(teamColor.copy(alpha = 0.2f))
+                            .border(1.dp, adaptiveTeam, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = when {
+                                isPlaying -> "Pause"
+                                isMuted -> "Play (muted)"
+                                else -> "Play"
+                            },
+                            tint = adaptiveTeam,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 TeamLogoBadge(team = clip.team, sizeDp = 24)
 
@@ -1266,24 +1390,42 @@ private fun TeamRadioClipItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "${clip.driverName} (${clip.driverCode})",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
-                        Text(
-                            text = clip.timestamp,
-                            color = P1TColors.TextMuted,
-                            fontSize = 11.sp
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (isMuted) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                                    contentDescription = "Muted",
+                                    tint = P1TTheme.accentRed,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            Text(
+                                text = clip.timestamp,
+                                color = P1TTheme.textMuted,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "\"${clip.transcript}\"",
-                        color = P1TColors.TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1291,21 +1433,21 @@ private fun TeamRadioClipItem(
                 }
             }
 
-            if (isPlaying) {
+            if (isPlaying || progress > 0f) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(3.dp)
                         .clip(RoundedCornerShape(1.5.dp))
-                        .background(Color(0xFF252530))
+                        .background(P1TTheme.dividerSubtle)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(progress.coerceIn(0f, 1f))
                             .clip(RoundedCornerShape(1.5.dp))
-                            .background(Color(clip.team.colorHex))
+                            .background(if (isMuted) P1TTheme.textMuted else adaptiveTeam)
                     )
                 }
             }
@@ -1317,8 +1459,8 @@ private fun TeamRadioClipItem(
 private fun OvertakeEventCard(event: OvertakeEvent) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = P1TColors.SurfaceCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1329,11 +1471,11 @@ private fun OvertakeEventCard(event: OvertakeEvent) {
         ) {
             Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = Color(0xFF1E1E28)
+                color = P1TTheme.pillBg
             ) {
                 Text(
                     text = "LAP ${event.lap}",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
@@ -1345,13 +1487,13 @@ private fun OvertakeEventCard(event: OvertakeEvent) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "${event.overtakingDriver} passed ${event.overtakenDriver}",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = "For P${event.positionGained} at ${event.cornerText}",
-                    color = P1TColors.TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.5.sp
                 )
             }
@@ -1363,8 +1505,8 @@ private fun OvertakeEventCard(event: OvertakeEvent) {
 private fun WeatherConditionsCard(weather: WeatherSnapshot) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = P1TColors.SurfaceCard,
-        border = androidx.compose.foundation.BorderStroke(1.dp, P1TColors.BorderSubtle),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1374,7 +1516,7 @@ private fun WeatherConditionsCard(weather: WeatherSnapshot) {
         ) {
             Text(
                 text = "TRACK & ATMOSPHERIC CONDITIONS",
-                color = P1TColors.TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
@@ -1406,18 +1548,29 @@ private fun WeatherConditionsCard(weather: WeatherSnapshot) {
 }
 
 @Composable
+private fun resolveTrackStatusColors(trackStatus: String): Triple<Color, Color, Color> = when {
+    trackStatus.contains("Red", ignoreCase = true) ->
+        Triple(P1TTheme.redFlagBg, P1TTheme.accentRed, P1TTheme.accentRed)
+    trackStatus.contains("Clear", ignoreCase = true) ||
+    trackStatus.contains("Green", ignoreCase = true) ->
+        Triple(P1TTheme.trackClearBg, P1TTheme.sectorGreen, P1TTheme.sectorGreen)
+    else ->
+        Triple(P1TTheme.sectorYellowBg, P1TTheme.sectorYellow, P1TTheme.sectorYellow)
+}
+
+@Composable
 private fun WeatherParam(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,
-            color = P1TColors.TextMuted,
+            color = P1TTheme.textMuted,
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = value,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace

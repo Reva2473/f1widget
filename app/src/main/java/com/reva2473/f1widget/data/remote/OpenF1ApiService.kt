@@ -160,7 +160,7 @@ data class OpenF1LapDto(
 
 @Serializable
 data class OpenF1StintDto(
-    @SerialName("compound") val compound: String = "MEDIUM",
+    @SerialName("compound") val compound: String? = null,
     @SerialName("driver_number") val driverNumber: Int = 0,
     @SerialName("lap_end") val lapEnd: Int? = null,
     @SerialName("lap_start") val lapStart: Int = 0,

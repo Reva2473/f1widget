@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
+    <!-- Strictly include shared preferences and DataStore user preferences; f1_offline_cache is excluded by allowlisting. -->
     <cloud-backup>
         <include domain="sharedpref" path="." />
-        <include domain="file" path="datastore" />
+        <include domain="file" path="datastore/user_preferences.preferences_pb" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
-        <include domain="file" path="datastore" />
+        <include domain="file" path="datastore/user_preferences.preferences_pb" />
     </device-transfer>
 </data-extraction-rules>

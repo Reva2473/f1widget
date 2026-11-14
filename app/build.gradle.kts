@@ -1,9 +1,34 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.compiler)
 }
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+val releaseStoreFilePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    ?: keystoreProperties.getProperty("storeFile")
+val releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+    ?: keystoreProperties.getProperty("storePassword")
+val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+    ?: keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+    ?: keystoreProperties.getProperty("keyPassword")
+val releaseStoreFile = releaseStoreFilePath
+    ?.takeIf { it.isNotBlank() }
+    ?.let { rootProject.file(it) }
+val hasReleaseSigning = releaseStoreFile != null &&
+    releaseStoreFile.exists() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.reva2473.f1widget"
@@ -17,14 +42,26 @@ android {
         versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -65,7 +102,6 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.androidx.navigation.compose)
 
     // Jetpack Glance Widgets
     implementation(libs.androidx.glance)
@@ -78,15 +114,14 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
 
-    // DataStore Preferences & Coroutines
+    // DataStore Preferences, Coroutines & Background Work
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
     debugImplementation(libs.androidx.ui.tooling)
 }

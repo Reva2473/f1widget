@@ -26,106 +26,95 @@ import androidx.compose.ui.unit.sp
 import com.reva2473.f1widget.R
 import com.reva2473.f1widget.domain.model.F1TeamId
 
+private data class DriverAssetSpec(
+    val code: String,
+    val firstNames: Set<String>,
+    val lastNames: Set<String>,
+    @DrawableRes val headshotRes: Int,
+    @DrawableRes val cutoutRes: Int
+)
+
+private val DRIVER_NAME_SPLIT_REGEX = Regex("[\\s_\\-.]+")
+
+private val DRIVER_ASSET_SPECS = listOf(
+    DriverAssetSpec("VER", setOf("max"), setOf("verstappen"), R.drawable.driver_ver, R.drawable.driver_full_ver),
+    DriverAssetSpec("HAM", setOf("lewis"), setOf("hamilton"), R.drawable.driver_ham, R.drawable.driver_full_ham),
+    DriverAssetSpec("LEC", setOf("charles"), setOf("leclerc"), R.drawable.driver_lec, R.drawable.driver_full_lec),
+    DriverAssetSpec("NOR", setOf("lando"), setOf("norris"), R.drawable.driver_nor, R.drawable.driver_full_nor),
+    DriverAssetSpec("PIA", setOf("oscar"), setOf("piastri"), R.drawable.driver_pia, R.drawable.driver_full_pia),
+    DriverAssetSpec("RUS", setOf("george"), setOf("russell"), R.drawable.driver_rus, R.drawable.driver_full_rus),
+    DriverAssetSpec("ANT", setOf("andrea", "kimi"), setOf("antonelli"), R.drawable.driver_ant, R.drawable.driver_full_ant),
+    DriverAssetSpec("ALO", setOf("fernando"), setOf("alonso"), R.drawable.driver_alo, R.drawable.driver_full_alo),
+    DriverAssetSpec("STR", setOf("lance"), setOf("stroll"), R.drawable.driver_str, R.drawable.driver_full_str),
+    DriverAssetSpec("GAS", setOf("pierre"), setOf("gasly"), R.drawable.driver_gas, R.drawable.driver_full_gas),
+    DriverAssetSpec("OCO", setOf("esteban"), setOf("ocon"), R.drawable.driver_oco, R.drawable.driver_full_oco),
+    DriverAssetSpec("ALB", setOf("alex", "alexander"), setOf("albon"), R.drawable.driver_alb, R.drawable.driver_full_alb),
+    DriverAssetSpec("SAI", setOf("carlos"), setOf("sainz"), R.drawable.driver_sai, R.drawable.driver_full_sai),
+    DriverAssetSpec("LAW", setOf("liam"), setOf("lawson"), R.drawable.driver_law, R.drawable.driver_full_law),
+    DriverAssetSpec("HAD", setOf("isack"), setOf("hadjar"), R.drawable.driver_had, R.drawable.driver_full_had),
+    DriverAssetSpec("COL", setOf("franco"), setOf("colapinto"), R.drawable.driver_col, R.drawable.driver_full_col),
+    DriverAssetSpec("BEA", setOf("oliver", "ollie"), setOf("bearman"), R.drawable.driver_bea, R.drawable.driver_full_bea),
+    DriverAssetSpec("HUL", setOf("nico"), setOf("hulkenberg", "hülkenberg"), R.drawable.driver_hul, R.drawable.driver_full_hul),
+    DriverAssetSpec("BOR", setOf("gabriel"), setOf("bortoleto"), R.drawable.driver_bor, R.drawable.driver_full_bor),
+    DriverAssetSpec("TSU", setOf("yuki"), setOf("tsunoda"), R.drawable.driver_tsu, R.drawable.driver_full_tsu),
+    DriverAssetSpec("DOO", setOf("jack"), setOf("doohan"), R.drawable.driver_doo, R.drawable.driver_full_doo),
+    DriverAssetSpec("BOT", setOf("valtteri"), setOf("bottas"), R.drawable.driver_bot, R.drawable.driver_full_bot),
+    DriverAssetSpec("LIN", setOf("arvid"), setOf("lindblad"), R.drawable.driver_lin, R.drawable.driver_full_lin),
+    DriverAssetSpec("PER", setOf("sergio"), setOf("perez", "pérez"), R.drawable.driver_per, R.drawable.driver_full_per)
+)
+
+private fun resolveDriverAssetSpec(codeOrName: String): DriverAssetSpec? {
+    val trimmed = codeOrName.trim()
+    if (trimmed.isEmpty()) return null
+
+    // 1. Exact 3-letter driver code match first
+    val upper = trimmed.uppercase()
+    if (upper.length == 3) {
+        DRIVER_ASSET_SPECS.firstOrNull { it.code == upper }?.let { return it }
+    }
+
+    // 2. Tokenized full name / driverId match (guards against historical relatives like Jos Verstappen)
+    val tokens = trimmed.lowercase().split(DRIVER_NAME_SPLIT_REGEX).filter { it.isNotEmpty() }
+    if (tokens.isEmpty()) return null
+
+    if (tokens.size == 1) {
+        val single = tokens[0]
+        return DRIVER_ASSET_SPECS.firstOrNull { single in it.lastNames }
+    }
+
+    return DRIVER_ASSET_SPECS.firstOrNull { spec ->
+        tokens.any { it in spec.lastNames } && tokens.any { it in spec.firstNames }
+    }
+}
+
 /**
  * Resolves real 2025/2026 F1 driver circular headshot drawable resource.
  */
 @DrawableRes
-fun getDriverHeadshotRes(codeOrName: String): Int? {
-    val key = codeOrName.trim().uppercase()
-    val lower = codeOrName.trim().lowercase()
-
-    return when {
-        key == "VER" || lower.contains("verstappen") -> R.drawable.driver_ver
-        key == "HAM" || lower.contains("hamilton") -> R.drawable.driver_ham
-        key == "LEC" || lower.contains("leclerc") -> R.drawable.driver_lec
-        key == "NOR" || lower.contains("norris") -> R.drawable.driver_nor
-        key == "PIA" || lower.contains("piastri") -> R.drawable.driver_pia
-        key == "RUS" || lower.contains("russell") -> R.drawable.driver_rus
-        key == "ANT" || lower.contains("antonelli") -> R.drawable.driver_ant
-        key == "ALO" || lower.contains("alonso") -> R.drawable.driver_alo
-        key == "STR" || lower.contains("stroll") -> R.drawable.driver_str
-        key == "GAS" || lower.contains("gasly") -> R.drawable.driver_gas
-        key == "OCO" || lower.contains("ocon") -> R.drawable.driver_oco
-        key == "ALB" || lower.contains("albon") -> R.drawable.driver_alb
-        key == "SAI" || lower.contains("sainz") -> R.drawable.driver_sai
-        key == "LAW" || lower.contains("lawson") -> R.drawable.driver_law
-        key == "HAD" || lower.contains("hadjar") -> R.drawable.driver_had
-        key == "COL" || lower.contains("colapinto") -> R.drawable.driver_col
-        key == "BEA" || lower.contains("bearman") -> R.drawable.driver_bea
-        key == "HUL" || lower.contains("hulkenberg") || lower.contains("hülkenberg") -> R.drawable.driver_hul
-        key == "BOR" || lower.contains("bortoleto") -> R.drawable.driver_bor
-        key == "TSU" || lower.contains("tsunoda") -> R.drawable.driver_tsu
-        key == "DOO" || lower.contains("doohan") -> R.drawable.driver_doo
-        key == "BOT" || key == "VB" || lower.contains("bottas") -> R.drawable.driver_bot
-        key == "LIN" || key == "AL" || lower.contains("lindblad") -> R.drawable.driver_lin
-        key == "PER" || key == "SP" || lower.contains("perez") || lower.contains("pérez") -> R.drawable.driver_per
-        else -> null
-    }
-}
+fun getDriverHeadshotRes(codeOrName: String): Int? =
+    resolveDriverAssetSpec(codeOrName)?.headshotRes
 
 /**
  * Resolves real 2025/2026 F1 driver full upper-body cutout drawable resource.
  */
 @DrawableRes
-fun getDriverCutoutRes(codeOrName: String): Int? {
-    val key = codeOrName.trim().uppercase()
-    val lower = codeOrName.trim().lowercase()
-
-    return when {
-        key == "VER" || lower.contains("verstappen") -> R.drawable.driver_full_ver
-        key == "HAM" || lower.contains("hamilton") -> R.drawable.driver_full_ham
-        key == "LEC" || lower.contains("leclerc") -> R.drawable.driver_full_lec
-        key == "NOR" || lower.contains("norris") -> R.drawable.driver_full_nor
-        key == "PIA" || lower.contains("piastri") -> R.drawable.driver_full_pia
-        key == "RUS" || lower.contains("russell") -> R.drawable.driver_full_rus
-        key == "ANT" || lower.contains("antonelli") -> R.drawable.driver_full_ant
-        key == "ALO" || lower.contains("alonso") -> R.drawable.driver_full_alo
-        key == "STR" || lower.contains("stroll") -> R.drawable.driver_full_str
-        key == "GAS" || lower.contains("gasly") -> R.drawable.driver_full_gas
-        key == "OCO" || lower.contains("ocon") -> R.drawable.driver_full_oco
-        key == "ALB" || lower.contains("albon") -> R.drawable.driver_full_alb
-        key == "SAI" || lower.contains("sainz") -> R.drawable.driver_full_sai
-        key == "LAW" || lower.contains("lawson") -> R.drawable.driver_full_law
-        key == "HAD" || lower.contains("hadjar") -> R.drawable.driver_full_had
-        key == "COL" || lower.contains("colapinto") -> R.drawable.driver_full_col
-        key == "BEA" || lower.contains("bearman") -> R.drawable.driver_full_bea
-        key == "HUL" || lower.contains("hulkenberg") || lower.contains("hülkenberg") -> R.drawable.driver_full_hul
-        key == "BOR" || lower.contains("bortoleto") -> R.drawable.driver_full_bor
-        key == "TSU" || lower.contains("tsunoda") -> R.drawable.driver_full_tsu
-        key == "DOO" || lower.contains("doohan") -> R.drawable.driver_full_doo
-        key == "BOT" || key == "VB" || lower.contains("bottas") -> R.drawable.driver_full_bot
-        key == "LIN" || key == "AL" || lower.contains("lindblad") -> R.drawable.driver_full_lin
-        key == "PER" || key == "SP" || lower.contains("perez") || lower.contains("pérez") -> R.drawable.driver_full_per
-        else -> null
-    }
-}
+fun getDriverCutoutRes(codeOrName: String): Int? =
+    resolveDriverAssetSpec(codeOrName)?.cutoutRes
 
 /**
  * Resolves real 2025/2026 F1 team car side-profile cutout drawable resource.
  */
 @DrawableRes
 fun getTeamCarRes(teamIdOrName: String): Int {
-    val lower = teamIdOrName.trim().lowercase()
-
-    return when {
-        lower.contains("mercedes") || lower == "mer" -> R.drawable.car_mercedes
-        lower.contains("ferrari") || lower == "fer" -> R.drawable.car_ferrari
-        lower.contains("red bull") || lower.contains("red_bull") || lower == "rbr" -> R.drawable.car_red_bull
-        lower.contains("mclaren") || lower == "mcl" -> R.drawable.car_mclaren
-        lower.contains("racing bull") || lower.contains("vcarb") || lower.contains("alphatauri") ||
-            lower == "rb" || lower == "vrb" || lower.contains("cash app") -> R.drawable.car_racing_bulls
-        lower.contains("alpine") || lower == "alp" -> R.drawable.car_alpine
-        lower.contains("aston") || lower == "amr" -> R.drawable.car_aston_martin
-        lower.contains("haas") || lower == "haa" -> R.drawable.car_haas
-        lower.contains("williams") || lower == "wil" -> R.drawable.car_williams
-        lower.contains("cadillac") || lower == "cad" -> R.drawable.car_cadillac
-        lower.contains("sauber") || lower.contains("audi") || lower == "sau" -> R.drawable.car_audi_sauber
-        else -> R.drawable.car_ferrari
+    val trimmed = teamIdOrName.trim()
+    val byShortCode = F1TeamId.entries.firstOrNull {
+        it != F1TeamId.OTHER && it.shortCode.equals(trimmed, ignoreCase = true)
     }
+    return getTeamCarRes(byShortCode ?: F1TeamId.fromName(trimmed))
 }
 
 @DrawableRes
-fun getTeamCarRes(team: F1TeamId): Int {
+fun getTeamCarResOrNull(team: F1TeamId): Int? {
     return when (team) {
         F1TeamId.MERCEDES -> R.drawable.car_mercedes
         F1TeamId.FERRARI -> R.drawable.car_ferrari
@@ -138,14 +127,22 @@ fun getTeamCarRes(team: F1TeamId): Int {
         F1TeamId.WILLIAMS -> R.drawable.car_williams
         F1TeamId.AUDI_SAUBER -> R.drawable.car_audi_sauber
         F1TeamId.CADILLAC -> R.drawable.car_cadillac
+        F1TeamId.OTHER -> null
     }
+}
+
+@DrawableRes
+fun getTeamCarRes(team: F1TeamId): Int {
+    return getTeamCarResOrNull(team) ?: R.drawable.car_haas
 }
 
 @DrawableRes
 fun getTeamCarResByColor(color: Color): Int {
     val targetArgb = color.toArgb()
     val matched = F1TeamId.entries.firstOrNull {
-        Color(it.colorHex).toArgb() == targetArgb || Color(it.secondaryHex).toArgb() == targetArgb
+        it != F1TeamId.OTHER && (
+            Color(it.colorHex).toArgb() == targetArgb || Color(it.secondaryHex).toArgb() == targetArgb
+            )
     }
     if (matched != null) return getTeamCarRes(matched)
 
@@ -157,7 +154,22 @@ fun getTeamCarResByColor(color: Color): Int {
         color.green > 0.5f && color.blue in 0.3f..0.6f -> R.drawable.car_aston_martin
         color.red > 0.8f && color.blue > 0.6f -> R.drawable.car_alpine
         color.green > 0.8f && color.blue < 0.4f -> R.drawable.car_audi_sauber
-        else -> R.drawable.car_ferrari
+        else -> R.drawable.car_haas
+    }
+}
+
+private fun computeDriverFallbackLabel(driverCodeOrName: String, driverCode: String?): String {
+    val explicitCode = driverCode?.trim()?.takeIf { it.isNotEmpty() }
+    if (explicitCode != null) {
+        return explicitCode.take(3).uppercase()
+    }
+    val trimmed = driverCodeOrName.trim()
+    if (trimmed.isEmpty()) return "?"
+    val words = trimmed.split(DRIVER_NAME_SPLIT_REGEX).filter { it.isNotEmpty() }
+    return when {
+        words.size >= 2 -> "${words.first().first()}${words.last().first()}".uppercase()
+        trimmed.length <= 3 -> trimmed.uppercase()
+        else -> trimmed.first().uppercase()
     }
 }
 
@@ -173,12 +185,19 @@ fun DriverPortraitAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 52.dp,
     positionBadge: String? = null,
-    useFullCutout: Boolean = false
+    useFullCutout: Boolean = false,
+    driverCode: String? = null
 ) {
     val resId = if (useFullCutout) {
-        getDriverCutoutRes(driverCodeOrName) ?: getDriverHeadshotRes(driverCodeOrName)
+        driverCode?.let(::getDriverCutoutRes)
+            ?: getDriverCutoutRes(driverCodeOrName)
+            ?: driverCode?.let(::getDriverHeadshotRes)
+            ?: getDriverHeadshotRes(driverCodeOrName)
     } else {
-        getDriverHeadshotRes(driverCodeOrName) ?: getDriverCutoutRes(driverCodeOrName)
+        driverCode?.let(::getDriverHeadshotRes)
+            ?: getDriverHeadshotRes(driverCodeOrName)
+            ?: driverCode?.let(::getDriverCutoutRes)
+            ?: getDriverCutoutRes(driverCodeOrName)
     }
 
     Box(
@@ -202,7 +221,7 @@ fun DriverPortraitAvatar(
                 )
             } else {
                 Text(
-                    text = driverCodeOrName.take(3).uppercase(),
+                    text = computeDriverFallbackLabel(driverCodeOrName, driverCode),
                     color = Color.White,
                     fontSize = (size.value * 0.32f).sp,
                     fontWeight = FontWeight.Black

@@ -1,7 +1,7 @@
 # ApexGrid Proguard Rules
 
 # Annotations & Attributes
--keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,Exceptions
 
 # Kotlinx Serialization
 -dontnote kotlinx.serialization.AnnotationsKt
@@ -23,26 +23,13 @@
     *;
 }
 
-# ApexGrid Domain & Remote Models
--keep class com.reva2473.f1widget.domain.model.** { *; }
--keep class com.reva2473.f1widget.data.remote.** { *; }
--keep class com.reva2473.f1widget.data.local.** { *; }
-
-# Retrofit 2 & OkHttp
--dontwarn retrofit2.**
--keep class retrofit2.** { *; }
--keepattributes Exceptions
+# Retrofit Service Interfaces (relies on Retrofit/OkHttp consumer ProGuard rules)
 -keepclasseswithmembers interface * {
     @retrofit2.http.* <methods>;
 }
--dontwarn okhttp3.**
--dontwarn okio.**
--keep class okhttp3.** { *; }
+-keep interface com.reva2473.f1widget.data.remote.*ApiService { *; }
 
-# Jetpack Glance Widgets & AppWidgets
--keep class androidx.glance.** { *; }
--keep class androidx.glance.appwidget.** { *; }
--keep class com.reva2473.f1widget.widget.** { *; }
+# Jetpack Glance AppWidgets (relies on Glance consumer ProGuard rules)
 -keep class * extends androidx.glance.appwidget.GlanceAppWidget { *; }
 -keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver { *; }
 

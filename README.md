@@ -31,21 +31,31 @@ A native Android application and Jetpack Glance home-screen widget suite built w
 - **Team Radio Player**: Playable team radio clips (`Fernando Alonso · Aston Martin`) with waveform progress bar.
 - **Sub-Tabs**: `Track`, `Race control`, `Radio`, `Overtakes`, and `Weather`.
 
-### 6. 7 Native Android Home Screen Widgets (Jetpack Glance)
-1. **Next Grand Prix & Circuit Widget** (`NextRaceCountdownWidget`)
-2. **Weekend Session Schedule Widget** (`WeekendScheduleWidget`)
-3. **Driver Standings (WDC) Widget** (`DriverStandingsWidget`)
-4. **Constructor Standings (WCC) Widget** (`ConstructorStandingsWidget`)
-5. **Favourite Driver Card Widget** (`FavoriteDriverWidget`)
-6. **Favourite Team Garage Widget** (`FavoriteTeamWidget`)
-7. **Last Race Podium Widget** (`LastRacePodiumWidget`)
+### 6. 8 Native Android Home Screen Widgets (Jetpack Glance)
+1. **Next Grand Prix & Circuit Widget** (`NextRaceCountdownWidget`, 4×2) — deep-links to `NEXT_RACE` (Race Weekend Schedule)
+2. **Weekend Session Schedule Widget** (`WeekendScheduleWidget`, 4×3) — deep-links to `WEEKEND_SCHEDULE` (Race Weekend Schedule)
+3. **Driver Standings (WDC) Widget** (`DriverStandingsWidget`, 4×3) — deep-links to `DRIVER_STANDINGS` (Standings — Drivers)
+4. **Constructor Standings (WCC) Widget** (`ConstructorStandingsWidget`, 4×3) — deep-links to `CONSTRUCTOR_STANDINGS` (Standings — Constructors)
+5. **Favourite Driver Card Widget** (`FavoriteDriverWidget`, 2×2) — deep-links to `DRIVER_STANDINGS` (Standings — Drivers)
+6. **Favourite Team Garage Widget** (`FavoriteTeamWidget`, 2×2) — deep-links to `FAVORITE_TEAM` (Settings & Widgets)
+7. **Last Race Podium & Stints Widget** (`LastRacePodiumWidget`, 4×2) — deep-links to `LAST_RACE_RESULTS` (Race Weekend — Race Results)
+8. **Live Timing Banner Widget** (`LiveTimingBannerWidget`, 4×2) — deep-links to `LIVE_TIMING` (Live Timing & Telemetry)
 
-### 7. Personalization & Offline-First Data Architecture
+### 7. Personalization, Notifications & Offline-First Data Architecture
 - **Team Colour Accent**: Dynamically tunes the app's primary accent and top radial header glow to match your chosen constructor (`Ferrari`, `Mercedes`, `McLaren`, `Red Bull`, `Aston Martin`, `Alpine`, `Williams`, `Racing Bulls`, `Haas`, `Kick Sauber`, `Cadillac`).
-- **Data Sources**:
+- **Data Sources & Offline Storage**:
   - **Jolpica-F1 API** (`https://api.jolpi.ca/ergast/f1/`) for 1950–2026 historical seasons, schedules, standings, results, qualifying, and pit stops.
   - **OpenF1 API** (`https://api.openf1.org/v1/`) for live timing, car positions, tyre stints, team radio, race control, overtakes, and weather.
-  - **Room Database + Pre-Seeded Replay Engine (`SeedDataProvider`)** so every screen and live timing simulation works offline and between race weekends.
+  - **JSON File Cache (`F1Database` / `F1Dao`)**: Disk-backed JSON files stored under `filesDir/f1_offline_cache` (`standings_*.json`, `schedule_*.json`, `race_result_*.json`) with atomic writes (`*.tmp` + `Files.move`), mutex synchronization, and a 6-hour TTL (`DEFAULT_TTL_MS`).
+  - **Jetpack `DataStore` (`UserPreferencesStore`)**: Persists user preferences (`user_preferences.preferences_pb`) and explicit `reminder_session_keys` in atomic transactions.
+  - **Pre-Seeded Replay Engine (`SeedDataProvider`)**: Powers offline mode and live timing simulation without poisoning the live API cache.
+- **Background Refresh & Session Reminders**:
+  - **WorkManager (`WidgetRefreshWorker` / `WidgetRefreshScheduler`)**: Runs 30-minute periodic and immediate refreshes across all 8 Glance widgets, warming live session data during active race windows.
+  - **AlarmManager & Notifications (`SessionReminderScheduler` / `SessionReminderReceiver`)**: Schedules `setAndAllowWhileIdle` alarms 15 minutes before sessions on channel `apexgrid_session_reminders`, checks `POST_NOTIFICATIONS` on Android 13+, and resyncs alarms on `BOOT_COMPLETED`.
+
+## Build, Permissions & CI
+- **Manifest Permissions (`AndroidManifest.xml`)**: `INTERNET`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`.
+- **Release & CI Verification (`.github/workflows/android-ci.yml`)**: Runs `./gradlew testDebugUnitTest`, `./gradlew lintDebug`, and `./gradlew assembleDebug assembleRelease` (`release` enables `isMinifyEnabled = true` and `isShrinkResources = true` with R8/ProGuard rules in `app/proguard-rules.pro`).
 
 ## Project Structure
 ```
@@ -60,10 +70,12 @@ app/src/main/
 │   │   ├── repository/F1Repository.kt
 │   │   └── seed/SeedDataProvider.kt
 │   ├── domain/model/F1Models.kt
+│   ├── notifications/SessionReminderManager.kt
 │   ├── ui/
 │   │   ├── MainViewModel.kt
 │   │   ├── components/
 │   │   │   ├── CircuitCanvas.kt
+│   │   │   ├── F1AssetMapper.kt
 │   │   │   └── SharedComponents.kt
 │   │   ├── screens/
 │   │   │   ├── drivers/DriverProfilesAndCompareScreen.kt
@@ -73,9 +85,12 @@ app/src/main/
 │   │   │   ├── standings/StandingsScreen.kt
 │   │   │   └── weekend/RaceWeekendScreen.kt
 │   │   └── theme/Theme.kt
-│   └── widget/F1GlanceWidgets.kt
+│   ├── widget/F1GlanceWidgets.kt
+│   └── worker/WidgetRefreshWorker.kt
 └── res/
-    ├── layout/widget_loading.xml
+    ├── drawable/preview_widget_*.xml
+    ├── layout/{widget_loading.xml, preview_widget_*.xml}
+    ├── mipmap-anydpi/{ic_launcher.xml, ic_launcher_round.xml}
     ├── values/{colors.xml, strings.xml, themes.xml}
-    └── xml/widget_*.xml
+    └── xml/{backup_rules.xml, data_extraction_rules.xml, widget_*.xml}
 ```

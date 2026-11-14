@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_loading_bg"
+    android:orientation="vertical"
+    android:padding="12dp"
+    tools:ignore="Overdraw">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_wcc_header"
+            android:textColor="#E1251B"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/preview_badge_wcc_2026"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/wcc_p1"
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_pos_p1"
+            android:textColor="#F5C518"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:id="@+id/wcc_bar1"
+            android:layout_width="3dp"
+            android:layout_height="18dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toEndOf="@id/wcc_p1"
+            android:background="#E8002D" />
+
+        <TextView
+            android:id="@+id/wcc_pts1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_team_1_pts"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/wcc_gap1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_pts1"
+            android:text="@string/preview_team_1_gap"
+            android:textColor="#2CE580"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_gap1"
+            android:layout_toEndOf="@id/wcc_bar1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_team_1_name"
+            android:textColor="#F5F5F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/wcc_p2"
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_pos_p2"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:id="@+id/wcc_bar2"
+            android:layout_width="3dp"
+            android:layout_height="18dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toEndOf="@id/wcc_p2"
+            android:background="#FF8000" />
+
+        <TextView
+            android:id="@+id/wcc_pts2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_team_2_pts"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/wcc_gap2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_pts2"
+            android:text="@string/preview_team_2_gap"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_gap2"
+            android:layout_toEndOf="@id/wcc_bar2"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_team_2_name"
+            android:textColor="#F5F5F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/wcc_p3"
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_pos_p3"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:id="@+id/wcc_bar3"
+            android:layout_width="3dp"
+            android:layout_height="18dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toEndOf="@id/wcc_p3"
+            android:background="#3671C6" />
+
+        <TextView
+            android:id="@+id/wcc_pts3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_team_3_pts"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/wcc_gap3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_pts3"
+            android:text="@string/preview_team_3_gap"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_gap3"
+            android:layout_toEndOf="@id/wcc_bar3"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_team_3_name"
+            android:textColor="#F5F5F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/wcc_p4"
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_pos_p4"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:id="@+id/wcc_bar4"
+            android:layout_width="3dp"
+            android:layout_height="18dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toEndOf="@id/wcc_p4"
+            android:background="#27F4D2" />
+
+        <TextView
+            android:id="@+id/wcc_pts4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_team_4_pts"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/wcc_gap4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_pts4"
+            android:text="@string/preview_team_4_gap"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_gap4"
+            android:layout_toEndOf="@id/wcc_bar4"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_team_4_name"
+            android:textColor="#F5F5F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/wcc_p5"
+            android:layout_width="24dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="@string/preview_pos_p5"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:id="@+id/wcc_bar5"
+            android:layout_width="3dp"
+            android:layout_height="18dp"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toEndOf="@id/wcc_p5"
+            android:background="#229971" />
+
+        <TextView
+            android:id="@+id/wcc_pts5"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_preview_badge_dark"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="3dp"
+            android:text="@string/preview_team_5_pts"
+            android:textColor="#F5F5F7"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/wcc_gap5"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_pts5"
+            android:text="@string/preview_team_5_gap"
+            android:textColor="@color/apex_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/wcc_gap5"
+            android:layout_toEndOf="@id/wcc_bar5"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/preview_team_5_name"
+            android:textColor="#F5F5F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+</LinearLayout>

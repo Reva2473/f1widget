@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="100dp"
+    android:viewportWidth="200"
+    android:viewportHeight="100">
+    <path
+        android:fillColor="#16161A"
+        android:pathData="M14,0 H186 A14,14 0 0,1 200,14 V86 A14,14 0 0,1 186,100 H14 A14,14 0 0,1 0,86 V14 A14,14 0 0,1 14,0 Z" />
+    <!-- Live pill & Track status pill -->
+    <path
+        android:fillColor="#E1251B"
+        android:pathData="M16,10 H72 A4,4 0 0,1 76,14 V22 A4,4 0 0,1 72,26 H16 A4,4 0 0,1 12,22 V14 A4,4 0 0,1 16,10 Z" />
+    <path
+        android:fillColor="#103321"
+        android:pathData="M122,10 H184 A4,4 0 0,1 188,14 V22 A4,4 0 0,1 184,26 H122 A4,4 0 0,1 118,22 V14 A4,4 0 0,1 122,10 Z" />
+    <path
+        android:fillColor="#2CE580"
+        android:pathData="M126,16 H180 V20 H126 Z" />
+    <!-- Grand Prix title -->
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M12,34 H140 V44 H12 Z" />
+    <!-- Leader card -->
+    <path
+        android:fillColor="#1E1E24"
+        android:pathData="M16,54 H184 A6,6 0 0,1 190,60 V84 A6,6 0 0,1 184,90 H16 A6,6 0 0,1 10,84 V60 A6,6 0 0,1 16,54 Z" />
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M20,64 H36 V78 H20 Z" />
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M46,61 H130 V69 H46 Z" />
+    <path
+        android:fillColor="#2CE580"
+        android:pathData="M46,75 H168 V82 H46 Z" />
+</vector>

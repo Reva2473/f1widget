@@ -11,12 +11,15 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -24,7 +27,6 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
@@ -34,10 +36,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.domain.model.LiveDriverTiming
+import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * Normalized circuit geometry descriptor.
@@ -270,11 +273,375 @@ object YasMarinaCircuitGeometry {
 }
 
 /**
- * Resolves circuit geometry by circuit type string.
+ * Normalized geometry for Bahrain International Circuit (Sakhir).
+ */
+object BahrainCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.22f, 0.80f), // Start/Finish
+        Offset(0.55f, 0.84f), // Main Straight
+        Offset(0.84f, 0.86f), // Turn 1 Hairpin
+        Offset(0.76f, 0.72f), // Turn 2
+        Offset(0.80f, 0.62f), // Turn 3
+        Offset(0.72f, 0.42f)  // Turn 4 Hairpin
+    )
+
+    val sector2Points = listOf(
+        Offset(0.72f, 0.42f),
+        Offset(0.60f, 0.46f), // Turn 5
+        Offset(0.52f, 0.40f), // Turn 6
+        Offset(0.44f, 0.48f), // Turn 7
+        Offset(0.36f, 0.36f), // Turn 8 Hairpin
+        Offset(0.46f, 0.24f), // Turn 9
+        Offset(0.26f, 0.16f)  // Turn 10 Hairpin
+    )
+
+    val sector3Points = listOf(
+        Offset(0.26f, 0.16f),
+        Offset(0.24f, 0.38f), // Back Straight
+        Offset(0.20f, 0.52f), // Turn 11
+        Offset(0.34f, 0.56f), // Turn 12
+        Offset(0.48f, 0.58f), // Turn 13
+        Offset(0.30f, 0.72f), // Turn 14
+        Offset(0.14f, 0.78f), // Turn 15
+        Offset(0.22f, 0.80f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.85f, 0.86f)),
+        Pair(2, Offset(0.75f, 0.72f)),
+        Pair(4, Offset(0.73f, 0.41f)),
+        Pair(6, Offset(0.52f, 0.39f)),
+        Pair(8, Offset(0.35f, 0.35f)),
+        Pair(10, Offset(0.25f, 0.15f)),
+        Pair(11, Offset(0.19f, 0.52f)),
+        Pair(13, Offset(0.49f, 0.58f)),
+        Pair(14, Offset(0.29f, 0.73f)),
+        Pair(15, Offset(0.13f, 0.78f))
+    )
+}
+
+/**
+ * Normalized geometry for Albert Park Circuit (Melbourne, Australia).
+ */
+object MelbourneCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.24f, 0.78f), // Start/Finish
+        Offset(0.48f, 0.84f), // Turn 1
+        Offset(0.62f, 0.78f), // Turn 3
+        Offset(0.64f, 0.66f), // Turn 4
+        Offset(0.76f, 0.64f), // Turn 5
+        Offset(0.84f, 0.46f)  // Turn 6-7
+    )
+
+    val sector2Points = listOf(
+        Offset(0.84f, 0.46f),
+        Offset(0.78f, 0.26f), // Turn 8 Lakeside
+        Offset(0.56f, 0.16f), // Turn 9-10 Chicane
+        Offset(0.36f, 0.18f), // Turn 11
+        Offset(0.24f, 0.28f)  // Turn 12
+    )
+
+    val sector3Points = listOf(
+        Offset(0.24f, 0.28f),
+        Offset(0.26f, 0.46f), // Turn 13
+        Offset(0.16f, 0.56f), // Turn 14
+        Offset(0.14f, 0.72f), // Turn 15-16
+        Offset(0.24f, 0.78f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.48f, 0.85f)),
+        Pair(3, Offset(0.63f, 0.79f)),
+        Pair(5, Offset(0.77f, 0.65f)),
+        Pair(6, Offset(0.85f, 0.46f)),
+        Pair(9, Offset(0.56f, 0.15f)),
+        Pair(11, Offset(0.36f, 0.17f)),
+        Pair(13, Offset(0.27f, 0.46f)),
+        Pair(14, Offset(0.15f, 0.56f))
+    )
+}
+
+/**
+ * Normalized geometry for Silverstone Circuit (Great Britain).
+ */
+object SilverstoneCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.44f, 0.84f), // Hamilton Straight
+        Offset(0.62f, 0.82f), // Abbey T1
+        Offset(0.68f, 0.70f), // Farm T2
+        Offset(0.56f, 0.64f), // Village T3
+        Offset(0.62f, 0.54f), // The Loop T4
+        Offset(0.74f, 0.56f), // Aintree T5
+        Offset(0.84f, 0.36f)  // Wellington Straight
+    )
+
+    val sector2Points = listOf(
+        Offset(0.84f, 0.36f),
+        Offset(0.84f, 0.20f), // Brooklands T6
+        Offset(0.74f, 0.16f), // Luffield T7
+        Offset(0.66f, 0.26f), // Woodcote T8
+        Offset(0.52f, 0.20f), // Copse T9
+        Offset(0.38f, 0.24f), // Maggotts
+        Offset(0.32f, 0.34f), // Becketts
+        Offset(0.24f, 0.42f)  // Chapel T14
+    )
+
+    val sector3Points = listOf(
+        Offset(0.24f, 0.42f),
+        Offset(0.16f, 0.62f), // Hangar Straight
+        Offset(0.18f, 0.76f), // Stowe T15
+        Offset(0.28f, 0.86f), // Vale T16
+        Offset(0.36f, 0.84f), // Club T17-18
+        Offset(0.44f, 0.84f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.63f, 0.83f)),
+        Pair(3, Offset(0.55f, 0.64f)),
+        Pair(4, Offset(0.62f, 0.53f)),
+        Pair(6, Offset(0.85f, 0.19f)),
+        Pair(9, Offset(0.52f, 0.19f)),
+        Pair(11, Offset(0.38f, 0.23f)),
+        Pair(13, Offset(0.31f, 0.34f)),
+        Pair(15, Offset(0.17f, 0.76f)),
+        Pair(18, Offset(0.36f, 0.85f))
+    )
+}
+
+/**
+ * Normalized geometry for Circuit de Monaco (Monte Carlo).
+ */
+object MonacoCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.24f, 0.68f), // Start/Finish
+        Offset(0.26f, 0.48f), // Sainte-Devote T1
+        Offset(0.36f, 0.30f), // Beau Rivage
+        Offset(0.54f, 0.18f), // Casino Square T4
+        Offset(0.68f, 0.24f)  // Mirabeau T5
+    )
+
+    val sector2Points = listOf(
+        Offset(0.68f, 0.24f),
+        Offset(0.84f, 0.26f), // Fairmont Hairpin T6
+        Offset(0.76f, 0.36f), // Mirabeau Bas T7
+        Offset(0.86f, 0.46f), // Portier T8
+        Offset(0.72f, 0.58f), // Tunnel
+        Offset(0.56f, 0.60f)  // Nouvelle Chicane T10
+    )
+
+    val sector3Points = listOf(
+        Offset(0.56f, 0.60f),
+        Offset(0.48f, 0.68f), // Tabac T12
+        Offset(0.44f, 0.78f), // Swimming Pool
+        Offset(0.36f, 0.82f),
+        Offset(0.22f, 0.84f), // La Rascasse T17
+        Offset(0.18f, 0.76f), // Anthony Noghes T18
+        Offset(0.24f, 0.68f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.25f, 0.48f)),
+        Pair(3, Offset(0.54f, 0.17f)),
+        Pair(5, Offset(0.68f, 0.23f)),
+        Pair(6, Offset(0.85f, 0.26f)),
+        Pair(8, Offset(0.87f, 0.46f)),
+        Pair(10, Offset(0.56f, 0.59f)),
+        Pair(12, Offset(0.48f, 0.69f)),
+        Pair(15, Offset(0.44f, 0.79f)),
+        Pair(17, Offset(0.21f, 0.85f)),
+        Pair(18, Offset(0.17f, 0.76f))
+    )
+}
+
+/**
+ * Normalized geometry for Autodromo Nazionale Monza (Italy).
+ */
+object MonzaCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.44f, 0.84f), // Main Straight
+        Offset(0.76f, 0.84f), // Rettifilo Chicane T1-T2
+        Offset(0.86f, 0.68f), // Curva Grande T3
+        Offset(0.76f, 0.50f)  // Variante della Roggia T4-T5
+    )
+
+    val sector2Points = listOf(
+        Offset(0.76f, 0.50f),
+        Offset(0.80f, 0.26f), // Lesmo 1 T6
+        Offset(0.66f, 0.16f), // Lesmo 2 T7
+        Offset(0.48f, 0.22f), // Serraglio
+        Offset(0.34f, 0.34f), // Ascari T8-T10
+        Offset(0.28f, 0.44f)
+    )
+
+    val sector3Points = listOf(
+        Offset(0.28f, 0.44f),
+        Offset(0.20f, 0.64f), // Back Straight
+        Offset(0.18f, 0.80f), // Parabolica T11
+        Offset(0.28f, 0.86f),
+        Offset(0.44f, 0.84f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.76f, 0.85f)),
+        Pair(3, Offset(0.87f, 0.68f)),
+        Pair(4, Offset(0.75f, 0.50f)),
+        Pair(6, Offset(0.81f, 0.25f)),
+        Pair(7, Offset(0.66f, 0.15f)),
+        Pair(8, Offset(0.34f, 0.33f)),
+        Pair(11, Offset(0.17f, 0.80f))
+    )
+}
+
+/**
+ * Normalized geometry for Suzuka International Racing Course (Japan).
+ */
+object SuzukaCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.62f, 0.78f), // Start/Finish
+        Offset(0.82f, 0.74f), // Turn 1-2
+        Offset(0.76f, 0.54f), // S-Curves
+        Offset(0.84f, 0.44f),
+        Offset(0.74f, 0.34f),
+        Offset(0.68f, 0.22f)  // Dunlop T7
+    )
+
+    val sector2Points = listOf(
+        Offset(0.68f, 0.22f),
+        Offset(0.52f, 0.18f), // Degner 1
+        Offset(0.50f, 0.30f), // Degner 2
+        Offset(0.44f, 0.40f), // Crossover Underpass
+        Offset(0.36f, 0.32f), // Hairpin T11
+        Offset(0.22f, 0.38f), // 200R
+        Offset(0.14f, 0.28f), // Spoon Curve entry
+        Offset(0.14f, 0.44f)  // Spoon Curve exit
+    )
+
+    val sector3Points = listOf(
+        Offset(0.14f, 0.44f),
+        Offset(0.34f, 0.56f), // Back Straight (Crossover Overpass)
+        Offset(0.52f, 0.66f), // 130R T15
+        Offset(0.56f, 0.80f), // Casio Triangle T16-T18
+        Offset(0.62f, 0.78f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.83f, 0.74f)),
+        Pair(4, Offset(0.85f, 0.44f)),
+        Pair(7, Offset(0.68f, 0.21f)),
+        Pair(8, Offset(0.52f, 0.17f)),
+        Pair(11, Offset(0.36f, 0.31f)),
+        Pair(13, Offset(0.13f, 0.28f)),
+        Pair(15, Offset(0.52f, 0.67f)),
+        Pair(16, Offset(0.56f, 0.81f))
+    )
+}
+
+/**
+ * Normalized geometry for Circuit de Spa-Francorchamps (Belgium).
+ */
+object SpaCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.24f, 0.44f), // Start/Finish
+        Offset(0.14f, 0.32f), // La Source T1 Hairpin
+        Offset(0.24f, 0.20f), // Eau Rouge / Raidillon
+        Offset(0.48f, 0.16f), // Kemmel Straight
+        Offset(0.72f, 0.18f)  // Les Combes T5-T7
+    )
+
+    val sector2Points = listOf(
+        Offset(0.72f, 0.18f),
+        Offset(0.84f, 0.28f), // Bruxelles T8
+        Offset(0.72f, 0.36f), // Speaker's Corner T9
+        Offset(0.86f, 0.48f), // Pouhon T10-T11
+        Offset(0.76f, 0.64f), // Fagnes T12-T13
+        Offset(0.84f, 0.80f)  // Stavelot T14-T15
+    )
+
+    val sector3Points = listOf(
+        Offset(0.84f, 0.80f),
+        Offset(0.62f, 0.84f), // Paul Frere
+        Offset(0.44f, 0.74f), // Blanchimont T16-T17
+        Offset(0.32f, 0.60f), // Bus Stop Chicane T18-T19
+        Offset(0.24f, 0.44f)  // Rejoin Start/Finish
+    )
+
+    val allPoints: List<Offset> by lazy {
+        val list = mutableListOf<Offset>()
+        list.addAll(sector1Points)
+        list.addAll(sector2Points.drop(1))
+        list.addAll(sector3Points.drop(1))
+        list
+    }
+
+    val corners = listOf(
+        Pair(1, Offset(0.13f, 0.32f)),
+        Pair(3, Offset(0.24f, 0.19f)),
+        Pair(5, Offset(0.72f, 0.17f)),
+        Pair(8, Offset(0.85f, 0.28f)),
+        Pair(10, Offset(0.87f, 0.48f)),
+        Pair(12, Offset(0.75f, 0.64f)),
+        Pair(14, Offset(0.85f, 0.80f)),
+        Pair(17, Offset(0.44f, 0.75f)),
+        Pair(18, Offset(0.32f, 0.61f))
+    )
+}
+
+/**
+ * Resolves circuit geometry by circuit type or circuitId/name string.
  */
 fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
-    return when (circuitType.uppercase()) {
-        "INTERLAGOS", "BRAZIL", "SAO_PAULO", "SAO PAULO" -> CircuitGeometryData(
+    val key = circuitType.trim().uppercase()
+    return when {
+        key in setOf("INTERLAGOS", "BRAZIL", "SAO_PAULO", "SAO PAULO") ||
+            key.contains("INTERLAGOS") || key.contains("SAO_PAULO") -> CircuitGeometryData(
             sector1Points = InterlagosCircuitGeometry.sector1Points,
             sector2Points = InterlagosCircuitGeometry.sector2Points,
             sector3Points = InterlagosCircuitGeometry.sector3Points,
@@ -286,7 +653,8 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             s1CutoffProgress = 0.34f,
             s2CutoffProgress = 0.68f
         )
-        "YAS_MARINA", "YAS MARINA", "ABU_DHABI", "ABU DHABI" -> CircuitGeometryData(
+        key in setOf("YAS_MARINA", "YAS MARINA", "ABU_DHABI", "ABU DHABI") ||
+            key.contains("YAS") || key.contains("ABU") -> CircuitGeometryData(
             sector1Points = YasMarinaCircuitGeometry.sector1Points,
             sector2Points = YasMarinaCircuitGeometry.sector2Points,
             sector3Points = YasMarinaCircuitGeometry.sector3Points,
@@ -297,6 +665,97 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             speedTrapBadgePos = Offset(0.52f, 0.25f),
             s1CutoffProgress = 0.32f,
             s2CutoffProgress = 0.66f
+        )
+        key in setOf("BAHRAIN", "SAKHIR") ||
+            key.contains("BAHRAIN") || key.contains("SAKHIR") -> CircuitGeometryData(
+            sector1Points = BahrainCircuitGeometry.sector1Points,
+            sector2Points = BahrainCircuitGeometry.sector2Points,
+            sector3Points = BahrainCircuitGeometry.sector3Points,
+            allPoints = BahrainCircuitGeometry.allPoints,
+            corners = BahrainCircuitGeometry.corners,
+            startFinishPos = BahrainCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.58f, 0.84f),
+            speedTrapBadgePos = Offset(0.58f, 0.74f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("MELBOURNE", "ALBERT_PARK", "ALBERT PARK", "AUSTRALIA") ||
+            key.contains("MELBOURNE") || key.contains("ALBERT") -> CircuitGeometryData(
+            sector1Points = MelbourneCircuitGeometry.sector1Points,
+            sector2Points = MelbourneCircuitGeometry.sector2Points,
+            sector3Points = MelbourneCircuitGeometry.sector3Points,
+            allPoints = MelbourneCircuitGeometry.allPoints,
+            corners = MelbourneCircuitGeometry.corners,
+            startFinishPos = MelbourneCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.68f, 0.21f),
+            speedTrapBadgePos = Offset(0.62f, 0.30f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("SILVERSTONE", "GREAT_BRITAIN", "BRITAIN", "UK") ||
+            key.contains("SILVERSTONE") -> CircuitGeometryData(
+            sector1Points = SilverstoneCircuitGeometry.sector1Points,
+            sector2Points = SilverstoneCircuitGeometry.sector2Points,
+            sector3Points = SilverstoneCircuitGeometry.sector3Points,
+            allPoints = SilverstoneCircuitGeometry.allPoints,
+            corners = SilverstoneCircuitGeometry.corners,
+            startFinishPos = SilverstoneCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.19f, 0.54f),
+            speedTrapBadgePos = Offset(0.33f, 0.56f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("MONACO", "MONTE_CARLO", "MONTE CARLO") ||
+            key.contains("MONACO") || key.contains("MONTE") -> CircuitGeometryData(
+            sector1Points = MonacoCircuitGeometry.sector1Points,
+            sector2Points = MonacoCircuitGeometry.sector2Points,
+            sector3Points = MonacoCircuitGeometry.sector3Points,
+            allPoints = MonacoCircuitGeometry.allPoints,
+            corners = MonacoCircuitGeometry.corners,
+            startFinishPos = MonacoCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.70f, 0.58f),
+            speedTrapBadgePos = Offset(0.66f, 0.48f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.67f
+        )
+        key in setOf("MONZA", "ITALY", "ITALIAN") ||
+            key.contains("MONZA") -> CircuitGeometryData(
+            sector1Points = MonzaCircuitGeometry.sector1Points,
+            sector2Points = MonzaCircuitGeometry.sector2Points,
+            sector3Points = MonzaCircuitGeometry.sector3Points,
+            allPoints = MonzaCircuitGeometry.allPoints,
+            corners = MonzaCircuitGeometry.corners,
+            startFinishPos = MonzaCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.62f, 0.84f),
+            speedTrapBadgePos = Offset(0.60f, 0.74f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.67f
+        )
+        key in setOf("SUZUKA", "JAPAN", "JAPANESE") ||
+            key.contains("SUZUKA") -> CircuitGeometryData(
+            sector1Points = SuzukaCircuitGeometry.sector1Points,
+            sector2Points = SuzukaCircuitGeometry.sector2Points,
+            sector3Points = SuzukaCircuitGeometry.sector3Points,
+            allPoints = SuzukaCircuitGeometry.allPoints,
+            corners = SuzukaCircuitGeometry.corners,
+            startFinishPos = SuzukaCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.46f, 0.62f),
+            speedTrapBadgePos = Offset(0.46f, 0.52f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("SPA", "SPA_FRANCORCHAMPS", "SPA-FRANCORCHAMPS", "BELGIUM", "BELGIAN") ||
+            key.contains("SPA") -> CircuitGeometryData(
+            sector1Points = SpaCircuitGeometry.sector1Points,
+            sector2Points = SpaCircuitGeometry.sector2Points,
+            sector3Points = SpaCircuitGeometry.sector3Points,
+            allPoints = SpaCircuitGeometry.allPoints,
+            corners = SpaCircuitGeometry.corners,
+            startFinishPos = SpaCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.56f, 0.16f),
+            speedTrapBadgePos = Offset(0.56f, 0.25f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.68f
         )
         else -> CircuitGeometryData(
             sector1Points = SepangCircuitGeometry.sector1Points,
@@ -395,13 +854,16 @@ fun CircuitOutlineCanvas(
     modifier: Modifier = Modifier,
     circuitType: String = "SEPANG"
 ) {
+    val geometry = remember(circuitType) { getCircuitGeometry(circuitType) }
     val cached = remember(circuitType) { CachedCircuitPath() }
+    val isDark = LocalF1Accent.current.isDark
+    val outlineColor = if (isDark) Color.White else Color(0xFF1A1A22)
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
 
-        val geometry = getCircuitGeometry(circuitType)
         if (cached.width != w || cached.height != h || cached.circuitType != circuitType) {
             cached.path = buildCircuitPath(geometry.allPoints, w, h, close = true)
             cached.width = w
@@ -413,21 +875,21 @@ fun CircuitOutlineCanvas(
         // Outer glow layer
         drawPath(
             path = circuitPath,
-            color = Color.White.copy(alpha = 0.18f),
+            color = outlineColor.copy(alpha = if (isDark) 0.18f else 0.12f),
             style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
         // Mid glow layer
         drawPath(
             path = circuitPath,
-            color = Color.White.copy(alpha = 0.40f),
+            color = outlineColor.copy(alpha = if (isDark) 0.40f else 0.25f),
             style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
         // Crisp inner stroke
         drawPath(
             path = circuitPath,
-            color = Color.White,
+            color = outlineColor,
             style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
@@ -472,12 +934,22 @@ fun MultiSectorCircuitMap(
             textAlign = android.graphics.Paint.Align.CENTER
         }
     }
+    val sectorTextPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+    }
+    val geometry = remember(circuitType) { getCircuitGeometry(circuitType) }
     val cached = remember(circuitType) { CachedCircuitPath() }
+    val isDark = LocalF1Accent.current.isDark
+    val trackShadowColor = if (isDark) Color(0xFF1E1E26) else Color(0xFFD6D6E2)
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val geometry = getCircuitGeometry(circuitType)
+        if (w <= 0f || h <= 0f) return@Canvas
 
         if (cached.width != w || cached.height != h || cached.circuitType != circuitType) {
             cached.s1Path = buildCircuitPath(geometry.sector1Points, w, h)
@@ -498,7 +970,7 @@ fun MultiSectorCircuitMap(
         // Background shadow track ribbon
         drawPath(
             path = fullPath,
-            color = Color(0xFF1E1E26),
+            color = trackShadowColor,
             style = Stroke(width = strokeWidth + 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
@@ -572,17 +1044,24 @@ fun MultiSectorCircuitMap(
         val s2Center = Offset(geometry.sector2Points[geometry.sector2Points.size / 2].x * w, (geometry.sector2Points[geometry.sector2Points.size / 2].y - 0.08f) * h)
         val s3Center = Offset(geometry.sector3Points[geometry.sector3Points.size / 2].x * w, (geometry.sector3Points[geometry.sector3Points.size / 2].y + 0.08f) * h)
 
-        drawSectorLabel("SECTOR 1", Color(0xFFE1251B), s1Center)
-        drawSectorLabel("SECTOR 2", Color(0xFF00B4D8), s2Center)
-        drawSectorLabel("SECTOR 3", Color(0xFFFFD100), s3Center)
+        drawSectorLabel("SECTOR 1", Color(0xFFE1251B), s1Center, sectorTextPaint)
+        drawSectorLabel("SECTOR 2", Color(0xFF00B4D8), s2Center, sectorTextPaint)
+        drawSectorLabel("SECTOR 3", Color(0xFFFFD100), s3Center, sectorTextPaint)
 
         // SPEED TRAP Callout & Badge
         val trapTarget = Offset(geometry.speedTrapPos.x * w, geometry.speedTrapPos.y * h)
         val trapBadgePos = Offset(geometry.speedTrapBadgePos.x * w, geometry.speedTrapBadgePos.y * h)
 
+        val trapBadgeWidth = 68.dp.toPx()
+        val trapBadgeHeight = 16.dp.toPx()
+        val pad = 2.dp.toPx()
+        val trapLeft = (trapBadgePos.x - trapBadgeWidth / 2f).coerceIn(pad, (w - trapBadgeWidth - pad).coerceAtLeast(pad))
+        val trapTop = (trapBadgePos.y - trapBadgeHeight).coerceIn(pad, (h - trapBadgeHeight - pad).coerceAtLeast(pad))
+        val clampedBadgeAnchor = Offset(trapLeft + trapBadgeWidth / 2f, trapTop + trapBadgeHeight)
+
         drawLine(
             color = P1TColors.SpeedTrapMagenta,
-            start = trapBadgePos,
+            start = clampedBadgeAnchor,
             end = trapTarget,
             strokeWidth = 1.2.dp.toPx()
         )
@@ -591,11 +1070,6 @@ fun MultiSectorCircuitMap(
             radius = 3.dp.toPx(),
             center = trapTarget
         )
-
-        val trapBadgeWidth = 68.dp.toPx()
-        val trapBadgeHeight = 16.dp.toPx()
-        val trapLeft = trapBadgePos.x - trapBadgeWidth / 2f
-        val trapTop = trapBadgePos.y - trapBadgeHeight
 
         drawRoundRect(
             color = P1TColors.SpeedTrapMagenta,
@@ -608,26 +1082,27 @@ fun MultiSectorCircuitMap(
         cornerPaint.textSize = 8.dp.toPx()
         drawContext.canvas.nativeCanvas.drawText(
             "SPEED TRAP",
-            trapBadgePos.x,
+            trapLeft + trapBadgeWidth / 2f,
             trapTop + 11.5.dp.toPx(),
             cornerPaint
         )
     }
 }
 
-private fun DrawScope.drawSectorLabel(text: String, color: Color, center: Offset) {
-    val paint = android.graphics.Paint().apply {
-        isAntiAlias = true
-        textSize = 9.dp.toPx()
-        typeface = android.graphics.Typeface.DEFAULT_BOLD
-        textAlign = android.graphics.Paint.Align.CENTER
-        this.color = android.graphics.Color.WHITE
-    }
+private fun DrawScope.drawSectorLabel(
+    text: String,
+    color: Color,
+    center: Offset,
+    paint: android.graphics.Paint
+) {
+    paint.textSize = 9.dp.toPx()
+    paint.color = android.graphics.Color.WHITE
 
     val badgeW = 60.dp.toPx()
     val badgeH = 17.dp.toPx()
-    val left = center.x - badgeW / 2f
-    val top = center.y - badgeH / 2f
+    val pad = 2.dp.toPx()
+    val left = (center.x - badgeW / 2f).coerceIn(pad, (size.width - badgeW - pad).coerceAtLeast(pad))
+    val top = (center.y - badgeH / 2f).coerceIn(pad, (size.height - badgeH - pad).coerceAtLeast(pad))
 
     drawRoundRect(
         color = Color(0xFF14141A),
@@ -645,10 +1120,21 @@ private fun DrawScope.drawSectorLabel(text: String, color: Color, center: Offset
 
     drawContext.canvas.nativeCanvas.drawText(
         text,
-        center.x,
+        left + badgeW / 2f,
         top + 12.dp.toPx(),
         paint
     )
+}
+
+private class DriverTapTarget(
+    val code: String,
+    val dotPos: Offset,
+    val pillRect: Rect
+)
+
+private class TapTargetSnapshot {
+    @Volatile
+    var targets: List<DriverTapTarget> = emptyList()
 }
 
 /**
@@ -671,10 +1157,11 @@ fun LiveTrackMapCanvas(
 ) {
     val currentDrivers by rememberUpdatedState(drivers)
     val currentOnDriverTap by rememberUpdatedState(onDriverTap)
+    val geometry = remember(circuitType) { getCircuitGeometry(circuitType) }
 
-    val pulseScale = if (selectedDriverCode != null) {
+    val pulseScaleState: State<Float> = if (selectedDriverCode != null) {
         val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-        val scale by infiniteTransition.animateFloat(
+        infiniteTransition.animateFloat(
             initialValue = 1.0f,
             targetValue = 1.6f,
             animationSpec = infiniteRepeatable(
@@ -683,9 +1170,8 @@ fun LiveTrackMapCanvas(
             ),
             label = "pulseScale"
         )
-        scale
     } else {
-        1.0f
+        remember { mutableFloatStateOf(1.0f) }
     }
 
     // Pre-allocate to prevent 12.5 Hz garbage collection churn
@@ -713,23 +1199,42 @@ fun LiveTrackMapCanvas(
         }
     }
 
-    // Driver tap targets computed during draw
-    val driverTapTargets = remember { mutableMapOf<String, Offset>() }
+    // Snapshot of driver dot + clamped pill bounds updated atomically during draw
+    val tapTargetSnapshot = remember { TapTargetSnapshot() }
 
     val canvasModifier = if (onDriverTap != null) {
         modifier
             .fillMaxSize()
-            .pointerInput(onDriverTap) {
+            .pointerInput(Unit) {
                 detectTapGestures { tapOffset ->
+                    val targets = tapTargetSnapshot.targets
+                    val maxTapDist = 40.dp.toPx()
+                    val pillHitPad = 8.dp.toPx()
                     var closestDriver: String? = null
+                    var bestIsExactPill = false
                     var minDist = Float.MAX_VALUE
-                    driverTapTargets.forEach { (code, pos) ->
-                        val dx = tapOffset.x - pos.x
-                        val dy = tapOffset.y - pos.y
-                        val dist = sqrt(dx * dx + dy * dy)
-                        if (dist < 40.dp.toPx() && dist < minDist) {
-                            minDist = dist
-                            closestDriver = code
+
+                    for (target in targets) {
+                        val exactPill = target.pillRect.contains(tapOffset)
+                        val paddedPill =
+                            tapOffset.x in (target.pillRect.left - pillHitPad)..(target.pillRect.right + pillHitPad) &&
+                                tapOffset.y in (target.pillRect.top - pillHitPad)..(target.pillRect.bottom + pillHitPad)
+                        val dotDist = hypot(tapOffset.x - target.dotPos.x, tapOffset.y - target.dotPos.y)
+                        val pillCenter = target.pillRect.center
+                        val pillDist = hypot(tapOffset.x - pillCenter.x, tapOffset.y - pillCenter.y)
+                        val effectiveDist = minOf(dotDist, pillDist)
+
+                        if (exactPill) {
+                            if (!bestIsExactPill || pillDist <= minDist) {
+                                bestIsExactPill = true
+                                minDist = pillDist
+                                closestDriver = target.code
+                            }
+                        } else if (!bestIsExactPill && (paddedPill || dotDist < maxTapDist)) {
+                            if (effectiveDist < minDist) {
+                                minDist = effectiveDist
+                                closestDriver = target.code
+                            }
                         }
                     }
                     closestDriver?.let { currentOnDriverTap?.invoke(it) }
@@ -739,13 +1244,18 @@ fun LiveTrackMapCanvas(
         modifier.fillMaxSize()
     }
 
+    val isDark = LocalF1Accent.current.isDark
+    val outerRibbonColor = if (isDark) Color(0xFF1E1E26) else Color(0xFFD4D4E0)
+    val innerRibbonColor = if (isDark) Color(0xFF2C2C38) else Color(0xFFAEAEC0)
+    val sectorTickColor = if (isDark) Color.White else Color(0xFF1E1E28)
+
     Canvas(
         modifier = canvasModifier
     ) {
         val w = size.width
         val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
 
-        val geometry = getCircuitGeometry(circuitType)
         if (cached.width != w || cached.height != h || cached.circuitType != circuitType) {
             cached.path = buildCircuitPath(geometry.allPoints, w, h, close = true)
             pathMeasure.setPath(cached.path, false)
@@ -756,18 +1266,19 @@ fun LiveTrackMapCanvas(
         }
         val fullPath = cached.path
         val pathLength = cached.pathLength
+        if (pathLength <= 0f) return@Canvas
 
-        // Outer Dark Ribbon
+        // Outer Track Ribbon
         drawPath(
             path = fullPath,
-            color = Color(0xFF1E1E26),
+            color = outerRibbonColor,
             style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
         // Inner Track Ribbon
         drawPath(
             path = fullPath,
-            color = Color(0xFF2C2C38),
+            color = innerRibbonColor,
             style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
 
@@ -804,11 +1315,11 @@ fun LiveTrackMapCanvas(
         val sfPos = pathMeasure.getPosition(pathLength * 0.02f)
 
         // S1 tick & badge
-        drawCircle(color = Color.White, radius = 3.dp.toPx(), center = s1Pos)
+        drawCircle(color = sectorTickColor, radius = 3.dp.toPx(), center = s1Pos)
         drawSectorDividerBadge(text = "S1", pos = s1Pos, paint = sectorTextPaint)
 
         // S2 tick & badge
-        drawCircle(color = Color.White, radius = 3.dp.toPx(), center = s2Pos)
+        drawCircle(color = sectorTickColor, radius = 3.dp.toPx(), center = s2Pos)
         drawSectorDividerBadge(text = "S2", pos = s2Pos, paint = sectorTextPaint)
 
         // S3 / Start-Finish tick & badge
@@ -817,12 +1328,16 @@ fun LiveTrackMapCanvas(
 
         // Draw Drivers
         labelPaint.textSize = 9.dp.toPx()
-        driverTapTargets.clear()
+        val nextTargets = ArrayList<DriverTapTarget>(currentDrivers.size)
+        val pillW = 28.dp.toPx()
+        val pillH = 14.dp.toPx()
+        val pad = 2.dp.toPx()
+        val maxPillLeft = (w - pillW - pad).coerceAtLeast(pad)
+        val maxPillTop = (h - pillH - pad).coerceAtLeast(pad)
 
         currentDrivers.forEach { driver ->
             val progress = driver.trackProgress.coerceIn(0f, 1f)
             val dotPos = pathMeasure.getPosition(pathLength * progress)
-            driverTapTargets[driver.code] = dotPos
 
             val isSelected = driver.code.equals(selectedDriverCode, ignoreCase = true)
             val teamColor = Color(driver.team.colorHex)
@@ -831,7 +1346,7 @@ fun LiveTrackMapCanvas(
             if (isSelected) {
                 drawCircle(
                     color = Color(0xFFE1251B).copy(alpha = 0.35f),
-                    radius = 18.dp.toPx() * pulseScale,
+                    radius = 18.dp.toPx() * pulseScaleState.value,
                     center = dotPos
                 )
                 drawCircle(
@@ -854,10 +1369,22 @@ fun LiveTrackMapCanvas(
                 center = dotPos
             )
 
-            // Pill Label
-            val pillW = 28.dp.toPx()
-            val pillH = 14.dp.toPx()
-            val pillTopLeft = Offset(dotPos.x - pillW / 2f, dotPos.y - 18.dp.toPx())
+            // Pill Label clamped within canvas bounds
+            val pillLeft = (dotPos.x - pillW / 2f).coerceIn(pad, maxPillLeft)
+            val preferredTop = dotPos.y - 18.dp.toPx()
+            val pillTop = if (preferredTop < pad) {
+                (dotPos.y + 8.dp.toPx()).coerceIn(pad, maxPillTop)
+            } else {
+                preferredTop.coerceIn(pad, maxPillTop)
+            }
+            val pillTopLeft = Offset(pillLeft, pillTop)
+            nextTargets.add(
+                DriverTapTarget(
+                    code = driver.code,
+                    dotPos = dotPos,
+                    pillRect = Rect(pillTopLeft, Size(pillW, pillH))
+                )
+            )
 
             if (isSelected) {
                 drawRoundRect(
@@ -886,11 +1413,12 @@ fun LiveTrackMapCanvas(
 
             drawContext.canvas.nativeCanvas.drawText(
                 driver.code,
-                dotPos.x,
+                pillTopLeft.x + pillW / 2f,
                 pillTopLeft.y + 10.5.dp.toPx(),
                 labelPaint
             )
         }
+        tapTargetSnapshot.targets = nextTargets
     }
 }
 
@@ -901,7 +1429,10 @@ private fun DrawScope.drawSectorDividerBadge(
 ) {
     val badgeW = 18.dp.toPx()
     val badgeH = 11.dp.toPx()
-    val offsetBadge = Offset(pos.x - badgeW / 2f, pos.y + 7.dp.toPx())
+    val pad = 2.dp.toPx()
+    val left = (pos.x - badgeW / 2f).coerceIn(pad, (size.width - badgeW - pad).coerceAtLeast(pad))
+    val top = (pos.y + 7.dp.toPx()).coerceIn(pad, (size.height - badgeH - pad).coerceAtLeast(pad))
+    val offsetBadge = Offset(left, top)
 
     drawRoundRect(
         color = Color(0xFF161620),
@@ -921,7 +1452,7 @@ private fun DrawScope.drawSectorDividerBadge(
     paint.textSize = 7.5.dp.toPx()
     drawContext.canvas.nativeCanvas.drawText(
         text,
-        pos.x,
+        left + badgeW / 2f,
         offsetBadge.y + 8.5.dp.toPx(),
         paint
     )
@@ -966,8 +1497,8 @@ fun F1CarSideProfileCanvas(
 @Composable
 fun F1CarTopDownCanvas(
     team: F1TeamId,
-    vertical: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    vertical: Boolean = false
 ) {
     val carRes = getTeamCarRes(team)
     Image(
@@ -981,8 +1512,8 @@ fun F1CarTopDownCanvas(
 @Composable
 fun F1CarTopDownCanvas(
     teamColor: Color,
-    vertical: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    vertical: Boolean = false
 ) {
     val carRes = getTeamCarResByColor(teamColor)
     Image(
@@ -1002,9 +1533,18 @@ fun F1CarTopDownCanvas(
 @Composable
 fun TeamLogoBadge(
     team: F1TeamId,
-    sizeDp: Int = 22,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sizeDp: Int = 22
 ) {
+    val isDark = LocalF1Accent.current.isDark
+    val haasPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textAlign = android.graphics.Paint.Align.CENTER
+            color = android.graphics.Color.parseColor("#222426")
+        }
+    }
     Canvas(modifier = modifier.size(sizeDp.dp)) {
         val w = size.width
         val h = size.height
@@ -1015,8 +1555,10 @@ fun TeamLogoBadge(
         when (team) {
             F1TeamId.MERCEDES -> {
                 // Mercedes Three-Pointed Star in Ring
+                val ringColor = if (isDark) Color(0xFFD4D4D8) else Color(0xFF4A4A56)
+                val starColor = if (isDark) Color.White else Color(0xFF1A1A22)
                 drawCircle(
-                    color = Color(0xFFD4D4D8),
+                    color = ringColor,
                     radius = r * 0.90f,
                     center = Offset(cx, cy),
                     style = Stroke(width = 1.4.dp.toPx())
@@ -1026,7 +1568,7 @@ fun TeamLogoBadge(
                     val starEndX = (cx + r * 0.82f * cos(angle)).toFloat()
                     val starEndY = (cy + r * 0.82f * sin(angle)).toFloat()
                     drawLine(
-                        color = Color.White,
+                        color = starColor,
                         start = Offset(cx, cy),
                         end = Offset(starEndX, starEndY),
                         strokeWidth = 1.5.dp.toPx(),
@@ -1144,11 +1686,12 @@ fun TeamLogoBadge(
                 val ringStroke = 1.3.dp.toPx()
                 val ringSpacing = r * 0.42f
                 val startX = cx - 1.5f * ringSpacing
+                val audiColor = if (isDark) Color(0xFFF0F0F2) else Color(0xFF4A4A56)
 
                 for (idx in 0..3) {
                     val ringX = startX + idx * ringSpacing
                     drawCircle(
-                        color = Color(0xFFF0F0F2),
+                        color = audiColor,
                         radius = ringRadius,
                         center = Offset(ringX, cy),
                         style = Stroke(width = ringStroke)
@@ -1159,20 +1702,17 @@ fun TeamLogoBadge(
             F1TeamId.HAAS -> {
                 // Haas White Circle with Red horizontal stripe and bold 'H'
                 drawCircle(color = Color.White, radius = r * 0.88f, center = Offset(cx, cy))
+                if (!isDark) {
+                    drawCircle(color = Color(0xFFC8C8D2), radius = r * 0.88f, center = Offset(cx, cy), style = Stroke(width = 1.dp.toPx()))
+                }
                 drawRect(
                     color = Color(0xFFE1251B),
                     topLeft = Offset(cx - 0.88f * r, cy - 0.20f * r),
                     size = Size(1.76f * r, 0.40f * r)
                 )
                 // Bold dark grey 'H'
-                val hPaint = android.graphics.Paint().apply {
-                    isAntiAlias = true
-                    textSize = r * 1.15f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    textAlign = android.graphics.Paint.Align.CENTER
-                    color = android.graphics.Color.parseColor("#222426")
-                }
-                drawContext.canvas.nativeCanvas.drawText("H", cx, cy + r * 0.38f, hPaint)
+                haasPaint.textSize = r * 1.15f
+                drawContext.canvas.nativeCanvas.drawText("H", cx, cy + r * 0.38f, haasPaint)
             }
 
             F1TeamId.WILLIAMS -> {
@@ -1220,6 +1760,42 @@ fun TeamLogoBadge(
                 // Geometric quartering lines
                 drawLine(Color(0xFF1E1E24), Offset(cx, cy - 0.60f * r), Offset(cx, cy + 0.80f * r), 1.2.dp.toPx())
                 drawLine(Color(0xFF1E1E24), Offset(cx - 0.65f * r, cy), Offset(cx + 0.65f * r, cy), 1.2.dp.toPx())
+            }
+
+            F1TeamId.OTHER -> {
+                // Neutral metallic shield / F1-style crest for historical or unlisted constructors
+                val shieldPath = Path().apply {
+                    moveTo(cx - 0.68f * r, cy - 0.72f * r)
+                    lineTo(cx + 0.68f * r, cy - 0.72f * r)
+                    lineTo(cx + 0.68f * r, cy + 0.14f * r)
+                    cubicTo(
+                        cx + 0.60f * r, cy + 0.56f * r,
+                        cx + 0.20f * r, cy + 0.80f * r,
+                        cx, cy + 0.88f * r
+                    )
+                    cubicTo(
+                        cx - 0.20f * r, cy + 0.80f * r,
+                        cx - 0.60f * r, cy + 0.56f * r,
+                        cx - 0.68f * r, cy + 0.14f * r
+                    )
+                    close()
+                }
+                val shieldFill = if (isDark) Color(0xFF2C2C36) else Color(0xFFE6E6EE)
+                val shieldStroke = if (isDark) Color(0xFFA0A0AE) else Color(0xFF5A5A68)
+                val chevronColor = if (isDark) Color(0xFFE4E4EE) else Color(0xFF24242E)
+                drawPath(shieldPath, color = shieldFill)
+                drawPath(shieldPath, color = shieldStroke, style = Stroke(width = 1.1.dp.toPx()))
+
+                val chevronPath = Path().apply {
+                    moveTo(cx - 0.34f * r, cy - 0.18f * r)
+                    lineTo(cx + 0.14f * r, cy - 0.18f * r)
+                    lineTo(cx + 0.36f * r, cy + 0.04f * r)
+                    lineTo(cx + 0.14f * r, cy + 0.26f * r)
+                    lineTo(cx - 0.34f * r, cy + 0.26f * r)
+                    lineTo(cx - 0.12f * r, cy + 0.04f * r)
+                    close()
+                }
+                drawPath(chevronPath, color = chevronColor)
             }
         }
     }

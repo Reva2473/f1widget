@@ -345,6 +345,30 @@
         cutout: 'assets/drivers/BOR.png',
         cdnHeadshot: 'https://media.formula1.com/image/upload/c_fill,w_300,h_300,g_face/q_auto/v1740000001/common/f1/2026/audi/gabbor01/2026audigabbor01right.png',
         cdnCutout: 'https://media.formula1.com/image/upload/v1740000001/common/f1/2026/audi/gabbor01/2026audigabbor01right.png'
+      },
+      BOT: {
+        code: 'BOT', initials: 'VB', name: 'Valtteri Bottas', fullName: 'Valtteri Bottas',
+        team: 'Cadillac', teamId: 'cadillac', color: '#D4AF37',
+        headshot: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='%23202023'/%3E%3Ccircle cx='60' cy='60' r='54' fill='%2318181b' stroke='%23D4AF37' stroke-width='3'/%3E%3Ctext x='60' y='71' fill='%23D4AF37' font-size='38' font-weight='800' font-family='sans-serif' text-anchor='middle'%3EVB%3C/text%3E%3C/svg%3E",
+        cutout: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 140'%3E%3Crect width='120' height='140' rx='18' fill='%2318181b' stroke='%23D4AF37' stroke-width='2'/%3E%3Ctext x='60' y='82' fill='%23D4AF37' font-size='38' font-weight='800' font-family='sans-serif' text-anchor='middle'%3EVB%3C/text%3E%3C/svg%3E",
+        cdnHeadshot: '',
+        cdnCutout: ''
+      },
+      LIN: {
+        code: 'LIN', initials: 'AL', name: 'Arvid Lindblad', fullName: 'Arvid Lindblad',
+        team: 'Racing Bulls', teamId: 'racingbulls', color: '#6692FF',
+        headshot: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='%23202023'/%3E%3Ccircle cx='60' cy='60' r='54' fill='%2318181b' stroke='%236692FF' stroke-width='3'/%3E%3Ctext x='60' y='71' fill='%236692FF' font-size='38' font-weight='800' font-family='sans-serif' text-anchor='middle'%3EAL%3C/text%3E%3C/svg%3E",
+        cutout: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 140'%3E%3Crect width='120' height='140' rx='18' fill='%2318181b' stroke='%236692FF' stroke-width='2'/%3E%3Ctext x='60' y='82' fill='%236692FF' font-size='38' font-weight='800' font-family='sans-serif' text-anchor='middle'%3EAL%3C/text%3E%3C/svg%3E",
+        cdnHeadshot: '',
+        cdnCutout: ''
+      },
+      PER: {
+        code: 'PER', initials: 'SP', name: 'Sergio Perez', fullName: 'Sergio Perez',
+        team: 'Cadillac', teamId: 'cadillac', color: '#D4AF37',
+        headshot: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='%23202023'/%3E%3Ccircle cx='60' cy='60' r='54' fill='%2318181b' stroke='%23D4AF37' stroke-width='3'/%3E%3Ctext x='60' y='71' fill='%23D4AF37' font-size='38' font-weight='800' font-family='sans-serif' text-anchor='middle'%3ESP%3C/text%3E%3C/svg%3E",
+        cutout: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 140'%3E%3Crect width='120' height='140' rx='18' fill='%2318181b' stroke='%23D4AF37' stroke-width='2'/%3E%3Ctext x='60' y='82' fill='%23D4AF37' font-size='38' font-weight='800' font-family='sans-serif' text-anchor='middle'%3ESP%3C/text%3E%3C/svg%3E",
+        cdnHeadshot: '',
+        cdnCutout: ''
       }
     };
 
@@ -352,11 +376,13 @@
       KA: 'ANT', GR: 'RUS', LH: 'HAM', CL: 'LEC', LN: 'NOR', OP: 'PIA', MV: 'VER',
       IH: 'HAD', FA: 'ALO', LS: 'STR', PG: 'GAS', FC: 'COL', EO: 'OCO', OB: 'BEA',
       AA: 'ALB', CS: 'SAI', LL: 'LAW', YT: 'TSU', NH: 'HUL', GB: 'BOR', JD: 'DOO',
+      VB: 'BOT', AL: 'LIN', SP: 'PER',
       SLA: 'BOR',
       KIMI: 'ANT', RUSSELL: 'RUS', HAMILTON: 'HAM', LECLERC: 'LEC', NORRIS: 'NOR',
       PIASTRI: 'PIA', VERSTAPPEN: 'VER', HADJAR: 'HAD', ALONSO: 'ALO', STROLL: 'STR',
       GASLY: 'GAS', COLAPINTO: 'COL', OCON: 'OCO', BEARMAN: 'BEA', ALBON: 'ALB',
-      SAINZ: 'SAI', LAWSON: 'LAW', TSUNODA: 'TSU', HULKENBERG: 'HUL', BORTOLETO: 'BOR'
+      SAINZ: 'SAI', LAWSON: 'LAW', TSUNODA: 'TSU', HULKENBERG: 'HUL', BORTOLETO: 'BOR',
+      BOTTAS: 'BOT', LINDBLAD: 'LIN', PEREZ: 'PER'
     };
 
     function getDriver(id) {
@@ -427,7 +453,7 @@
         cdn: 'https://media.formula1.com/image/upload/v1740000001/common/f1/2026/audi/2026audicarright.png'
       },
       cadillac: {
-        local: 'assets/cars/ferrari.png',
+        local: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 54'%3E%3Cpath d='M16 34 L34 26 L72 24 L92 17 L126 19 L146 27 L166 30 L166 37 L148 39 L20 39 Z' fill='%231C1C22' stroke='%23D4AF37' stroke-width='1.5'/%3E%3Cpath d='M12 22 L28 22 L32 34 L16 34 Z' fill='%23D4AF37' opacity='0.85'/%3E%3Cpath d='M148 33 L172 34 L170 38 L148 38 Z' fill='%23D4AF37'/%3E%3Ccircle cx='44' cy='39' r='9' fill='%23111114' stroke='%23D4AF37' stroke-width='2'/%3E%3Ccircle cx='138' cy='39' r='9' fill='%23111114' stroke='%23D4AF37' stroke-width='2'/%3E%3Ctext x='88' y='32' fill='%23D4AF37' font-size='8' font-weight='800' font-family='monospace' text-anchor='middle'%3ECADILLAC%3C/text%3E%3C/svg%3E",
         cdn: ''
       }
     };

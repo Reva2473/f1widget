@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:description="@string/widget_favorite_team_desc"
     android:initialLayout="@layout/widget_loading"
-    android:previewLayout="@layout/widget_loading"
-    android:minWidth="130dp"
-    android:minHeight="130dp"
+    android:previewImage="@drawable/preview_widget_favorite_team"
+    android:previewLayout="@layout/preview_widget_favorite_team"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
     android:targetCellWidth="2"
     android:targetCellHeight="2"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="3600000"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen"
+    tools:targetApi="s" />

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,12 +39,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -56,6 +60,7 @@ import com.reva2473.f1widget.domain.model.SectorStatus
 import com.reva2473.f1widget.domain.model.TyreCompound
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
+import com.reva2473.f1widget.ui.theme.P1TTheme
 
 /**
  * Full screen dark background (#0B0B0E) with the top radial team-colored glow (LocalF1Accent.current.headerGlow).
@@ -68,49 +73,54 @@ fun P1TRadialBackground(
     val glowColor = LocalF1Accent.current.headerGlow
     val isDark = LocalF1Accent.current.isDark
     val bgPrimary = MaterialTheme.colorScheme.background
+    val radialColors = remember(glowColor, isDark) {
+        if (isDark) {
+            listOf(
+                glowColor.copy(alpha = 0.55f),
+                glowColor.copy(alpha = 0.25f),
+                Color.Transparent
+            )
+        } else {
+            listOf(
+                glowColor.copy(alpha = 0.20f),
+                glowColor.copy(alpha = 0.08f),
+                Color.Transparent
+            )
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(bgPrimary)
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val canvasWidth = size.width
-            val canvasHeight = size.height
-
-            // Top radial glow respecting theme mode
-            val radialBrush = Brush.radialGradient(
-                colors = if (isDark) {
-                    listOf(
-                        glowColor.copy(alpha = 0.55f),
-                        glowColor.copy(alpha = 0.25f),
-                        Color.Transparent
+        Spacer(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawWithCache {
+                    val radialBrush = Brush.radialGradient(
+                        colors = radialColors,
+                        center = Offset(size.width / 2f, -size.height * 0.05f),
+                        radius = size.width * 0.95f
                     )
-                } else {
-                    listOf(
-                        glowColor.copy(alpha = 0.20f),
-                        glowColor.copy(alpha = 0.08f),
-                        Color.Transparent
-                    )
-                },
-                center = Offset(canvasWidth / 2f, -canvasHeight * 0.05f),
-                radius = canvasWidth * 0.95f
-            )
-
-            drawRect(brush = radialBrush)
-        }
+                    onDrawBehind {
+                        drawRect(brush = radialBrush)
+                    }
+                }
+        )
 
         content()
     }
 }
 
 /**
- * 44.dp circular button with subtle dark translucent fill and 1.dp border (#383842 / subtle red-tinted border in header).
+ * 44.dp circular button with subtle dark translucent fill and 1.dp border (#383842 / subtle red-tinted border in header),
+ * wrapped in a 48.dp minimum touch target for accessibility.
  */
 @Composable
 fun CircularHeaderButton(
-    modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     icon: @Composable () -> Unit
 ) {
     val isDark = LocalF1Accent.current.isDark
@@ -119,10 +129,8 @@ fun CircularHeaderButton(
 
     Box(
         modifier = modifier
-            .size(44.dp)
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clip(CircleShape)
-            .background(bgColor)
-            .border(1.dp, borderColor, CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true, color = if (isDark) Color.White else Color.Black),
@@ -130,7 +138,16 @@ fun CircularHeaderButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        icon()
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(bgColor)
+                .border(1.dp, borderColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
     }
 }
 
@@ -146,15 +163,16 @@ fun FloatingPillBottomBar(
 ) {
     val isDark = LocalF1Accent.current.isDark
     val primaryAccent = LocalF1Accent.current.primaryAccent
+    val activeAccent = P1TTheme.adaptiveTeamText(primaryAccent)
     val surfaceColor = if (isDark) Color(0xEE16161C) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
     val borderColor = if (isDark) Color(0xFF2E2E38) else MaterialTheme.colorScheme.outline
-    val inactiveTint = if (isDark) Color(0xFF888894) else Color(0xFF686873)
+    val inactiveTint = if (isDark) P1TColors.TextMuted else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -167,7 +185,7 @@ fun FloatingPillBottomBar(
             Row(
                 modifier = Modifier
                     .padding(horizontal = 14.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // HOME TAB
@@ -175,12 +193,12 @@ fun FloatingPillBottomBar(
                 BottomBarItem(
                     label = "Home",
                     isSelected = isHomeSelected,
-                    primaryAccent = primaryAccent,
+                    primaryAccent = activeAccent,
                     icon = { selected ->
                         Icon(
                             imageVector = if (selected) Icons.Filled.Home else Icons.Outlined.Home,
                             contentDescription = "Home",
-                            tint = if (selected) primaryAccent else inactiveTint,
+                            tint = if (selected) activeAccent else inactiveTint,
                             modifier = Modifier.size(24.dp)
                         )
                     },
@@ -192,12 +210,12 @@ fun FloatingPillBottomBar(
                 BottomBarItem(
                     label = "Standings",
                     isSelected = isStandingsSelected,
-                    primaryAccent = primaryAccent,
+                    primaryAccent = activeAccent,
                     icon = { selected ->
                         Icon(
                             imageVector = if (selected) Icons.Filled.EmojiEvents else Icons.Outlined.EmojiEvents,
                             contentDescription = "Standings",
-                            tint = if (selected) primaryAccent else inactiveTint,
+                            tint = if (selected) activeAccent else inactiveTint,
                             modifier = Modifier.size(24.dp)
                         )
                     },
@@ -209,12 +227,12 @@ fun FloatingPillBottomBar(
                 BottomBarItem(
                     label = "Season",
                     isSelected = isSeasonSelected,
-                    primaryAccent = primaryAccent,
+                    primaryAccent = activeAccent,
                     icon = { selected ->
                         Icon(
                             imageVector = if (selected) Icons.Filled.DateRange else Icons.Outlined.DateRange,
                             contentDescription = "Season",
-                            tint = if (selected) primaryAccent else inactiveTint,
+                            tint = if (selected) activeAccent else inactiveTint,
                             modifier = Modifier.size(24.dp)
                         )
                     },
@@ -226,12 +244,12 @@ fun FloatingPillBottomBar(
                 BottomBarItem(
                     label = "Settings",
                     isSelected = isSettingsSelected,
-                    primaryAccent = primaryAccent,
+                    primaryAccent = activeAccent,
                     icon = { selected ->
                         Icon(
                             imageVector = if (selected) Icons.Filled.Settings else Icons.Outlined.Settings,
                             contentDescription = "Settings",
-                            tint = if (selected) primaryAccent else inactiveTint,
+                            tint = if (selected) activeAccent else inactiveTint,
                             modifier = Modifier.size(24.dp)
                         )
                     },
@@ -252,6 +270,7 @@ private fun BottomBarItem(
 ) {
     Box(
         modifier = Modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .size(48.dp)
             .clip(CircleShape)
             .background(if (isSelected) primaryAccent.copy(alpha = 0.18f) else Color.Transparent)
@@ -278,21 +297,38 @@ private fun BottomBarItem(
 @Composable
 fun TyreCompoundBadge(
     compound: TyreCompound,
-    sizeDp: Int = 20,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sizeDp: Int = 20
 ) {
-    val ringColor = Color(compound.colorHex)
+    val isDark = LocalF1Accent.current.isDark
+    val ringColor = if (!isDark) {
+        when (compound) {
+            TyreCompound.HARD -> Color(0xFF4A4A56)
+            TyreCompound.MEDIUM -> P1TTheme.sectorYellow
+            TyreCompound.INTERMEDIATE -> P1TTheme.sectorGreen
+            TyreCompound.WET -> Color(0xFF007EA7)
+            TyreCompound.SOFT -> P1TTheme.accentRed
+        }
+    } else {
+        Color(compound.colorHex)
+    }
+
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val badgeScale = fontScale.coerceIn(1f, 1.35f)
+    val scaledSizeDp = sizeDp * badgeScale
+    val badgeFontSize = ((scaledSizeDp * 0.52f) / fontScale).sp
 
     Box(
         modifier = modifier
-            .size(sizeDp.dp)
+            .defaultMinSize(minWidth = scaledSizeDp.dp, minHeight = scaledSizeDp.dp)
+            .size(scaledSizeDp.dp)
             .semantics {
                 contentDescription = "${compound.label} Tyre Compound (${compound.code})"
             },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeW = (sizeDp * 0.14f).dp.toPx()
+            val strokeW = size.minDimension * 0.14f
             val radius = (size.minDimension - strokeW) / 2f
             drawCircle(
                 color = ringColor,
@@ -303,9 +339,12 @@ fun TyreCompoundBadge(
         Text(
             text = compound.code,
             color = ringColor,
-            fontSize = (sizeDp * 0.55f).sp,
+            fontSize = badgeFontSize,
+            lineHeight = badgeFontSize,
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -336,12 +375,23 @@ fun MiniSectorBars(
 
 @Composable
 private fun SectorBarItem(status: SectorStatus) {
+    val isDark = LocalF1Accent.current.isDark
+    val barColor = if (isDark) {
+        Color(status.colorHex)
+    } else {
+        when (status) {
+            SectorStatus.OVERALL_BEST -> P1TTheme.sectorPurple
+            SectorStatus.PERSONAL_BEST -> P1TTheme.sectorGreen
+            SectorStatus.NORMAL -> P1TTheme.sectorYellow
+            SectorStatus.INACTIVE -> Color(0xFFD0D0DC)
+        }
+    }
     Box(
         modifier = Modifier
             .width(22.dp)
             .height(5.dp)
             .clip(RoundedCornerShape(2.5.dp))
-            .background(Color(status.colorHex))
+            .background(barColor)
             .semantics {
                 contentDescription = status.name
             }

@@ -20,26 +20,29 @@ interface JolpicaApiService {
 
     @GET("seasons.json")
     suspend fun getSeasons(
-        @Query("limit") limit: Int = 1000,
+        @Query("limit") limit: Int = 100,
         @Query("offset") offset: Int = 0
     ): JolpicaResponse<SeasonTableWrapper>
 
     @GET("{season}.json")
     suspend fun getSeasonSchedule(
         @Path("season") season: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit") limit: Int = 100,
+        @Query("offset") offset: Int = 0
     ): JolpicaResponse<RaceTableWrapper>
 
     @GET("{season}/driverStandings.json")
     suspend fun getDriverStandings(
         @Path("season") season: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit") limit: Int = 100,
+        @Query("offset") offset: Int = 0
     ): JolpicaResponse<StandingsTableWrapper>
 
     @GET("{season}/constructorStandings.json")
     suspend fun getConstructorStandings(
         @Path("season") season: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit") limit: Int = 100,
+        @Query("offset") offset: Int = 0
     ): JolpicaResponse<StandingsTableWrapper>
 
     @GET("{season}/{round}/results.json")
@@ -58,7 +61,8 @@ interface JolpicaApiService {
     suspend fun getPitStops(
         @Path("season") season: String,
         @Path("round") round: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit") limit: Int = 100,
+        @Query("offset") offset: Int = 0
     ): JolpicaResponse<RaceTableWrapper>
 
     companion object {
@@ -136,6 +140,8 @@ data class RaceDto(
     @SerialName("ThirdPractice") val thirdPractice: SessionDto? = null,
     @SerialName("Qualifying") val qualifying: SessionDto? = null,
     @SerialName("Sprint") val sprint: SessionDto? = null,
+    @SerialName("SprintQualifying") val sprintQualifying: SessionDto? = null,
+    @SerialName("SprintShootout") val sprintShootout: SessionDto? = null,
     @SerialName("Results") val results: List<ResultDto> = emptyList(),
     @SerialName("QualifyingResults") val qualifyingResults: List<QualifyingResultDto> = emptyList(),
     @SerialName("PitStops") val pitStops: List<PitStopDto> = emptyList()

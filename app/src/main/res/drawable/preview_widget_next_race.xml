@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="100dp"
+    android:viewportWidth="200"
+    android:viewportHeight="100">
+    <!-- Dark card background -->
+    <path
+        android:fillColor="#16161A"
+        android:pathData="M14,0 H186 A14,14 0 0,1 200,14 V86 A14,14 0 0,1 186,100 H14 A14,14 0 0,1 0,86 V14 A14,14 0 0,1 14,0 Z" />
+    <!-- Top accent label + countdown pill -->
+    <path
+        android:fillColor="#E1251B"
+        android:pathData="M12,12 H76 V18 H12 Z" />
+    <path
+        android:fillColor="#1E1E24"
+        android:pathData="M144,10 H184 A4,4 0 0,1 188,14 V20 A4,4 0 0,1 184,24 H144 A4,4 0 0,1 140,20 V14 A4,4 0 0,1 144,10 Z" />
+    <!-- Grand Prix title & circuit bars -->
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M12,28 H134 V38 H12 Z" />
+    <path
+        android:fillColor="#9A9AA6"
+        android:pathData="M12,44 H110 V49 H12 Z" />
+    <!-- Minimal circuit silhouette -->
+    <path
+        android:strokeColor="#E1251B"
+        android:strokeWidth="2"
+        android:pathData="M150,48 C156,34 176,34 182,44 C186,52 172,56 160,54 Z" />
+    <!-- Footer stats bar -->
+    <path
+        android:fillColor="#1E1E24"
+        android:pathData="M16,64 H184 A6,6 0 0,1 190,70 V84 A6,6 0 0,1 184,90 H16 A6,6 0 0,1 10,84 V70 A6,6 0 0,1 16,64 Z" />
+    <path
+        android:fillColor="#9A9AA6"
+        android:pathData="M20,70 H42 V74 H20 Z M62,70 H88 V74 H62 Z M108,70 H134 V74 H108 Z M154,70 H180 V74 H154 Z" />
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M20,78 H38 V84 H20 Z M62,78 H90 V84 H62 Z M108,78 H126 V84 H108 Z M154,78 H178 V84 H154 Z" />
+</vector>

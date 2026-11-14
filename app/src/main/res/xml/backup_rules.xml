@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+    <!-- Strictly include shared preferences and DataStore user preferences; f1_offline_cache is excluded by allowlisting. -->
     <include domain="sharedpref" path="." />
-    <include domain="file" path="datastore" />
+    <include domain="file" path="datastore/user_preferences.preferences_pb" />
 </full-backup-content>

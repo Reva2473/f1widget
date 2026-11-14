@@ -1,30 +1,144 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">ApexGrid</string>
 
     <!-- Widget Titles and Descriptions -->
     <string name="widget_next_race_title">Next Grand Prix</string>
-    <string name="widget_next_race_desc">Countdown, circuit outline and live timing readiness for the upcoming Grand Prix.</string>
+    <string name="widget_next_race_desc">Round countdown, date range, circuit stats (laps, length, corners), and race start time for the upcoming Grand Prix.</string>
 
     <string name="widget_weekend_schedule_title">Weekend Schedule</string>
     <string name="widget_weekend_schedule_desc">Full Friday to Sunday session schedule (FP1, FP2, Quali, Race) in your local timezone.</string>
 
     <string name="widget_driver_standings_title">Driver Standings (WDC)</string>
-    <string name="widget_driver_standings_desc">Top World Drivers championship rankings (P1–P5), points, team badges, and gap to leader.</string>
+    <string name="widget_driver_standings_desc">Top World Drivers championship rankings (P1–P5), team badges, race wins, and points.</string>
 
     <string name="widget_constructor_standings_title">Constructor Standings (WCC)</string>
-    <string name="widget_constructor_standings_desc">Top World Constructors championship standings (P1–P3), team badges, driver points breakdown, and gap to P1.</string>
+    <string name="widget_constructor_standings_desc">Top World Constructors championship standings (P1–P5), team car silhouettes, points, and gap to P1.</string>
 
     <string name="widget_favorite_driver_title">Favorite Driver</string>
-    <string name="widget_favorite_driver_desc">Championship standing, points, team badge, and recent race results for your chosen driver.</string>
+    <string name="widget_favorite_driver_desc">Championship standing, points, race wins, team badge, and recent form summary for your chosen driver.</string>
 
     <string name="widget_favorite_team_title">Favorite Team</string>
-    <string name="widget_favorite_team_desc">Constructor standing, total points, driver lineup points split, and recent form for your chosen team.</string>
+    <string name="widget_favorite_team_desc">Constructor standing, total points, race wins, team car silhouette, and driver lineup points split for your chosen team.</string>
 
     <string name="widget_last_race_podium_title">Last Race Podium</string>
     <string name="widget_last_race_podium_desc">P1–P3 podium finishers, winning gap, and tyre stint strategies from the most recent Grand Prix.</string>
 
     <string name="widget_live_timing_title">Live Timing Banner</string>
-    <string name="widget_live_timing_desc">Live session status, track state, and current P1 leader telemetry banner.</string>
+    <string name="widget_live_timing_desc">Live session code, time remaining, track status, and P1 leader best and last lap times.</string>
 
     <string name="widget_loading">Loading race data…</string>
+
+    <!-- Notification Channels -->
+    <string name="notification_channel_session_reminders_name">Race Session Reminders</string>
+    <string name="notification_channel_session_reminders_desc">Alerts before Qualifying, Sprint, and Grand Prix session starts.</string>
+
+    <!-- Static Widget Preview Labels -->
+    <string name="preview_badge_wdc_2026">WDC 2026</string>
+    <string name="preview_badge_wcc_2026">WCC 2026</string>
+    <string name="preview_label_laps">LAPS</string>
+    <string name="preview_label_circuit">CIRCUIT</string>
+    <string name="preview_label_corners">CORNERS</string>
+    <string name="preview_label_race_time">RACE TIME</string>
+    <string name="preview_label_points">POINTS</string>
+    <string name="preview_label_wins">WINS</string>
+    <string name="preview_label_garage">GARAGE</string>
+
+    <string name="preview_next_race_header">NEXT GRAND PRIX</string>
+    <string name="preview_next_race_countdown">R05 · in 3d</string>
+    <string name="preview_next_race_gp">Bahrain Grand Prix</string>
+    <string name="preview_next_race_circuit">Bahrain International Circuit · 10–12 Apr</string>
+    <string name="preview_next_race_laps_val">57</string>
+    <string name="preview_next_race_length_val">5.41 km</string>
+    <string name="preview_next_race_corners_val">15</string>
+    <string name="preview_next_race_time_val">18:00</string>
+
+    <string name="preview_schedule_gp">Bahrain Grand Prix</string>
+    <string name="preview_schedule_tag">WEEKEND SCHEDULE</string>
+    <string name="preview_session_fp1_code" tools:ignore="Typos">FP1</string>
+    <string name="preview_session_fp1_name">Practice 1</string>
+    <string name="preview_session_fp1_date">Fri 10 Apr</string>
+    <string name="preview_session_fp1_time">14:30</string>
+    <string name="preview_session_fp2_code">FP2</string>
+    <string name="preview_session_fp2_name">Practice 2</string>
+    <string name="preview_session_fp2_date">Fri 10 Apr</string>
+    <string name="preview_session_fp2_time">18:00</string>
+    <string name="preview_session_quali_code">QUALI</string>
+    <string name="preview_session_quali_name">Qualifying</string>
+    <string name="preview_session_quali_date">Sat 11 Apr</string>
+    <string name="preview_session_quali_time">19:00</string>
+    <string name="preview_session_race_code">RACE</string>
+    <string name="preview_session_race_name">Grand Prix</string>
+    <string name="preview_session_race_date">Sun 12 Apr</string>
+    <string name="preview_session_race_time">18:00</string>
+
+    <string name="preview_wdc_header">DRIVERS CHAMPIONSHIP</string>
+    <string name="preview_pos_p1">P1</string>
+    <string name="preview_pos_p2">P2</string>
+    <string name="preview_pos_p3">P3</string>
+    <string name="preview_pos_p4">P4</string>
+    <string name="preview_pos_p5">P5</string>
+    <string name="preview_drv_1_name">Charles Leclerc</string>
+    <string name="preview_drv_1_team">Ferrari · 2W</string>
+    <string name="preview_drv_1_pts">98 PTS</string>
+    <string name="preview_drv_2_name">Lando Norris</string>
+    <string name="preview_drv_2_team">McLaren · 1W</string>
+    <string name="preview_drv_2_pts">86 PTS</string>
+    <string name="preview_drv_3_name">Max Verstappen</string>
+    <string name="preview_drv_3_team">Red Bull Racing · 1W</string>
+    <string name="preview_drv_3_pts">79 PTS</string>
+    <string name="preview_drv_4_name">Lewis Hamilton</string>
+    <string name="preview_drv_4_team">Ferrari · 0W</string>
+    <string name="preview_drv_4_pts">64 PTS</string>
+    <string name="preview_drv_5_name">Oscar Piastri</string>
+    <string name="preview_drv_5_team">McLaren · 0W</string>
+    <string name="preview_drv_5_pts">58 PTS</string>
+
+    <string name="preview_wcc_header">CONSTRUCTORS CHAMPIONSHIP</string>
+    <string name="preview_team_1_name">Ferrari</string>
+    <string name="preview_team_1_gap">LEADER</string>
+    <string name="preview_team_1_pts">162 PTS</string>
+    <string name="preview_team_2_name">McLaren</string>
+    <string name="preview_team_2_gap">-18</string>
+    <string name="preview_team_2_pts">144 PTS</string>
+    <string name="preview_team_3_name">Red Bull Racing</string>
+    <string name="preview_team_3_gap">-41</string>
+    <string name="preview_team_3_pts">121 PTS</string>
+    <string name="preview_team_4_name">Mercedes</string>
+    <string name="preview_team_4_gap">-68</string>
+    <string name="preview_team_4_pts">94 PTS</string>
+    <string name="preview_team_5_name">Aston Martin</string>
+    <string name="preview_team_5_gap">-112</string>
+    <string name="preview_team_5_pts">50 PTS</string>
+
+    <string name="preview_fav_drv_team">FERRARI</string>
+    <string name="preview_fav_drv_code">LEC</string>
+    <string name="preview_fav_drv_name">Charles Leclerc</string>
+    <string name="preview_fav_drv_pts">98</string>
+    <string name="preview_fav_drv_wins">2</string>
+    <string name="preview_fav_drv_form">Last 3: P1 · P2 · P1</string>
+
+    <string name="preview_fav_team_name">Ferrari</string>
+    <string name="preview_fav_team_summary">162 PTS · 2 WINS</string>
+    <string name="preview_fav_team_d1_name">C. Leclerc</string>
+    <string name="preview_fav_team_d1_pts">98 pts</string>
+    <string name="preview_fav_team_d2_name">L. Hamilton</string>
+    <string name="preview_fav_team_d2_pts">64 pts</string>
+
+    <string name="preview_podium_header">LAST RACE PODIUM · JAPANESE GP</string>
+    <string name="preview_podium_tag">FINAL</string>
+    <string name="preview_podium_p1_driver">LEC · Charles Leclerc</string>
+    <string name="preview_podium_p1_detail">Ferrari · M → H</string>
+    <string name="preview_podium_p1_gap">1:28:14.2</string>
+    <string name="preview_podium_p2_driver">NOR · Lando Norris</string>
+    <string name="preview_podium_p2_detail">McLaren · M → H</string>
+    <string name="preview_podium_p2_gap">+2.418s</string>
+    <string name="preview_podium_p3_driver">VER · Max Verstappen</string>
+    <string name="preview_podium_p3_detail">Red Bull · S → M → H</string>
+    <string name="preview_podium_p3_gap">+6.905s</string>
+
+    <string name="preview_live_status">LIVE · RACE</string>
+    <string name="preview_live_track">LAP 34/53 · GREEN</string>
+    <string name="preview_live_gp">Japanese Grand Prix</string>
+    <string name="preview_live_leader">LEC · Charles Leclerc</string>
+    <string name="preview_live_laps">BEST: 1:30.965 · LAST: 1:31.412</string>
 </resources>

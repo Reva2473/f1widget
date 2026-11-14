@@ -2,15 +2,20 @@ package com.reva2473.f1widget.data.local
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.domain.model.UserPreferencesState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -24,6 +29,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.ConcurrentHashMap
 
 // ============================================================================
 // Cache TTL Constants & Helpers
@@ -33,6 +39,14 @@ const val DEFAULT_TTL_MS = 6 * 60 * 60 * 1000L // 6 hours
 
 fun isExpired(lastUpdatedMillis: Long, ttlMs: Long = DEFAULT_TTL_MS): Boolean {
     return (System.currentTimeMillis() - lastUpdatedMillis) > ttlMs
+}
+
+private fun File.safeCanonicalPath(): String {
+    return try {
+        canonicalPath
+    } catch (_: IOException) {
+        absolutePath
+    }
 }
 
 // ============================================================================
@@ -55,6 +69,15 @@ data class CachedScheduleEntity(
     val lastUpdatedMillis: Long = System.currentTimeMillis()
 )
 
+@Serializable
+data class CachedRaceResultEntity(
+    val cacheKey: String,
+    val season: Int,
+    val round: Int,
+    val payloadJson: String,
+    val lastUpdatedMillis: Long = System.currentTimeMillis()
+)
+
 // ============================================================================
 // Offline Cache DAO
 // ============================================================================
@@ -64,8 +87,11 @@ interface F1Dao {
     suspend fun insertStandings(entity: CachedStandingsEntity)
     suspend fun getSchedule(season: Int): CachedScheduleEntity?
     suspend fun insertSchedule(entity: CachedScheduleEntity)
+    suspend fun getRaceResult(cacheKey: String): CachedRaceResultEntity?
+    suspend fun insertRaceResult(entity: CachedRaceResultEntity)
     suspend fun clearStandings()
     suspend fun clearSchedule()
+    suspend fun clearRaceResults()
 
     companion object {
         const val DEFAULT_TTL_MS = com.reva2473.f1widget.data.local.DEFAULT_TTL_MS
@@ -92,9 +118,34 @@ class F1Database internal constructor(internal val cacheDir: File) {
         }
     }
 
+    private fun sanitizeCacheKey(key: String): String {
+        return key.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+    }
+
+    private inline fun <T> safeCacheRead(block: () -> T): T? {
+        return try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private inline fun safeCacheWrite(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Safely ignore disk/serialization failures while propagating cancellation
+        }
+    }
+
     private fun atomicWrite(targetFile: File, content: String) {
         ensureCacheDir()
-        val tempFile = File(targetFile.parentFile, "${targetFile.name}.${System.currentTimeMillis()}.tmp")
+        val parentDir = targetFile.parentFile ?: cacheDir
+        val tempFile = File.createTempFile("${targetFile.name}.", ".tmp", parentDir)
         try {
             tempFile.writeText(content)
             try {
@@ -121,18 +172,19 @@ class F1Database internal constructor(internal val cacheDir: File) {
         override suspend fun getStandings(key: String): CachedStandingsEntity? = withContext(Dispatchers.IO) {
             mutex.withLock {
                 ensureCacheDir()
-                val file = File(cacheDir, "standings_${key.replace("[^a-zA-Z0-9_-]".toRegex(), "_")}.json")
+                val file = File(cacheDir, "standings_${sanitizeCacheKey(key)}.json")
                 if (!file.exists()) return@withLock null
-                runCatching { json.decodeFromString<CachedStandingsEntity>(file.readText()) }.getOrNull()
+                safeCacheRead { json.decodeFromString<CachedStandingsEntity>(file.readText()) }
             }
         }
 
         override suspend fun insertStandings(entity: CachedStandingsEntity) = withContext(Dispatchers.IO) {
             mutex.withLock {
-                ensureCacheDir()
-                val file = File(cacheDir, "standings_${entity.seasonKey.replace("[^a-zA-Z0-9_-]".toRegex(), "_")}.json")
-                runCatching { atomicWrite(file, json.encodeToString(entity)) }
-                Unit
+                safeCacheWrite {
+                    ensureCacheDir()
+                    val file = File(cacheDir, "standings_${sanitizeCacheKey(entity.seasonKey)}.json")
+                    atomicWrite(file, json.encodeToString(entity))
+                }
             }
         }
 
@@ -141,16 +193,36 @@ class F1Database internal constructor(internal val cacheDir: File) {
                 ensureCacheDir()
                 val file = File(cacheDir, "schedule_${season}.json")
                 if (!file.exists()) return@withLock null
-                runCatching { json.decodeFromString<CachedScheduleEntity>(file.readText()) }.getOrNull()
+                safeCacheRead { json.decodeFromString<CachedScheduleEntity>(file.readText()) }
             }
         }
 
         override suspend fun insertSchedule(entity: CachedScheduleEntity) = withContext(Dispatchers.IO) {
             mutex.withLock {
+                safeCacheWrite {
+                    ensureCacheDir()
+                    val file = File(cacheDir, "schedule_${entity.season}.json")
+                    atomicWrite(file, json.encodeToString(entity))
+                }
+            }
+        }
+
+        override suspend fun getRaceResult(cacheKey: String): CachedRaceResultEntity? = withContext(Dispatchers.IO) {
+            mutex.withLock {
                 ensureCacheDir()
-                val file = File(cacheDir, "schedule_${entity.season}.json")
-                runCatching { atomicWrite(file, json.encodeToString(entity)) }
-                Unit
+                val file = File(cacheDir, "race_result_${sanitizeCacheKey(cacheKey)}.json")
+                if (!file.exists()) return@withLock null
+                safeCacheRead { json.decodeFromString<CachedRaceResultEntity>(file.readText()) }
+            }
+        }
+
+        override suspend fun insertRaceResult(entity: CachedRaceResultEntity) = withContext(Dispatchers.IO) {
+            mutex.withLock {
+                safeCacheWrite {
+                    ensureCacheDir()
+                    val file = File(cacheDir, "race_result_${sanitizeCacheKey(entity.cacheKey)}.json")
+                    atomicWrite(file, json.encodeToString(entity))
+                }
             }
         }
 
@@ -171,29 +243,65 @@ class F1Database internal constructor(internal val cacheDir: File) {
                 Unit
             }
         }
+
+        override suspend fun clearRaceResults() = withContext(Dispatchers.IO) {
+            mutex.withLock {
+                if (cacheDir.exists()) {
+                    cacheDir.listFiles()?.filter { it.name.startsWith("race_result_") }?.forEach { it.delete() }
+                }
+                Unit
+            }
+        }
     }
 
     fun f1Dao(): F1Dao = daoImpl
 
+    suspend fun clearCacheForTesting() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (cacheDir.exists()) {
+                cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+            }
+            Unit
+        }
+    }
+
     companion object {
         @Volatile
         private var INSTANCE: F1Database? = null
+        private val instancesByPath = ConcurrentHashMap<String, F1Database>()
 
         fun getInstance(context: Context): F1Database {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: F1Database(context.applicationContext).also { INSTANCE = it }
-            }
+            val cacheDir = File(context.applicationContext.filesDir, "f1_offline_cache")
+            return getInstance(cacheDir)
         }
 
         fun getInstance(cacheDir: File): F1Database {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: F1Database(cacheDir).also { INSTANCE = it }
+            val targetPath = cacheDir.safeCanonicalPath()
+            val current = INSTANCE
+            if (current != null && current.cacheDir.safeCanonicalPath() == targetPath) {
+                return current
+            }
+            instancesByPath[targetPath]?.let { return it }
+            return synchronized(this) {
+                val doubleChecked = INSTANCE
+                if (doubleChecked != null && doubleChecked.cacheDir.safeCanonicalPath() == targetPath) {
+                    doubleChecked
+                } else {
+                    instancesByPath.getOrPut(targetPath) {
+                        F1Database(cacheDir)
+                    }.also { db ->
+                        if (INSTANCE == null) {
+                            INSTANCE = db
+                        }
+                    }
+                }
             }
         }
 
         internal fun resetInstanceForTesting() {
             synchronized(this) {
                 INSTANCE = null
+                instancesByPath.clear()
             }
         }
     }
@@ -218,16 +326,19 @@ class UserPreferencesStore(private val dataStore: DataStore<Preferences>) {
         val SESSION_REMINDERS = booleanPreferencesKey("session_reminders")
         val LAP_RECORD_ALERTS = booleanPreferencesKey("lap_record_alerts")
         val OFFLINE_CACHE = booleanPreferencesKey("offline_cache")
+        val REMINDER_SESSION_KEYS = stringSetPreferencesKey("reminder_session_keys")
+    }
+
+    private fun Flow<Preferences>.catchIOAsEmpty(): Flow<Preferences> = catch { e ->
+        if (e is IOException) {
+            emit(emptyPreferences())
+        } else {
+            throw e
+        }
     }
 
     val preferencesFlow: Flow<UserPreferencesState> = dataStore.data
-        .catch { e ->
-            if (e is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw e
-            }
-        }
+        .catchIOAsEmpty()
         .map { prefs ->
             val teamStr = prefs[Keys.FAVORITE_TEAM] ?: F1TeamId.FERRARI.name
             val favoriteTeam = try {
@@ -247,6 +358,29 @@ class UserPreferencesStore(private val dataStore: DataStore<Preferences>) {
                 offlineCacheEnabled = prefs[Keys.OFFLINE_CACHE] ?: true
             )
         }
+
+    val reminderSessionKeysFlow: Flow<Set<String>> = dataStore.data
+        .catchIOAsEmpty()
+        .map { prefs ->
+            prefs[Keys.REMINDER_SESSION_KEYS] ?: emptySet()
+        }
+
+    suspend fun setSessionReminder(sessionKey: String, enabled: Boolean) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.REMINDER_SESSION_KEYS] ?: emptySet()
+            prefs[Keys.REMINDER_SESSION_KEYS] = if (enabled) {
+                current + sessionKey
+            } else {
+                current - sessionKey
+            }
+        }
+    }
+
+    suspend fun clearSessionReminders() {
+        dataStore.edit { prefs ->
+            prefs.remove(Keys.REMINDER_SESSION_KEYS)
+        }
+    }
 
     suspend fun updateAllPreferences(prefs: UserPreferencesState) {
         dataStore.edit { preferences ->
@@ -306,6 +440,35 @@ class UserPreferencesStore(private val dataStore: DataStore<Preferences>) {
     suspend fun updateOfflineCache(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[Keys.OFFLINE_CACHE] = enabled
+        }
+    }
+
+    companion object {
+        private val fallbackDataStores = ConcurrentHashMap<String, DataStore<Preferences>>()
+
+        /**
+         * Returns a process-safe singleton [DataStore] instance for the given fallback [file],
+         * preventing DataStore's multiple-instance [IllegalStateException] in non-Context tests
+         * or fallback repository instantiations.
+         */
+        fun getOrCreateFallbackDataStore(file: File): DataStore<Preferences> {
+            val canonicalPath = file.safeCanonicalPath()
+            return fallbackDataStores[canonicalPath] ?: synchronized(fallbackDataStores) {
+                fallbackDataStores.getOrPut(canonicalPath) {
+                    PreferenceDataStoreFactory.create(
+                        scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+                        produceFile = { file }
+                    )
+                }
+            }
+        }
+
+        /**
+         * Creates or reuses a [UserPreferencesStore] backed by a process-safe fallback [DataStore]
+         * keyed by [file]'s canonical path.
+         */
+        fun forFallbackFile(file: File): UserPreferencesStore {
+            return UserPreferencesStore(getOrCreateFallbackDataStore(file))
         }
     }
 }
