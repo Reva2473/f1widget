@@ -12,6 +12,17 @@ import com.reva2473.f1widget.data.remote.DriverStandingDto
 import com.reva2473.f1widget.data.remote.JolpicaApiService
 import com.reva2473.f1widget.data.remote.JolpicaResponse
 import com.reva2473.f1widget.data.remote.OpenF1ApiService
+import com.reva2473.f1widget.data.remote.OpenF1DriverDto
+import com.reva2473.f1widget.data.remote.OpenF1IntervalDto
+import com.reva2473.f1widget.data.remote.OpenF1LapDto
+import com.reva2473.f1widget.data.remote.OpenF1OvertakeDto
+import com.reva2473.f1widget.data.remote.OpenF1PositionDto
+import com.reva2473.f1widget.data.remote.OpenF1RaceControlDto
+import com.reva2473.f1widget.data.remote.OpenF1SessionDto
+import com.reva2473.f1widget.data.remote.OpenF1StintDto
+import com.reva2473.f1widget.data.remote.OpenF1TeamRadioDto
+import com.reva2473.f1widget.data.remote.OpenF1WeatherDto
+import com.reva2473.f1widget.data.remote.PitStopDto
 import com.reva2473.f1widget.data.remote.QualifyingResultDto
 import com.reva2473.f1widget.data.remote.RaceDto
 import com.reva2473.f1widget.data.remote.SessionDto
@@ -21,12 +32,19 @@ import com.reva2473.f1widget.domain.model.ConstructorStanding
 import com.reva2473.f1widget.domain.model.DriverCareerComparison
 import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
+import com.reva2473.f1widget.domain.model.LiveDriverTiming
 import com.reva2473.f1widget.domain.model.LiveSessionState
+import com.reva2473.f1widget.domain.model.OvertakeEvent
 import com.reva2473.f1widget.domain.model.RaceControlMessage
 import com.reva2473.f1widget.domain.model.RaceDriverResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
+import com.reva2473.f1widget.domain.model.SectorStatus
 import com.reva2473.f1widget.domain.model.SessionScheduleItem
+import com.reva2473.f1widget.domain.model.TeamRadioClip
+import com.reva2473.f1widget.domain.model.TyreCompound
+import com.reva2473.f1widget.domain.model.TyreStint
 import com.reva2473.f1widget.domain.model.UserPreferencesState
+import com.reva2473.f1widget.domain.model.WeatherSnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -50,6 +68,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
 val sharedOkHttpClient: OkHttpClient by lazy {
@@ -59,17 +78,9 @@ val sharedOkHttpClient: OkHttpClient by lazy {
         .build()
 }
 
-fun createDefaultJolpicaApi(): JolpicaApiService? = try {
-    JolpicaApiService.create(sharedOkHttpClient)
-} catch (_: Throwable) {
-    null
-}
+fun createDefaultJolpicaApi(): JolpicaApiService? = F1Repository.sharedJolpicaApi
 
-fun createDefaultOpenF1Api(): OpenF1ApiService? = try {
-    OpenF1ApiService.create(sharedOkHttpClient)
-} catch (_: Throwable) {
-    null
-}
+fun createDefaultOpenF1Api(): OpenF1ApiService? = F1Repository.sharedOpenF1Api
 
 /**
  * Main repository coordinating Jolpica Ergast API, OpenF1 API, offline cache,
@@ -94,11 +105,7 @@ class F1Repository(
         preferencesStore = UserPreferencesStore(context.applicationContext)
     )
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
-    }
+    private val json: Json get() = sharedJson
 
     val userPreferencesFlow: Flow<UserPreferencesState> = preferencesStore.preferencesFlow
     val reminderSessionKeysFlow: Flow<Set<String>> = preferencesStore.reminderSessionKeysFlow
@@ -130,10 +137,24 @@ class F1Repository(
     }
 
     /**
-     * Get the next upcoming race weekend (Bahrain Sepang 2026 default).
+     * Get the next upcoming race weekend from the current season schedule.
      */
     suspend fun getNextRaceWeekend(): RaceWeekend = withContext(Dispatchers.IO) {
-        updateWeekendCountdowns(SeedDataProvider.getNextRaceWeekend())
+        val currentSeason = LocalDate.now().year
+        val schedule = getSeasonSchedule(currentSeason)
+        val now = System.currentTimeMillis()
+        val next = schedule.firstOrNull { weekend ->
+            val raceSession = weekend.sessions.firstOrNull { it.isRace } ?: weekend.sessions.lastOrNull()
+            val utcMillis = raceSession?.utcEpochMillis
+            if (utcMillis != null) {
+                utcMillis > now
+            } else {
+                !isRaceCompleted(weekend)
+            }
+        } ?: schedule.firstOrNull { !isRaceCompleted(it) }
+            ?: schedule.lastOrNull()
+            ?: SeedDataProvider.getNextRaceWeekend()
+        updateWeekendCountdowns(next)
     }
 
     /**
@@ -159,140 +180,255 @@ class F1Repository(
 
     /**
      * Get race weekend for a specific season and round.
+     * Enriches completed rounds with race results, qualifying results, and pit stops.
      */
     suspend fun getRaceWeekend(season: Int, round: Int): RaceWeekend = withContext(Dispatchers.IO) {
         val schedule = getSeasonSchedule(season)
-        schedule.firstOrNull { it.round == round } ?: SeedDataProvider.getNextRaceWeekend()
+        val weekend = schedule.firstOrNull { it.round == round }
+            ?: schedule.firstOrNull()
+            ?: SeedDataProvider.getNextRaceWeekend().copy(season = season, round = round, results = emptyList())
+        val updated = updateWeekendCountdowns(weekend)
+        if (updated.results.isEmpty() && isRaceCompleted(updated)) {
+            enrichWeekendWithResults(updated, forceRefresh = false)
+        } else {
+            updated
+        }
     }
 
     /**
      * Get the latest completed race weekend with podium results from the season schedule
-     * (enriched from Jolpica results & qualifying APIs when available), with disk caching
-     * and historical seed fallback only for matching seasons (2023 / 2024).
+     * (enriched from Jolpica results, qualifying & pit-stop APIs when available), walking
+     * backwards through completed rounds if the latest round has no published results yet.
      */
-    suspend fun getLatestCompletedRace(season: Int = 2026): RaceWeekend = withContext(Dispatchers.IO) {
+    suspend fun getLatestCompletedRace(
+        season: Int = 2026,
+        forceRefresh: Boolean = false
+    ): RaceWeekend = withContext(Dispatchers.IO) {
         val schedule = getSeasonSchedule(season)
-        schedule.lastOrNull { it.results.isNotEmpty() }?.let { return@withContext it }
+        val completedCandidates = schedule.filter { isRaceCompleted(it) }.asReversed()
 
-        val completedCandidate = schedule.lastOrNull { isRaceCompleted(it) }
-        val cacheEnabled = isOfflineCacheEnabled()
-
-        if (completedCandidate != null) {
-            val resultCacheKey = "${season}_${completedCandidate.round}_results"
-            var cachedResults: List<RaceDriverResult>? = null
-            if (cacheEnabled) {
-                try {
-                    val cached = database.f1Dao().getRaceResult(resultCacheKey)
-                    if (cached != null) {
-                        val parsed = json.decodeFromString<List<RaceDriverResult>>(cached.payloadJson)
-                        if (parsed.isNotEmpty()) {
-                            if (!isExpired(cached.lastUpdatedMillis)) {
-                                return@withContext completedCandidate.copy(results = parsed)
-                            }
-                            cachedResults = parsed
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {}
+        for (candidate in completedCandidates) {
+            if (!forceRefresh && candidate.results.isNotEmpty()) {
+                return@withContext candidate
             }
-
-            if (jolpicaApi != null) {
-                val (raceDto, qualifyingDtos) = coroutineScope {
-                    val raceDeferred = async {
-                        safeSuspendCall {
-                            jolpicaApi.getRaceResults(season.toString(), completedCandidate.round.toString())
-                                .mrData.raceTable?.races?.firstOrNull()
-                        }
-                    }
-                    val qualifyingDeferred = async {
-                        safeSuspendCall {
-                            jolpicaApi.getQualifyingResults(season.toString(), completedCandidate.round.toString())
-                                .mrData.raceTable?.races?.firstOrNull()?.qualifyingResults.orEmpty()
-                        }.orEmpty()
-                    }
-                    raceDeferred.await() to qualifyingDeferred.await()
-                }
-
-                val qualiByDriverId = mutableMapOf<String, QualifyingResultDto>()
-                val qualiByCode = mutableMapOf<String, QualifyingResultDto>()
-                for (qDto in qualifyingDtos) {
-                    val id = qDto.driver.driverId.trim().lowercase(Locale.ROOT)
-                    if (id.isNotEmpty()) qualiByDriverId[id] = qDto
-                    val code = qDto.driver.code?.trim()?.uppercase(Locale.ROOT).orEmpty()
-                    if (code.isNotEmpty()) qualiByCode[code] = qDto
-                }
-
-                val mappedResults = raceDto?.results?.mapIndexed { idx, dto ->
-                    val driverIdKey = dto.driver.driverId.trim().lowercase(Locale.ROOT)
-                    val driverCode = dto.driver.code?.ifBlank { null } ?: dto.driver.familyName.take(3).uppercase()
-                    val qualiDto = qualiByDriverId[driverIdKey] ?: qualiByCode[driverCode.uppercase(Locale.ROOT)]
-                    val qualiPos = qualiDto?.position?.trim()?.takeIf { it.isNotEmpty() }?.let { "P$it" } ?: ""
-                    val qualiTime = qualiDto?.let {
-                        it.q3?.ifBlank { null } ?: it.q2?.ifBlank { null } ?: it.q1?.ifBlank { null }
-                    }.orEmpty()
-
-                    RaceDriverResult(
-                        position = dto.position.toIntOrNull() ?: (idx + 1),
-                        driverCode = driverCode,
-                        driverFullName = "${dto.driver.givenName} ${dto.driver.familyName}".trim(),
-                        team = F1TeamId.fromName(dto.constructor.name),
-                        finishTimeOrGap = dto.time?.time?.ifBlank { null } ?: dto.status.ifBlank { "Finished" },
-                        points = dto.points.toDoubleOrNull() ?: 0.0,
-                        qualifyingPosition = qualiPos,
-                        qualifyingTime = qualiTime,
-                        fastestLapPosition = dto.fastestLap?.rank?.let { "P$it" } ?: "",
-                        fastestLapTime = dto.fastestLap?.time?.time ?: "",
-                        totalLaps = dto.laps.toIntOrNull() ?: completedCandidate.totalLaps
-                    )
-                }.orEmpty()
-
-                if (mappedResults.isNotEmpty()) {
-                    if (cacheEnabled) {
-                        try {
-                            database.f1Dao().insertRaceResult(
-                                CachedRaceResultEntity(
-                                    cacheKey = resultCacheKey,
-                                    season = season,
-                                    round = completedCandidate.round,
-                                    payloadJson = json.encodeToString(mappedResults)
-                                )
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {}
-                    }
-                    return@withContext completedCandidate.copy(results = mappedResults)
-                }
+            val enriched = enrichWeekendWithResults(candidate, forceRefresh = forceRefresh)
+            if (enriched.results.isNotEmpty()) {
+                return@withContext enriched
             }
+        }
 
-            if (cacheEnabled && !cachedResults.isNullOrEmpty()) {
-                return@withContext completedCandidate.copy(results = cachedResults)
-            }
+        if (!forceRefresh) {
+            schedule.lastOrNull { it.results.isNotEmpty() }?.let { return@withContext it }
         }
 
         when (season) {
             2024 -> SeedDataProvider.getSaoPaulo2024Results()
             2023 -> SeedDataProvider.getAbuDhabi2023Results()
-            else -> completedCandidate
+            else -> completedCandidates.firstOrNull()
                 ?: schedule.firstOrNull()?.copy(results = emptyList())
                 ?: SeedDataProvider.getNextRaceWeekend().copy(season = season, results = emptyList())
         }
     }
 
+    private suspend fun enrichWeekendWithResults(
+        weekend: RaceWeekend,
+        forceRefresh: Boolean
+    ): RaceWeekend {
+        val cacheEnabled = isOfflineCacheEnabled()
+        val resultCacheKey = "${weekend.season}_${weekend.round}_results"
+        var cachedResults: List<RaceDriverResult>? = null
+
+        if (cacheEnabled) {
+            try {
+                val cached = database.f1Dao().getRaceResult(resultCacheKey)
+                if (cached != null) {
+                    val parsed = json.decodeFromString<List<RaceDriverResult>>(cached.payloadJson)
+                    if (parsed.isNotEmpty()) {
+                        if (!forceRefresh && !isExpired(cached.lastUpdatedMillis)) {
+                            return weekend.copy(results = parsed)
+                        }
+                        cachedResults = parsed
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {}
+        }
+
+        if (jolpicaApi != null) {
+            val (raceDto, qualifyingDtos, pitStopDtos) = coroutineScope {
+                val raceDeferred = async {
+                    safeSuspendCall {
+                        jolpicaApi.getRaceResults(
+                            weekend.season.toString(),
+                            weekend.round.toString(),
+                            limit = 100,
+                            offset = 0
+                        ).mrData.raceTable?.races?.firstOrNull()
+                    }
+                }
+                val qualifyingDeferred = async {
+                    safeSuspendCall {
+                        jolpicaApi.getQualifyingResults(
+                            weekend.season.toString(),
+                            weekend.round.toString(),
+                            limit = 100,
+                            offset = 0
+                        ).mrData.raceTable?.races?.firstOrNull()?.qualifyingResults.orEmpty()
+                    }.orEmpty()
+                }
+                val pitStopsDeferred = async {
+                    safeSuspendCall {
+                        fetchAllPitStops(weekend.season, weekend.round)
+                    }.orEmpty()
+                }
+                Triple(raceDeferred.await(), qualifyingDeferred.await(), pitStopsDeferred.await())
+            }
+
+            val qualiByDriverId = mutableMapOf<String, QualifyingResultDto>()
+            val qualiByCode = mutableMapOf<String, QualifyingResultDto>()
+            for (qDto in qualifyingDtos) {
+                val id = qDto.driver.driverId.trim().lowercase(Locale.ROOT)
+                if (id.isNotEmpty()) qualiByDriverId[id] = qDto
+                val code = qDto.driver.code?.trim()?.uppercase(Locale.ROOT).orEmpty()
+                if (code.isNotEmpty()) qualiByCode[code] = qDto
+            }
+
+            val pitStopsByDriverId = pitStopDtos
+                .filter { it.driverId.isNotBlank() }
+                .groupBy { it.driverId.trim().lowercase(Locale.ROOT) }
+
+            val mappedResults = raceDto?.results?.mapIndexed { idx, dto ->
+                val driverIdKey = dto.driver.driverId.trim().lowercase(Locale.ROOT)
+                val driverCode = dto.driver.code?.ifBlank { null }
+                    ?: dto.driver.familyName.take(3).uppercase(Locale.ROOT)
+                val qualiDto = qualiByDriverId[driverIdKey] ?: qualiByCode[driverCode.uppercase(Locale.ROOT)]
+                val qualiPos = qualiDto?.position?.trim()?.takeIf { it.isNotEmpty() }?.let { "P$it" } ?: ""
+                val qualiTime = qualiDto?.let {
+                    it.q3?.ifBlank { null } ?: it.q2?.ifBlank { null } ?: it.q1?.ifBlank { null }
+                }.orEmpty()
+                val driverTotalLaps = dto.laps.toIntOrNull() ?: weekend.totalLaps
+                val stints = buildStintsFromPitStops(
+                    pitStops = pitStopsByDriverId[driverIdKey].orEmpty(),
+                    totalLaps = driverTotalLaps
+                )
+
+                RaceDriverResult(
+                    position = dto.position.toIntOrNull() ?: (idx + 1),
+                    driverCode = driverCode,
+                    driverFullName = "${dto.driver.givenName} ${dto.driver.familyName}".trim(),
+                    team = F1TeamId.fromName(dto.constructor.name),
+                    finishTimeOrGap = dto.time?.time?.ifBlank { null } ?: dto.status.ifBlank { "Finished" },
+                    points = dto.points.toDoubleOrNull() ?: 0.0,
+                    qualifyingPosition = qualiPos,
+                    qualifyingTime = qualiTime,
+                    fastestLapPosition = dto.fastestLap?.rank?.trim()?.takeIf { it.isNotEmpty() }?.let { "P$it" } ?: "",
+                    fastestLapTime = dto.fastestLap?.time?.time ?: "",
+                    totalLaps = driverTotalLaps,
+                    stints = stints
+                )
+            }.orEmpty()
+
+            if (mappedResults.isNotEmpty()) {
+                if (cacheEnabled) {
+                    try {
+                        database.f1Dao().insertRaceResult(
+                            CachedRaceResultEntity(
+                                cacheKey = resultCacheKey,
+                                season = weekend.season,
+                                round = weekend.round,
+                                payloadJson = json.encodeToString(mappedResults)
+                            )
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {}
+                }
+                return weekend.copy(results = mappedResults)
+            }
+        }
+
+        return if (cacheEnabled && !cachedResults.isNullOrEmpty()) {
+            weekend.copy(results = cachedResults)
+        } else {
+            weekend
+        }
+    }
+
+    private suspend fun fetchAllPitStops(season: Int, round: Int): List<PitStopDto> {
+        val api = jolpicaApi ?: return emptyList()
+        return fetchAllPaginated(
+            fetchPage = { limit, offset ->
+                api.getPitStops(season.toString(), round.toString(), limit = limit, offset = offset)
+            },
+            extractItems = { it.mrData.raceTable?.races?.firstOrNull()?.pitStops.orEmpty() }
+        )
+    }
+
+    private fun buildStintsFromPitStops(
+        pitStops: List<PitStopDto>,
+        totalLaps: Int
+    ): List<TyreStint> {
+        if (pitStops.isEmpty()) return emptyList()
+        val sortedStops = pitStops.sortedWith(
+            compareBy<PitStopDto>(
+                { it.stop.toIntOrNull() ?: Int.MAX_VALUE },
+                { it.lap.toIntOrNull() ?: Int.MAX_VALUE }
+            )
+        )
+        val stints = mutableListOf<TyreStint>()
+        var prevLap = 0
+        sortedStops.forEachIndexed { index, stop ->
+            val stopLap = stop.lap.toIntOrNull()
+            val lapsInStint = if (stopLap != null) (stopLap - prevLap).coerceAtLeast(1) else 0
+            val rawDuration = stop.duration.trim()
+            val formattedDuration = when {
+                rawDuration.isEmpty() -> null
+                rawDuration.endsWith("s", ignoreCase = true) -> rawDuration
+                else -> "${rawDuration}s"
+            }
+            stints.add(
+                TyreStint(
+                    stintNumber = index + 1,
+                    compound = if (index == 0) TyreCompound.MEDIUM else TyreCompound.HARD,
+                    lapsCount = lapsInStint,
+                    pitStopDuration = formattedDuration,
+                    pitStopLap = stopLap
+                )
+            )
+            if (stopLap != null && stopLap > prevLap) {
+                prevLap = stopLap
+            }
+        }
+        val finalLaps = (totalLaps - prevLap).coerceAtLeast(1)
+        stints.add(
+            TyreStint(
+                stintNumber = sortedStops.size + 1,
+                compound = TyreCompound.HARD,
+                lapsCount = finalLaps,
+                pitStopDuration = null,
+                pitStopLap = null
+            )
+        )
+        return stints
+    }
+
     private fun isRaceCompleted(weekend: RaceWeekend): Boolean {
         if (weekend.results.isNotEmpty()) return true
+        val currentYear = LocalDate.now().year
+        if (weekend.season < currentYear && weekend.sessions.isEmpty()) return true
         val raceSession = weekend.sessions.firstOrNull { it.isRace } ?: weekend.sessions.lastOrNull()
-            ?: return false
+            ?: return (weekend.season < currentYear)
         val completionBufferMillis = 3L * 60L * 60L * 1000L
         val utcMillis = raceSession.utcEpochMillis
         if (utcMillis != null) {
             return System.currentTimeMillis() >= utcMillis + completionBufferMillis
         }
 
-        val month = monthNameToNumber(raceSession.dateMonth) ?: return false
-        val day = raceSession.dateDay.toIntOrNull() ?: return false
-        val raceDate = runCatching { LocalDate.of(weekend.season, month, day) }.getOrNull() ?: return false
+        val month = monthNameToNumber(raceSession.dateMonth) ?: return (weekend.season < currentYear)
+        val day = raceSession.dateDay.toIntOrNull() ?: return (weekend.season < currentYear)
+        val raceDate = runCatching { LocalDate.of(weekend.season, month, day) }.getOrNull()
+            ?: return (weekend.season < currentYear)
         val today = LocalDate.now()
         if (raceDate.isBefore(today)) return true
         if (raceDate.isAfter(today)) return false
@@ -503,25 +639,28 @@ class F1Repository(
     ): List<DriverStanding> {
         if (list.isEmpty()) return emptyList()
 
+        val sorted = list.sortedBy { it.position.toIntOrNull() ?: Int.MAX_VALUE }
         val validRound = seasonRound?.takeIf { it > 0 }
         val racesCount = validRound ?: 0
-        val leaderPts = list.firstOrNull()?.points?.toDoubleOrNull() ?: 0.0
+        val leaderPts = sorted.firstOrNull()?.points?.toDoubleOrNull() ?: 0.0
 
-        return list.mapIndexed { index, dto ->
+        return sorted.mapIndexed { index, dto ->
             val constructor = dto.constructors.lastOrNull()
             val constructorName = constructor?.name ?: "Unknown"
             val team = F1TeamId.fromName(constructorName)
             val pts = dto.points.toDoubleOrNull() ?: 0.0
-            val prevPts = if (index > 0) list[index - 1].points.toDoubleOrNull() ?: pts else pts
+            val pos = dto.position.toIntOrNull() ?: (index + 1)
+            val prevPos = if (index > 0) (sorted[index - 1].position.toIntOrNull() ?: index) else pos
+            val prevPts = if (index > 0) sorted[index - 1].points.toDoubleOrNull() ?: pts else pts
             val gapLeaderStr = if (index > 0) formatGap(leaderPts - pts, prefix = "-", suffix = "to leader") else null
-            val gapPrevStr = if (index > 0) formatGap(prevPts - pts, prefix = "-", suffix = "to P$index") else null
+            val gapPrevStr = if (index > 0) formatGap(prevPts - pts, prefix = "-", suffix = "to P$prevPos") else null
             val winsCount = dto.wins.toIntOrNull() ?: 0
             val ptsStr = formatPoints(pts)
 
             DriverStanding(
-                position = dto.position.toIntOrNull() ?: (index + 1),
+                position = pos,
                 driverId = dto.driver.driverId,
-                code = dto.driver.code?.ifBlank { null } ?: dto.driver.familyName.take(3).uppercase(),
+                code = dto.driver.code?.ifBlank { null } ?: dto.driver.familyName.take(3).uppercase(Locale.ROOT),
                 firstName = dto.driver.givenName,
                 lastName = dto.driver.familyName,
                 fullName = "${dto.driver.givenName} ${dto.driver.familyName}".trim(),
@@ -569,6 +708,25 @@ class F1Repository(
             } catch (_: Exception) {}
         }
 
+        // Reuse valid non-expired cached driver standings before hitting network
+        val validCachedDrivers: List<DriverStanding>? = if (!forceRefresh && cacheEnabled) {
+            try {
+                val cachedDrivers = database.f1Dao().getStandings("${season}_drivers")
+                if (cachedDrivers != null && !isExpired(cachedDrivers.lastUpdatedMillis)) {
+                    json.decodeFromString<List<DriverStanding>>(cachedDrivers.payloadJson)
+                        .takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+
         // Remote Jolpica lookup
         if (jolpicaApi != null) {
             try {
@@ -576,10 +734,14 @@ class F1Repository(
                     val constructorsDeferred = async {
                         fetchAllConstructorStandings(season)
                     }
-                    val driversDeferred = async {
-                        safeSuspendCall { fetchAllDriverStandings(season).second }.orEmpty()
+                    val driversDeferred = if (validCachedDrivers == null) {
+                        async {
+                            safeSuspendCall { fetchAllDriverStandings(season).second }.orEmpty()
+                        }
+                    } else {
+                        null
                     }
-                    constructorsDeferred.await() to driversDeferred.await()
+                    constructorsDeferred.await() to (driversDeferred?.await().orEmpty())
                 }
                 if (constructorDtos.isNotEmpty()) {
                     val driversByConstructorId = mutableMapOf<String, MutableList<ConstructorDriverPoints>>()
@@ -601,33 +763,28 @@ class F1Repository(
                     }
 
                     val cachedDriversByTeam: Map<F1TeamId, List<ConstructorDriverPoints>> =
-                        if (driverDtos.isEmpty() && cacheEnabled) {
-                            try {
-                                val cachedDrivers = database.f1Dao().getStandings("${season}_drivers")
-                                if (cachedDrivers != null) {
-                                    json.decodeFromString<List<DriverStanding>>(cachedDrivers.payloadJson)
-                                        .filter { it.team != F1TeamId.OTHER }
-                                        .groupBy { it.team }
-                                        .mapValues { (_, list) ->
-                                            list.map {
-                                                ConstructorDriverPoints(fullName = it.fullName, points = it.points)
-                                            }
-                                        }
-                                } else emptyMap()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (_: Exception) {
-                                emptyMap()
-                            }
-                        } else emptyMap()
+                        if (driverDtos.isEmpty() && !validCachedDrivers.isNullOrEmpty()) {
+                            validCachedDrivers
+                                .groupBy { it.team }
+                                .mapValues { (_, list) ->
+                                    list.map {
+                                        ConstructorDriverPoints(fullName = it.fullName, points = it.points)
+                                    }
+                                }
+                        } else {
+                            emptyMap()
+                        }
 
-                    val leaderPts = constructorDtos.firstOrNull()?.points?.toDoubleOrNull() ?: 0.0
-                    val converted = constructorDtos.mapIndexed { index, dto ->
+                    val sortedConstructors = constructorDtos.sortedBy { it.position.toIntOrNull() ?: Int.MAX_VALUE }
+                    val leaderPts = sortedConstructors.firstOrNull()?.points?.toDoubleOrNull() ?: 0.0
+                    val converted = sortedConstructors.mapIndexed { index, dto ->
                         val team = F1TeamId.fromName(dto.constructor.name)
                         val pts = dto.points.toDoubleOrNull() ?: 0.0
-                        val prevPts = if (index > 0) constructorDtos[index - 1].points.toDoubleOrNull() ?: pts else pts
+                        val pos = dto.position.toIntOrNull() ?: (index + 1)
+                        val prevPos = if (index > 0) (sortedConstructors[index - 1].position.toIntOrNull() ?: index) else pos
+                        val prevPts = if (index > 0) sortedConstructors[index - 1].points.toDoubleOrNull() ?: pts else pts
                         val gapToP1 = if (index > 0) formatGap(leaderPts - pts, suffix = "to P1") else null
-                        val gapToPrev = if (index > 0) formatGap(prevPts - pts, suffix = "to P$index") else null
+                        val gapToPrev = if (index > 0) formatGap(prevPts - pts, suffix = "to P$prevPos") else null
                         val winsCount = dto.wins.toIntOrNull() ?: 0
 
                         val teamDrivers = if (driverDtos.isNotEmpty()) {
@@ -645,7 +802,7 @@ class F1Repository(
                         }
 
                         ConstructorStanding(
-                            position = dto.position.toIntOrNull() ?: (index + 1),
+                            position = pos,
                             team = team,
                             points = pts,
                             wins = winsCount,
@@ -701,55 +858,435 @@ class F1Repository(
     }
 
     /**
-     * Get live session state. Queries OpenF1 API when sessionKey is "latest" or numeric,
-     * returning named offline fixtures cleanly without mixing live OpenF1 telemetry onto them.
+     * Get live session state. Queries OpenF1 API concurrently when sessionKey is "latest" or numeric,
+     * using a 20s in-memory cache and returning named/offline fixtures with `isLive = false` when offline.
      */
-    suspend fun getLiveSessionState(sessionKey: String = "SAO_PAULO"): LiveSessionState = withContext(Dispatchers.IO) {
-        val fallbackState = SeedDataProvider.getLiveSessionState(sessionKey)
-        val shouldQueryOpenF1 = sessionKey.equals("latest", ignoreCase = true) ||
-            (sessionKey.isNotBlank() && sessionKey.all { it.isDigit() })
+    suspend fun getLiveSessionState(sessionKey: String = "latest"): LiveSessionState = withContext(Dispatchers.IO) {
+        val fallbackState = SeedDataProvider.getLiveSessionState(sessionKey).copy(isLive = false)
+        val trimmedKey = sessionKey.trim()
+        val shouldQueryOpenF1 = trimmedKey.equals("latest", ignoreCase = true) ||
+            (trimmedKey.isNotBlank() && trimmedKey.all { it.isDigit() })
         if (!shouldQueryOpenF1 || openF1Api == null) {
             return@withContext fallbackState
         }
 
-        val openF1SessionKey = if (sessionKey.equals("latest", ignoreCase = true)) "latest" else sessionKey
+        val openF1SessionKey = if (trimmedKey.equals("latest", ignoreCase = true)) "latest" else trimmedKey
+        val cacheKey = "${System.identityHashCode(openF1Api)}_${openF1SessionKey.lowercase(Locale.ROOT)}"
+        val nowMillis = System.currentTimeMillis()
+        liveSessionCache[cacheKey]?.let { cached ->
+            if ((nowMillis - cached.fetchedAtMillis) < LIVE_SESSION_CACHE_TTL_MS) {
+                return@withContext cached.state
+            }
+        }
+
         try {
-            val weatherList = safeSuspendCall { openF1Api.getWeather(openF1SessionKey) }
-            val latestWeatherDto = weatherList?.lastOrNull()
-            val enrichedWeather = if (latestWeatherDto != null) {
-                fallbackState.weather.copy(
-                    trackTempC = latestWeatherDto.trackTemperature,
-                    airTempC = latestWeatherDto.airTemperature,
-                    humidityPercent = latestWeatherDto.humidity.roundToInt(),
-                    windSpeedKmh = ((latestWeatherDto.windSpeed * 3.6) * 10.0).roundToInt() / 10.0,
-                    windDirection = degreesToCompass(latestWeatherDto.windDirection),
-                    pressureMbar = latestWeatherDto.pressure,
-                    rainfallPercent = if (latestWeatherDto.rainfall > 0.0) 100 else 0
+            val fetched = coroutineScope {
+                val sessionsDeferred = async { safeSuspendCall { openF1Api.getSessions(sessionKey = openF1SessionKey) } }
+                val weatherDeferred = async { safeSuspendCall { openF1Api.getWeather(openF1SessionKey) } }
+                val raceControlDeferred = async { safeSuspendCall { openF1Api.getRaceControl(openF1SessionKey) } }
+                val driversDeferred = async { safeSuspendCall { openF1Api.getDrivers(openF1SessionKey) } }
+                val positionsDeferred = async { safeSuspendCall { openF1Api.getPositions(openF1SessionKey) } }
+                val intervalsDeferred = async { safeSuspendCall { openF1Api.getIntervals(openF1SessionKey) } }
+                val lapsDeferred = async { safeSuspendCall { openF1Api.getLaps(openF1SessionKey) } }
+                val stintsDeferred = async { safeSuspendCall { openF1Api.getStints(openF1SessionKey) } }
+                val teamRadioDeferred = async { safeSuspendCall { openF1Api.getTeamRadio(openF1SessionKey) } }
+                val overtakesDeferred = async { safeSuspendCall { openF1Api.getOvertakes(openF1SessionKey) } }
+
+                OpenF1LiveFetchBundle(
+                    sessions = sessionsDeferred.await().orEmpty(),
+                    weather = weatherDeferred.await().orEmpty(),
+                    raceControl = raceControlDeferred.await().orEmpty(),
+                    drivers = driversDeferred.await().orEmpty(),
+                    positions = positionsDeferred.await().orEmpty(),
+                    intervals = intervalsDeferred.await().orEmpty(),
+                    laps = lapsDeferred.await().orEmpty(),
+                    stints = stintsDeferred.await().orEmpty(),
+                    teamRadio = teamRadioDeferred.await().orEmpty(),
+                    overtakes = overtakesDeferred.await().orEmpty()
                 )
-            } else fallbackState.weather
+            }
 
-            val raceControlDtos = safeSuspendCall { openF1Api.getRaceControl(openF1SessionKey) }
-            val enrichedMessages = if (!raceControlDtos.isNullOrEmpty()) {
-                raceControlDtos.takeLast(10).reversed().map { dto ->
-                    RaceControlMessage(
-                        id = "rc_${dto.sessionKey}_${dto.date}_${dto.message.hashCode()}",
-                        title = dto.message.ifBlank { dto.flag ?: "FLAG" },
-                        timestamp = formatRaceControlTimestamp(dto.date),
-                        category = dto.category ?: "INFO"
-                    )
-                }
-            } else fallbackState.raceControlMessages
+            if (fetched.isEmpty()) {
+                return@withContext fallbackState
+            }
 
-            return@withContext fallbackState.copy(
-                weather = enrichedWeather,
-                raceControlMessages = enrichedMessages
+            val mappedState = mapOpenF1BundleToLiveState(fetched, fallbackState)
+            liveSessionCache[cacheKey] = CachedLiveSessionEntry(
+                state = mappedState,
+                fetchedAtMillis = System.currentTimeMillis()
             )
+            return@withContext mappedState
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             // fall through to fallbackState
         }
         fallbackState
+    }
+
+    private data class OpenF1LiveFetchBundle(
+        val sessions: List<OpenF1SessionDto>,
+        val weather: List<OpenF1WeatherDto>,
+        val raceControl: List<OpenF1RaceControlDto>,
+        val drivers: List<OpenF1DriverDto>,
+        val positions: List<OpenF1PositionDto>,
+        val intervals: List<OpenF1IntervalDto>,
+        val laps: List<OpenF1LapDto>,
+        val stints: List<OpenF1StintDto>,
+        val teamRadio: List<OpenF1TeamRadioDto>,
+        val overtakes: List<OpenF1OvertakeDto>
+    ) {
+        fun isEmpty(): Boolean =
+            sessions.isEmpty() &&
+                weather.isEmpty() &&
+                raceControl.isEmpty() &&
+                drivers.isEmpty() &&
+                positions.isEmpty() &&
+                intervals.isEmpty() &&
+                laps.isEmpty() &&
+                stints.isEmpty() &&
+                teamRadio.isEmpty() &&
+                overtakes.isEmpty()
+    }
+
+    private fun mapOpenF1BundleToLiveState(
+        bundle: OpenF1LiveFetchBundle,
+        fallbackState: LiveSessionState
+    ): LiveSessionState {
+        val sessionDto = bundle.sessions.lastOrNull()
+        val nowInstant = Instant.now()
+        val startInstant = sessionDto?.dateStart?.let { parseIsoInstant(it) }
+        val endInstant = sessionDto?.dateEnd?.let { parseIsoInstant(it) }
+        val isLive = startInstant != null && endInstant != null &&
+            !nowInstant.isBefore(startInstant) && !nowInstant.isAfter(endInstant)
+
+        val timeRemaining = when {
+            isLive -> {
+                val secs = Duration.between(nowInstant, endInstant!!).seconds.coerceAtLeast(0)
+                val hours = secs / 3600
+                val mins = (secs % 3600) / 60
+                val remSecs = secs % 60
+                if (hours > 0) String.format(Locale.ROOT, "%d:%02d:%02d", hours, mins, remSecs)
+                else String.format(Locale.ROOT, "%d:%02d", mins, remSecs)
+            }
+            startInstant != null && nowInstant.isBefore(startInstant) -> "Starts soon"
+            endInstant != null && nowInstant.isAfter(endInstant) -> "Final"
+            else -> fallbackState.timeRemaining
+        }
+
+        val latestWeatherDto = bundle.weather.lastOrNull()
+        val enrichedWeather = if (latestWeatherDto != null) {
+            WeatherSnapshot(
+                trackTempC = latestWeatherDto.trackTemperature,
+                airTempC = latestWeatherDto.airTemperature,
+                humidityPercent = latestWeatherDto.humidity.roundToInt(),
+                windSpeedKmh = ((latestWeatherDto.windSpeed * 3.6) * 10.0).roundToInt() / 10.0,
+                windDirection = degreesToCompass(latestWeatherDto.windDirection),
+                rainfallPercent = if (latestWeatherDto.rainfall > 0.0) 100 else 0,
+                pressureMbar = latestWeatherDto.pressure
+            )
+        } else {
+            fallbackState.weather
+        }
+
+        val enrichedMessages = if (bundle.raceControl.isNotEmpty()) {
+            bundle.raceControl.takeLast(10).reversed().mapIndexed { index, dto ->
+                RaceControlMessage(
+                    id = "rc_${dto.sessionKey}_${dto.date}_${index}_${dto.message.hashCode()}",
+                    title = dto.message.ifBlank { dto.flag ?: "FLAG" },
+                    timestamp = formatRaceControlTimestamp(dto.date),
+                    category = dto.category ?: "INFO"
+                )
+            }
+        } else {
+            fallbackState.raceControlMessages
+        }
+
+        val trackStatusText = if (bundle.raceControl.isNotEmpty()) {
+            val latestRc = bundle.raceControl.last()
+            val combined = "${latestRc.flag.orEmpty()} ${latestRc.message}".uppercase(Locale.ROOT)
+            when {
+                combined.contains("RED") -> "Red Flag"
+                combined.contains("SAFETY CAR") || combined.contains("SC DEPLOYED") -> "Safety Car"
+                combined.contains("VIRTUAL SAFETY CAR") || combined.contains("VSC") -> "Virtual Safety Car"
+                combined.contains("DOUBLE YELLOW") -> "Double Yellow"
+                combined.contains("YELLOW") -> "Yellow Flag"
+                else -> "Track Clear"
+            }
+        } else {
+            fallbackState.trackStatusText
+        }
+
+        val driverByNumber = bundle.drivers.associateBy { it.driverNumber }
+        val mappedDrivers = if (bundle.drivers.isNotEmpty() || bundle.positions.isNotEmpty()) {
+            buildLiveDrivers(
+                driverByNumber = driverByNumber,
+                positions = bundle.positions,
+                intervals = bundle.intervals,
+                laps = bundle.laps,
+                stints = bundle.stints
+            )
+        } else {
+            fallbackState.drivers
+        }
+
+        val bestDriver = mappedDrivers.firstOrNull { it.isOverallBest } ?: mappedDrivers.firstOrNull()
+        val bestLapDriverCode = if (mappedDrivers.isNotEmpty()) {
+            bestDriver?.code ?: fallbackState.bestLapDriverCode
+        } else {
+            fallbackState.bestLapDriverCode
+        }
+        val bestLapTime = if (mappedDrivers.isNotEmpty()) {
+            bestDriver?.bestLapTime?.takeIf { it != "—" } ?: fallbackState.bestLapTime
+        } else {
+            fallbackState.bestLapTime
+        }
+
+        val mappedRadioClips = if (bundle.teamRadio.isNotEmpty()) {
+            bundle.teamRadio.takeLast(10).reversed().mapIndexed { idx, dto ->
+                val driver = driverByNumber[dto.driverNumber]
+                val code = driver?.nameAcronym?.ifBlank { null } ?: "#${dto.driverNumber}"
+                val name = driver?.fullName?.ifBlank { null } ?: "Driver #${dto.driverNumber}"
+                val team = driver?.teamName?.takeIf { it.isNotBlank() }?.let { F1TeamId.fromName(it) } ?: F1TeamId.OTHER
+                TeamRadioClip(
+                    id = "rad_${dto.sessionKey}_${dto.driverNumber}_${dto.date}_$idx",
+                    driverName = name,
+                    driverCode = code,
+                    team = team,
+                    timestamp = formatRaceControlTimestamp(dto.date),
+                    transcript = dto.transcript?.takeIf { it.isNotBlank() }
+                        ?: if (!dto.recordingUrl.isNullOrBlank()) "Team radio audio available" else "Team radio transmission",
+                    durationSeconds = 6,
+                    recordingUrl = dto.recordingUrl?.takeIf { it.isNotBlank() }
+                )
+            }
+        } else {
+            fallbackState.radioClips
+        }
+
+        val latestRadio = mappedRadioClips.firstOrNull() ?: fallbackState.latestRadio
+
+        val mappedOvertakes = if (bundle.overtakes.isNotEmpty()) {
+            val maxLap = bundle.laps.maxOfOrNull { it.lapNumber } ?: 0
+            bundle.overtakes.takeLast(20).reversed().map { dto ->
+                val overtakingDriver = driverByNumber[dto.overtakingDriverNumber]
+                val overtakenDriver = driverByNumber[dto.overtakenDriverNumber]
+                OvertakeEvent(
+                    lap = maxLap,
+                    overtakingDriver = overtakingDriver?.nameAcronym?.ifBlank { null } ?: "#${dto.overtakingDriverNumber}",
+                    overtakingTeam = overtakingDriver?.teamName?.takeIf { it.isNotBlank() }?.let { F1TeamId.fromName(it) } ?: F1TeamId.OTHER,
+                    overtakenDriver = overtakenDriver?.nameAcronym?.ifBlank { null } ?: "#${dto.overtakenDriverNumber}",
+                    overtakenTeam = overtakenDriver?.teamName?.takeIf { it.isNotBlank() }?.let { F1TeamId.fromName(it) } ?: F1TeamId.OTHER,
+                    positionGained = 1,
+                    cornerText = dto.position?.let { "P$it" } ?: "Track"
+                )
+            }
+        } else {
+            fallbackState.overtakes
+        }
+
+        val grandPrixName = sessionDto?.let { s ->
+            val base = s.countryName?.takeIf { it.isNotBlank() } ?: s.location?.takeIf { it.isNotBlank() }
+            if (base != null) {
+                if (base.contains("Grand Prix", ignoreCase = true)) base else "$base Grand Prix"
+            } else {
+                fallbackState.grandPrixName
+            }
+        } ?: fallbackState.grandPrixName
+
+        val sessionName = sessionDto?.sessionName?.takeIf { it.isNotBlank() } ?: fallbackState.sessionName
+        val shortSessionCode = sessionDto?.sessionName?.takeIf { it.isNotBlank() }?.let { deriveShortSessionCode(it) }
+            ?: fallbackState.shortSessionCode
+        val circuitId = sessionDto?.let { s ->
+            val raw = s.circuitShortName?.takeIf { it.isNotBlank() } ?: s.location.orEmpty()
+            if (raw.isNotBlank()) lookupCircuitSpecs(raw, raw).circuitId else fallbackState.circuitId
+        } ?: fallbackState.circuitId
+
+        return LiveSessionState(
+            grandPrixName = grandPrixName,
+            sessionName = sessionName,
+            shortSessionCode = shortSessionCode,
+            timeRemaining = timeRemaining,
+            bestLapDriverCode = bestLapDriverCode,
+            bestLapTime = bestLapTime,
+            carsOnTrack = if (mappedDrivers.isNotEmpty()) mappedDrivers.count { !it.isInPit } else fallbackState.carsOnTrack,
+            trackStatusText = trackStatusText,
+            sector1LengthKm = fallbackState.sector1LengthKm,
+            sector2LengthKm = fallbackState.sector2LengthKm,
+            sector3LengthKm = fallbackState.sector3LengthKm,
+            circuitId = circuitId,
+            drivers = mappedDrivers,
+            latestRadio = latestRadio,
+            radioClips = mappedRadioClips,
+            raceControlMessages = enrichedMessages,
+            overtakes = mappedOvertakes,
+            weather = enrichedWeather,
+            isLive = isLive
+        )
+    }
+
+    private fun buildLiveDrivers(
+        driverByNumber: Map<Int, OpenF1DriverDto>,
+        positions: List<OpenF1PositionDto>,
+        intervals: List<OpenF1IntervalDto>,
+        laps: List<OpenF1LapDto>,
+        stints: List<OpenF1StintDto>
+    ): List<LiveDriverTiming> {
+        val latestPosByDriver = mutableMapOf<Int, OpenF1PositionDto>()
+        for (pos in positions) {
+            if (pos.driverNumber > 0) latestPosByDriver[pos.driverNumber] = pos
+        }
+
+        val latestIntervalByDriver = mutableMapOf<Int, OpenF1IntervalDto>()
+        for (iv in intervals) {
+            if (iv.driverNumber > 0) latestIntervalByDriver[iv.driverNumber] = iv
+        }
+
+        val lapsByDriver = laps.filter { it.driverNumber > 0 }.groupBy { it.driverNumber }
+        val latestStintByDriver = stints
+            .filter { it.driverNumber > 0 }
+            .groupBy { it.driverNumber }
+            .mapValues { (_, list) -> list.maxByOrNull { it.stintNumber } }
+
+        val overallBestLapSeconds = laps.mapNotNull { it.lapDuration?.takeIf { d -> d > 0.0 } }.minOrNull()
+        val overallBestS1 = laps.mapNotNull { it.durationSector1?.takeIf { d -> d > 0.0 } }.minOrNull()
+        val overallBestS2 = laps.mapNotNull { it.durationSector2?.takeIf { d -> d > 0.0 } }.minOrNull()
+        val overallBestS3 = laps.mapNotNull { it.durationSector3?.takeIf { d -> d > 0.0 } }.minOrNull()
+
+        val allDriverNumbers = (driverByNumber.keys + latestPosByDriver.keys + lapsByDriver.keys).distinct()
+        val sortedNumbers = allDriverNumbers.sortedWith(
+            compareBy<Int>(
+                { latestPosByDriver[it]?.position?.takeIf { p -> p > 0 } ?: Int.MAX_VALUE },
+                {
+                    lapsByDriver[it]?.mapNotNull { l -> l.lapDuration?.takeIf { d -> d > 0.0 } }?.minOrNull()
+                        ?: Double.MAX_VALUE
+                },
+                { it }
+            )
+        )
+
+        return sortedNumbers.mapIndexed { idx, driverNumber ->
+            val driverDto = driverByNumber[driverNumber]
+            val pos = latestPosByDriver[driverNumber]?.position?.takeIf { it > 0 } ?: (idx + 1)
+            val driverLaps = lapsByDriver[driverNumber].orEmpty()
+            val lastLap = driverLaps.maxByOrNull { it.lapNumber }
+            val bestLapDuration = driverLaps.mapNotNull { it.lapDuration?.takeIf { d -> d > 0.0 } }.minOrNull()
+            val bestS1 = driverLaps.mapNotNull { it.durationSector1?.takeIf { d -> d > 0.0 } }.minOrNull()
+            val bestS2 = driverLaps.mapNotNull { it.durationSector2?.takeIf { d -> d > 0.0 } }.minOrNull()
+            val bestS3 = driverLaps.mapNotNull { it.durationSector3?.takeIf { d -> d > 0.0 } }.minOrNull()
+
+            val iv = latestIntervalByDriver[driverNumber]
+            val gapLeaderStr = if (pos == 1) {
+                "Leader"
+            } else {
+                iv?.gapToLeaderDouble?.let { String.format(Locale.ROOT, "+%.3f", it) }
+                    ?: iv?.gapToLeader?.toString()?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
+                    ?: "—"
+            }
+            val intervalAheadStr = if (pos == 1) {
+                "Leader"
+            } else {
+                iv?.intervalDouble?.let { String.format(Locale.ROOT, "+%.3f", it) }
+                    ?: iv?.interval?.toString()?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
+                    ?: "—"
+            }
+
+            val stint = latestStintByDriver[driverNumber]
+            val compound = mapOpenF1Compound(stint?.compound)
+            val tyreAge = if (stint != null) {
+                val startAge = stint.tyreAgeAtStart ?: 0
+                val currentLap = lastLap?.lapNumber ?: stint.lapStart
+                (startAge + (currentLap - stint.lapStart).coerceAtLeast(0)).coerceAtLeast(0)
+            } else {
+                0
+            }
+
+            val isOverallBest = bestLapDuration != null && overallBestLapSeconds != null &&
+                kotlin.math.abs(bestLapDuration - overallBestLapSeconds) < 0.0005
+
+            val s1 = lastLap?.durationSector1
+            val s2 = lastLap?.durationSector2
+            val s3 = lastLap?.durationSector3
+
+            LiveDriverTiming(
+                position = pos,
+                code = driverDto?.nameAcronym?.ifBlank { null } ?: "#$driverNumber",
+                fullName = driverDto?.fullName?.ifBlank { null } ?: "Driver #$driverNumber",
+                team = driverDto?.teamName?.takeIf { it.isNotBlank() }?.let { F1TeamId.fromName(it) } ?: F1TeamId.OTHER,
+                bestLapTime = formatLapDuration(bestLapDuration),
+                lastLapTime = formatLapDuration(lastLap?.lapDuration),
+                gapToLeader = gapLeaderStr,
+                intervalToAhead = intervalAheadStr,
+                isOverallBest = isOverallBest,
+                isInPit = false,
+                isOutLap = lastLap?.isPitOutLap == true,
+                tyreCompound = compound,
+                tyreAgeLaps = tyreAge,
+                sector1Status = resolveSectorStatus(s1, bestS1, overallBestS1),
+                sector2Status = resolveSectorStatus(s2, bestS2, overallBestS2),
+                sector3Status = resolveSectorStatus(s3, bestS3, overallBestS3),
+                sector1Time = s1?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "—",
+                sector2Time = s2?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "—",
+                sector3Time = s3?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "—",
+                trackProgress = ((idx + 1).toFloat() / (sortedNumbers.size + 1).coerceAtLeast(2).toFloat())
+            )
+        }
+    }
+
+    private fun resolveSectorStatus(
+        sectorTime: Double?,
+        driverBest: Double?,
+        overallBest: Double?
+    ): SectorStatus {
+        if (sectorTime == null || sectorTime <= 0.0) return SectorStatus.INACTIVE
+        if (overallBest != null && kotlin.math.abs(sectorTime - overallBest) < 0.0005) return SectorStatus.OVERALL_BEST
+        if (driverBest != null && kotlin.math.abs(sectorTime - driverBest) < 0.0005) return SectorStatus.PERSONAL_BEST
+        return SectorStatus.NORMAL
+    }
+
+    private fun formatLapDuration(seconds: Double?): String {
+        if (seconds == null || seconds <= 0.0) return "—"
+        val totalMillis = (seconds * 1000.0).roundToInt()
+        val mins = totalMillis / 60000
+        val remSecs = (totalMillis % 60000) / 1000.0
+        return if (mins > 0) {
+            String.format(Locale.ROOT, "%d:%06.3f", mins, remSecs)
+        } else {
+            String.format(Locale.ROOT, "%.3f", remSecs)
+        }
+    }
+
+    private fun mapOpenF1Compound(raw: String?): TyreCompound {
+        return when (raw?.trim()?.uppercase(Locale.ROOT)) {
+            "SOFT" -> TyreCompound.SOFT
+            "MEDIUM" -> TyreCompound.MEDIUM
+            "HARD" -> TyreCompound.HARD
+            "INTERMEDIATE", "INTER" -> TyreCompound.INTERMEDIATE
+            "WET" -> TyreCompound.WET
+            else -> TyreCompound.MEDIUM
+        }
+    }
+
+    private fun deriveShortSessionCode(sessionName: String): String {
+        val lower = sessionName.lowercase(Locale.ROOT)
+        return when {
+            lower.contains("practice 1") || lower == "fp1" -> "FP1"
+            lower.contains("practice 2") || lower == "fp2" -> "FP2"
+            lower.contains("practice 3") || lower == "fp3" -> "FP3"
+            lower.contains("sprint qualifying") || lower.contains("shootout") -> "SQ"
+            lower.contains("sprint") -> "SPR"
+            lower.contains("qualifying") -> "Q"
+            lower.contains("race") -> "RACE"
+            else -> sessionName.take(4).uppercase(Locale.ROOT)
+        }
+    }
+
+    private fun parseIsoInstant(raw: String): Instant? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        val normalized = trimmed.replace(Regex("([+-]\\d{2})(\\d{2})$"), "$1:$2")
+        return runCatching { OffsetDateTime.parse(normalized).toInstant() }.getOrNull()
+            ?: runCatching { Instant.parse(normalized) }.getOrNull()
     }
 
     private fun degreesToCompass(degrees: Double): String {
@@ -821,9 +1358,9 @@ class F1Repository(
         val raceSession = sortedSessions.firstOrNull { it.isRace } ?: sortedSessions.lastOrNull()
 
         val dateRangeText = if (firstSession != null && raceSession != null && firstSession != raceSession) {
-            "${firstSession.dayOfWeek.uppercase()} ${firstSession.dateDay} ${firstSession.dateMonth.uppercase()} - ${raceSession.dayOfWeek.uppercase()} ${raceSession.dateDay} ${raceSession.dateMonth.uppercase()}"
+            "${firstSession.dayOfWeek.uppercase(Locale.ROOT)} ${firstSession.dateDay} ${firstSession.dateMonth.uppercase(Locale.ROOT)} - ${raceSession.dayOfWeek.uppercase(Locale.ROOT)} ${raceSession.dateDay} ${raceSession.dateMonth.uppercase(Locale.ROOT)}"
         } else if (raceSession != null) {
-            "${raceSession.dayOfWeek.uppercase()} ${raceSession.dateDay} ${raceSession.dateMonth.uppercase()}"
+            "${raceSession.dayOfWeek.uppercase(Locale.ROOT)} ${raceSession.dateDay} ${raceSession.dateMonth.uppercase(Locale.ROOT)}"
         } else {
             dto.date
         }
@@ -876,10 +1413,11 @@ class F1Repository(
         val rawTime = sessionDto.time?.trim()?.takeIf { it.isNotBlank() }
 
         val offsetTime = if (rawTime != null) {
-            runCatching { OffsetTime.parse(rawTime) }.getOrNull()
-                ?: runCatching { LocalTime.parse(rawTime).atOffset(ZoneOffset.UTC) }.getOrNull()
+            val normalizedTime = rawTime.replace(Regex("([+-]\\d{2})(\\d{2})$"), "$1:$2")
+            runCatching { OffsetTime.parse(normalizedTime) }.getOrNull()
+                ?: runCatching { LocalTime.parse(normalizedTime).atOffset(ZoneOffset.UTC) }.getOrNull()
                 ?: runCatching {
-                    val parts = rawTime.split(":")
+                    val parts = normalizedTime.split(":")
                     val local = when (parts.size) {
                         1 -> LocalTime.of(parts[0].toInt(), 0)
                         2 -> LocalTime.of(parts[0].toInt(), parts[1].toInt())
@@ -923,6 +1461,43 @@ class F1Repository(
     companion object {
         val sharedHttpClient: OkHttpClient get() = sharedOkHttpClient
 
+        val sharedJson: Json by lazy {
+            Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                coerceInputValues = true
+            }
+        }
+
+        val sharedJolpicaApi: JolpicaApiService? by lazy {
+            try {
+                JolpicaApiService.create(sharedOkHttpClient)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        val sharedOpenF1Api: OpenF1ApiService? by lazy {
+            try {
+                OpenF1ApiService.create(sharedOkHttpClient)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        private const val LIVE_SESSION_CACHE_TTL_MS = 20_000L
+
+        private data class CachedLiveSessionEntry(
+            val state: LiveSessionState,
+            val fetchedAtMillis: Long
+        )
+
+        private val liveSessionCache = ConcurrentHashMap<String, CachedLiveSessionEntry>()
+
+        internal fun clearLiveSessionCacheForTesting() {
+            liveSessionCache.clear()
+        }
+
         private fun formatPoints(value: Double): String {
             val rounded = (value * 10.0).roundToInt() / 10.0
             return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
@@ -945,7 +1520,7 @@ class F1Repository(
         }
 
         private fun monthNameToNumber(monthName: String): Int? {
-            return when (monthName.lowercase(Locale.ENGLISH).trim()) {
+            return when (monthName.lowercase(Locale.ROOT).trim()) {
                 "jan", "january" -> 1
                 "feb", "february" -> 2
                 "mar", "march" -> 3
@@ -1013,7 +1588,17 @@ class F1Repository(
                 weekend.daysToGo
             }
 
+            val firstSession = updatedSessions.firstOrNull()
+            val updatedDateRangeText = if (firstSession != null && raceSession != null && firstSession != raceSession) {
+                "${firstSession.dayOfWeek.uppercase(Locale.ROOT)} ${firstSession.dateDay} ${firstSession.dateMonth.uppercase(Locale.ROOT)} - ${raceSession.dayOfWeek.uppercase(Locale.ROOT)} ${raceSession.dateDay} ${raceSession.dateMonth.uppercase(Locale.ROOT)}"
+            } else if (weekend.dateRangeText.isBlank() && raceSession != null) {
+                "${raceSession.dayOfWeek.uppercase(Locale.ROOT)} ${raceSession.dateDay} ${raceSession.dateMonth.uppercase(Locale.ROOT)}"
+            } else {
+                weekend.dateRangeText
+            }
+
             return weekend.copy(
+                dateRangeText = updatedDateRangeText,
                 daysToGo = daysToGo,
                 sessions = updatedSessions
             )
@@ -1096,7 +1681,7 @@ class F1Repository(
     }
 
     fun getCountryFlag(country: String): String {
-        return when (country.lowercase().trim()) {
+        return when (country.lowercase(Locale.ROOT).trim()) {
             "australia" -> "🇦🇺"
             "bahrain" -> "🇧🇭"
             "saudi arabia" -> "🇸🇦"

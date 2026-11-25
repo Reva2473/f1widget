@@ -10,17 +10,25 @@ import com.reva2473.f1widget.data.repository.F1Repository
 import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.*
 import com.reva2473.f1widget.notifications.SessionReminderScheduler
+import com.reva2473.f1widget.notifications.buildSessionReminderKey
 import com.reva2473.f1widget.ui.screens.standings.StandingsTab
 import com.reva2473.f1widget.ui.screens.weekend.WeekendFilterTab
 import com.reva2473.f1widget.worker.WidgetRefreshScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -70,14 +78,18 @@ data class MainUiState(
     val standingsError: String? = null,
     val standingsInitialTab: StandingsTab = StandingsTab.DRIVERS,
     val raceWeekendInitialTab: WeekendFilterTab = WeekendFilterTab.WEEKEND_SCHEDULE,
+    val navigationToken: Int = 0,
+    val selectedGrandPrix: String = "",
     val userPreferences: UserPreferencesState = UserPreferencesState(),
     val reminderSessionKeys: Set<String> = emptySet(),
     val raceWeekend: RaceWeekend = SeedDataProvider.getNextRaceWeekend(),
     val lastCompletedRace: RaceWeekend? = null,
     val fullSchedule2026: List<RaceWeekend> = SeedDataProvider.getSeasonSchedule(2026),
-    val liveSession: LiveSessionState = SeedDataProvider.getLiveSessionState(),
+    val liveSession: LiveSessionState = SeedDataProvider.getLiveSessionState().copy(isLive = false),
     val driverStandings: List<DriverStanding> = SeedDataProvider.getDriverStandings2026(),
     val constructorStandings: List<ConstructorStanding> = SeedDataProvider.getConstructorStandings2026(),
+    val currentSeasonDriverStandings: List<DriverStanding> = emptyList(),
+    val currentSeasonConstructorStandings: List<ConstructorStanding> = emptyList(),
     val careerComparisons: List<DriverCareerComparison> = SeedDataProvider.getDriverComparisons(),
     val compareDriver1: DriverCareerComparison = SeedDataProvider.getDriverComparisons().firstOrNull() ?: defaultFallbackDriver,
     val compareDriver2: DriverCareerComparison = SeedDataProvider.getDriverComparisons().getOrNull(1)
@@ -117,11 +129,24 @@ class MainViewModel(
     private val preferencesMutex = Mutex()
 
     private val backStack = ArrayDeque<AppScreen>()
+    private val isAppInForegroundFlow = MutableStateFlow(true)
     private var isAppInForeground: Boolean = true
     private var yearSelectionJob: Job? = null
+    private var refreshJob: Job? = null
+    private var deepLinkJob: Job? = null
 
     private val _uiState: MutableStateFlow<MainUiState>
     val uiState: StateFlow<MainUiState>
+
+    private val _liveSessionFlow: MutableStateFlow<LiveSessionState>
+    val liveSessionFlow: StateFlow<LiveSessionState>
+
+    private val _userFeedback = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val userFeedback = _userFeedback.asSharedFlow()
+
+    fun emitFeedback(message: String) {
+        _userFeedback.tryEmit(message)
+    }
 
     init {
         val defaultCompare1 = SeedDataProvider.getDriverComparisons().firstOrNull() ?: defaultFallbackDriver
@@ -159,6 +184,7 @@ class MainViewModel(
                 selectedYear = initialYear,
                 standingsInitialTab = initialStandingsTab,
                 raceWeekendInitialTab = initialRaceWeekendTab,
+                selectedGrandPrix = savedGpName.orEmpty(),
                 raceWeekend = initialWeekend,
                 fullSchedule2026 = initialSchedule2026,
                 compareDriver1 = restoreCompareDriver(KEY_COMPARE_DRIVER_1, defaultCompare1),
@@ -166,6 +192,8 @@ class MainViewModel(
             )
         )
         uiState = _uiState.asStateFlow()
+        _liveSessionFlow = MutableStateFlow(_uiState.value.liveSession)
+        liveSessionFlow = _liveSessionFlow.asStateFlow()
 
         // Collect user preferences from DataStore
         viewModelScope.launch {
@@ -181,8 +209,17 @@ class MainViewModel(
             }
         }
 
-        // Load initial repository data and ensure periodic widget refresh is scheduled
+        // Load initial repository data, sync reminders once on startup, and ensure periodic widget refresh is scheduled
         WidgetRefreshScheduler.schedulePeriodicRefresh(getApplication())
+        viewModelScope.launch {
+            try {
+                SessionReminderScheduler.syncReminders(getApplication(), repository)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Ignore transient startup reminder sync errors
+            }
+        }
         refreshAll()
 
         if (initialYear != 2026) {
@@ -190,54 +227,71 @@ class MainViewModel(
         }
 
         // Live coroutine ticker that smoothly animates car positions along circuit path.
-        // Gated so it ONLY updates _uiState when isAppInForeground, on HOME/LIVE_TIMING, and session is moving.
+        // Suspended at 0 Hz when offline/idle (isLive == false), backgrounded, or off HOME/LIVE_TIMING.
         viewModelScope.launch {
-            while (isActive) {
-                val stateSnapshot = _uiState.value
-                val currentScreen = stateSnapshot.currentScreen
-                val drivers = stateSnapshot.liveSession.drivers
-                val isSessionMoving = drivers.isNotEmpty() &&
-                    !stateSnapshot.liveSession.trackStatusText.contains("Red Flag", ignoreCase = true) &&
-                    !stateSnapshot.liveSession.timeRemaining.equals("0:00", ignoreCase = true) &&
-                    !stateSnapshot.liveSession.timeRemaining.equals("Finished", ignoreCase = true)
-
-                if (isAppInForeground &&
-                    (currentScreen == AppScreen.HOME || currentScreen == AppScreen.LIVE_TIMING) &&
-                    isSessionMoving
-                ) {
-                    delay(80) // ~12 fps track progress ticker
-                    _uiState.update { state ->
-                        val currentDrivers = state.liveSession.drivers
-                        if (currentDrivers.isEmpty()) return@update state
-                        val updatedDrivers = currentDrivers.map { driver ->
-                            if (driver.isInPit) {
-                                driver
-                            } else {
-                                val speed = 0.0032f + (22 - driver.position).coerceAtLeast(1) * 0.00008f
-                                var nextProgress = driver.trackProgress + speed
-                                if (nextProgress > 1.0f) nextProgress -= 1.0f
-                                driver.copy(trackProgress = nextProgress)
-                            }
-                        }
-                        state.copy(
-                            liveSession = state.liveSession.copy(drivers = updatedDrivers)
-                        )
-                    }
-                } else {
-                    delay(500)
-                }
+            combine(
+                isAppInForegroundFlow,
+                uiState.map { it.currentScreen }.distinctUntilChanged(),
+                liveSessionFlow.map { it.isLive }.distinctUntilChanged()
+            ) { inForeground, screen, isLive ->
+                inForeground && isLive && (screen == AppScreen.HOME || screen == AppScreen.LIVE_TIMING)
             }
+                .distinctUntilChanged()
+                .collectLatest { shouldRun ->
+                    if (!shouldRun) return@collectLatest
+                    while (isActive) {
+                        val liveSnapshot = _liveSessionFlow.value
+                        val currentScreen = _uiState.value.currentScreen
+                        val drivers = liveSnapshot.drivers
+                        val isSessionMoving = liveSnapshot.isLive &&
+                            drivers.isNotEmpty() &&
+                            !liveSnapshot.trackStatusText.contains("Red Flag", ignoreCase = true) &&
+                            !liveSnapshot.timeRemaining.equals("0:00", ignoreCase = true) &&
+                            !liveSnapshot.timeRemaining.equals("Finished", ignoreCase = true)
+
+                        if (isAppInForeground &&
+                            (currentScreen == AppScreen.HOME || currentScreen == AppScreen.LIVE_TIMING) &&
+                            isSessionMoving
+                        ) {
+                            delay(80) // ~12.5 Hz track progress ticker
+                            val screenAfterDelay = _uiState.value.currentScreen
+                            if (!isAppInForeground ||
+                                (screenAfterDelay != AppScreen.HOME && screenAfterDelay != AppScreen.LIVE_TIMING) ||
+                                !_liveSessionFlow.value.isLive
+                            ) {
+                                continue
+                            }
+                            _liveSessionFlow.update { live ->
+                                if (!live.isLive || live.drivers.isEmpty()) return@update live
+                                val updatedDrivers = live.drivers.map { driver ->
+                                    if (driver.isInPit) {
+                                        driver
+                                    } else {
+                                        val speed = 0.0032f + (22 - driver.position).coerceAtLeast(1) * 0.00008f
+                                        var nextProgress = driver.trackProgress + speed
+                                        if (nextProgress > 1.0f) nextProgress -= 1.0f
+                                        driver.copy(trackProgress = nextProgress)
+                                    }
+                                }
+                                live.copy(drivers = updatedDrivers)
+                            }
+                        } else {
+                            delay(500)
+                        }
+                    }
+                }
         }
     }
 
     fun refreshAll() {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             try {
                 val (nextWeekend, drivers, constructors, live, schedule2026, latestCompleted) = coroutineScope {
                     val nextDeferred = async { repository.getNextRaceWeekend() }
                     val driversDeferred = async { repository.getDriverStandings(2026) }
                     val constructorsDeferred = async { repository.getConstructorStandings(2026) }
-                    val liveDeferred = async { repository.getLiveSessionState() }
+                    val liveDeferred = async { repository.getLiveSessionState("latest") }
                     val scheduleDeferred = async { repository.getSeasonSchedule(2026) }
                     val completedDeferred = async { repository.getLatestCompletedRace(2026) }
                     InitialDataBundle(
@@ -263,31 +317,41 @@ class MainViewModel(
                         }
                     }
                     _uiState.value.raceWeekendInitialTab == WeekendFilterTab.RACE_RESULTS -> {
-                        savedStateHandle[KEY_SELECTED_GP_NAME] = formatWeekendLabel(latestCompleted)
+                        val label = formatWeekendLabel(latestCompleted)
+                        savedStateHandle[KEY_SELECTED_GP_NAME] = label
                         latestCompleted
                     }
                     else -> nextWeekend
                 }
 
+                _liveSessionFlow.value = live
                 _uiState.update { current ->
+                    val updatedSelectedGp = savedStateHandle.get<String>(KEY_SELECTED_GP_NAME) ?: current.selectedGrandPrix
                     if (current.selectedYear == 2026) {
                         current.copy(
                             raceWeekend = targetWeekend,
+                            selectedGrandPrix = updatedSelectedGp,
                             lastCompletedRace = latestCompleted,
                             driverStandings = drivers,
                             constructorStandings = constructors,
+                            currentSeasonDriverStandings = drivers,
+                            currentSeasonConstructorStandings = constructors,
                             liveSession = live,
                             fullSchedule2026 = resolvedSchedule
                         )
                     } else {
                         current.copy(
                             raceWeekend = targetWeekend,
+                            selectedGrandPrix = updatedSelectedGp,
                             lastCompletedRace = latestCompleted,
+                            currentSeasonDriverStandings = drivers,
+                            currentSeasonConstructorStandings = constructors,
                             liveSession = live,
                             fullSchedule2026 = resolvedSchedule
                         )
                     }
                 }
+                WidgetRefreshScheduler.triggerImmediateRefresh(getApplication())
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
@@ -331,13 +395,57 @@ class MainViewModel(
 
     fun setAppInForeground(inForeground: Boolean) {
         isAppInForeground = inForeground
+        isAppInForegroundFlow.value = inForeground
     }
 
     fun navigateTo(screen: AppScreen) {
+        navigateToInternal(screen, resetTabDefaults = screen in TOP_LEVEL_SCREENS)
+    }
+
+    private fun navigateToInternal(screen: AppScreen, resetTabDefaults: Boolean) {
         val current = _uiState.value.currentScreen
         if (screen in TOP_LEVEL_SCREENS) {
             backStack.clear()
             persistNavigationState(screen)
+            if (resetTabDefaults) {
+                when (screen) {
+                    AppScreen.STANDINGS -> {
+                        savedStateHandle[KEY_STANDINGS_TAB] = StandingsTab.DRIVERS.name
+                        _uiState.update {
+                            it.copy(
+                                currentScreen = screen,
+                                canNavigateBack = true,
+                                standingsInitialTab = StandingsTab.DRIVERS,
+                                navigationToken = it.navigationToken + 1
+                            )
+                        }
+                        return
+                    }
+                    AppScreen.RACE_WEEKEND -> {
+                        savedStateHandle[KEY_RACE_WEEKEND_TAB] = WeekendFilterTab.WEEKEND_SCHEDULE.name
+                        savedStateHandle.remove<String>(KEY_SELECTED_GP_NAME)
+                        val hadCustomSelection = _uiState.value.selectedGrandPrix.isNotEmpty() ||
+                            _uiState.value.raceWeekendInitialTab != WeekendFilterTab.WEEKEND_SCHEDULE
+                        val nextUpcoming = if (hadCustomSelection) {
+                            resolveUpcomingWeekendFromSchedule(_uiState.value.fullSchedule2026)
+                        } else {
+                            _uiState.value.raceWeekend
+                        }
+                        _uiState.update {
+                            it.copy(
+                                currentScreen = screen,
+                                canNavigateBack = true,
+                                raceWeekendInitialTab = WeekendFilterTab.WEEKEND_SCHEDULE,
+                                selectedGrandPrix = "",
+                                raceWeekend = nextUpcoming,
+                                navigationToken = it.navigationToken + 1
+                            )
+                        }
+                        return
+                    }
+                    else -> Unit
+                }
+            }
             if (current != screen || _uiState.value.canNavigateBack != (screen != AppScreen.HOME)) {
                 _uiState.update {
                     it.copy(
@@ -363,58 +471,99 @@ class MainViewModel(
         }
     }
 
+    private fun resolveUpcomingWeekendFromSchedule(schedule: List<RaceWeekend>): RaceWeekend {
+        val now = System.currentTimeMillis()
+        return schedule.firstOrNull { weekend ->
+            val raceSession = weekend.sessions.firstOrNull { it.isRace } ?: weekend.sessions.lastOrNull()
+            val utc = raceSession?.utcEpochMillis
+            if (utc != null) utc > now else weekend.results.isEmpty()
+        } ?: SeedDataProvider.getNextRaceWeekend()
+    }
+
+    fun openLastCompletedRace() {
+        deepLinkJob?.cancel()
+        savedStateHandle[KEY_RACE_WEEKEND_TAB] = WeekendFilterTab.RACE_RESULTS.name
+        val completed = _uiState.value.lastCompletedRace
+        if (completed != null) {
+            val label = formatWeekendLabel(completed)
+            savedStateHandle[KEY_SELECTED_GP_NAME] = label
+            _uiState.update {
+                it.copy(
+                    raceWeekend = completed,
+                    selectedGrandPrix = label,
+                    raceWeekendInitialTab = WeekendFilterTab.RACE_RESULTS,
+                    navigationToken = it.navigationToken + 1
+                )
+            }
+            navigateToInternal(AppScreen.RACE_WEEKEND, resetTabDefaults = false)
+        } else {
+            _uiState.update {
+                it.copy(
+                    raceWeekendInitialTab = WeekendFilterTab.RACE_RESULTS,
+                    navigationToken = it.navigationToken + 1
+                )
+            }
+            navigateToInternal(AppScreen.RACE_WEEKEND, resetTabDefaults = false)
+            deepLinkJob = viewModelScope.launch {
+                try {
+                    val fetched = repository.getLatestCompletedRace(2026)
+                    val label = formatWeekendLabel(fetched)
+                    savedStateHandle[KEY_SELECTED_GP_NAME] = label
+                    _uiState.update {
+                        it.copy(
+                            lastCompletedRace = fetched,
+                            raceWeekend = fetched,
+                            selectedGrandPrix = label
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // Keep existing state if fetch fails
+                }
+            }
+        }
+    }
+
     fun handleWidgetDeepLink(target: String) {
+        deepLinkJob?.cancel()
         val normalized = target.uppercase().trim()
         when (normalized) {
             "CONSTRUCTOR_STANDINGS" -> {
                 savedStateHandle[KEY_STANDINGS_TAB] = StandingsTab.CONSTRUCTORS.name
-                _uiState.update { it.copy(standingsInitialTab = StandingsTab.CONSTRUCTORS) }
-                navigateTo(AppScreen.STANDINGS)
+                _uiState.update {
+                    it.copy(
+                        standingsInitialTab = StandingsTab.CONSTRUCTORS,
+                        navigationToken = it.navigationToken + 1
+                    )
+                }
+                navigateToInternal(AppScreen.STANDINGS, resetTabDefaults = false)
             }
             "DRIVER_STANDINGS", "STANDINGS" -> {
                 savedStateHandle[KEY_STANDINGS_TAB] = StandingsTab.DRIVERS.name
-                _uiState.update { it.copy(standingsInitialTab = StandingsTab.DRIVERS) }
-                navigateTo(AppScreen.STANDINGS)
+                _uiState.update {
+                    it.copy(
+                        standingsInitialTab = StandingsTab.DRIVERS,
+                        navigationToken = it.navigationToken + 1
+                    )
+                }
+                navigateToInternal(AppScreen.STANDINGS, resetTabDefaults = false)
             }
             "LAST_RACE_RESULTS" -> {
-                savedStateHandle[KEY_RACE_WEEKEND_TAB] = WeekendFilterTab.RACE_RESULTS.name
-                val completed = _uiState.value.lastCompletedRace
-                if (completed != null) {
-                    savedStateHandle[KEY_SELECTED_GP_NAME] = formatWeekendLabel(completed)
-                    _uiState.update {
-                        it.copy(
-                            raceWeekend = completed,
-                            raceWeekendInitialTab = WeekendFilterTab.RACE_RESULTS
-                        )
-                    }
-                    navigateTo(AppScreen.RACE_WEEKEND)
-                } else {
-                    _uiState.update { it.copy(raceWeekendInitialTab = WeekendFilterTab.RACE_RESULTS) }
-                    navigateTo(AppScreen.RACE_WEEKEND)
-                    viewModelScope.launch {
-                        try {
-                            val fetched = repository.getLatestCompletedRace(2026)
-                            savedStateHandle[KEY_SELECTED_GP_NAME] = formatWeekendLabel(fetched)
-                            _uiState.update {
-                                it.copy(
-                                    lastCompletedRace = fetched,
-                                    raceWeekend = fetched
-                                )
-                            }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Throwable) {
-                            // Keep existing state if fetch fails
-                        }
-                    }
-                }
+                openLastCompletedRace()
             }
             "NEXT_RACE", "WEEKEND_SCHEDULE", "RACE_WEEKEND", "WEEKEND", "SEASON" -> {
                 savedStateHandle[KEY_RACE_WEEKEND_TAB] = WeekendFilterTab.WEEKEND_SCHEDULE.name
                 savedStateHandle.remove<String>(KEY_SELECTED_GP_NAME)
-                _uiState.update { it.copy(raceWeekendInitialTab = WeekendFilterTab.WEEKEND_SCHEDULE) }
-                navigateTo(AppScreen.RACE_WEEKEND)
-                viewModelScope.launch {
+                _uiState.update {
+                    it.copy(
+                        raceWeekendInitialTab = WeekendFilterTab.WEEKEND_SCHEDULE,
+                        selectedGrandPrix = "",
+                        navigationToken = it.navigationToken + 1
+                    )
+                }
+                navigateToInternal(AppScreen.RACE_WEEKEND, resetTabDefaults = false)
+                deepLinkJob = viewModelScope.launch {
                     try {
                         val nextWeekend = repository.getNextRaceWeekend()
                         _uiState.update { it.copy(raceWeekend = nextWeekend) }
@@ -426,19 +575,19 @@ class MainViewModel(
                 }
             }
             "LIVE_TIMING", "LIVE" -> {
-                navigateTo(AppScreen.LIVE_TIMING)
+                navigateToInternal(AppScreen.LIVE_TIMING, resetTabDefaults = false)
             }
             "FAVORITE_TEAM", "SETTINGS", "SETTINGS_WIDGETS", "WIDGETS" -> {
-                navigateTo(AppScreen.SETTINGS_WIDGETS)
+                navigateToInternal(AppScreen.SETTINGS_WIDGETS, resetTabDefaults = false)
             }
             "HOME" -> {
-                navigateTo(AppScreen.HOME)
+                navigateToInternal(AppScreen.HOME, resetTabDefaults = false)
             }
             "DRIVER_PROFILES", "DRIVERS", "PROFILES" -> {
-                navigateTo(AppScreen.DRIVER_PROFILES)
+                navigateToInternal(AppScreen.DRIVER_PROFILES, resetTabDefaults = false)
             }
             "COMPARE_DRIVERS", "COMPARE" -> {
-                navigateTo(AppScreen.COMPARE_DRIVERS)
+                navigateToInternal(AppScreen.COMPARE_DRIVERS, resetTabDefaults = false)
             }
         }
     }
@@ -566,8 +715,9 @@ class MainViewModel(
             SeedDataProvider.getSeasonSchedule(2026)
         }
         val weekend = resolveGrandPrix(gpName, schedule2026)
-        savedStateHandle[KEY_SELECTED_GP_NAME] = gpName.trim().ifEmpty { formatWeekendLabel(weekend) }
-        _uiState.update { it.copy(raceWeekend = weekend) }
+        val resolvedLabel = gpName.trim().ifEmpty { formatWeekendLabel(weekend) }
+        savedStateHandle[KEY_SELECTED_GP_NAME] = resolvedLabel
+        _uiState.update { it.copy(raceWeekend = weekend, selectedGrandPrix = resolvedLabel) }
     }
 
     private fun resolveGrandPrixFallback(query: String, explicitYear: Int?): RaceWeekend {
@@ -693,6 +843,8 @@ class MainViewModel(
                     _uiState.update {
                         if (it.selectedYear == year) {
                             it.copy(
+                                driverStandings = emptyList(),
+                                constructorStandings = emptyList(),
                                 isStandingsLoading = false,
                                 standingsError = t.localizedMessage ?: "Failed to load $year standings."
                             )
@@ -726,13 +878,45 @@ class MainViewModel(
     }
 
     fun swapCompareDrivers() {
-        _uiState.update { current ->
-            saveCompareDriver(KEY_COMPARE_DRIVER_1, current.compareDriver2)
-            saveCompareDriver(KEY_COMPARE_DRIVER_2, current.compareDriver1)
-            current.copy(
-                compareDriver1 = current.compareDriver2,
-                compareDriver2 = current.compareDriver1
+        val current = _uiState.value
+        val next1 = current.compareDriver2
+        val next2 = current.compareDriver1
+        saveCompareDriver(KEY_COMPARE_DRIVER_1, next1)
+        saveCompareDriver(KEY_COMPARE_DRIVER_2, next2)
+        _uiState.update {
+            it.copy(
+                compareDriver1 = next1,
+                compareDriver2 = next2
             )
+        }
+    }
+
+    private suspend fun findSessionByReminderKey(sessionKey: String): SessionScheduleItem? {
+        val state = _uiState.value
+        val candidates = buildList {
+            add(state.raceWeekend)
+            state.lastCompletedRace?.let(::add)
+            addAll(state.fullSchedule2026)
+        }
+        candidates.forEach { weekend ->
+            weekend.sessions.firstOrNull { session ->
+                buildSessionReminderKey(weekend.season, weekend.round, session) == sessionKey
+            }?.let { return it }
+        }
+        val season = sessionKey.substringBefore('_').toIntOrNull() ?: return null
+        return try {
+            repository.getSeasonSchedule(season).asSequence()
+                .flatMap { weekend ->
+                    weekend.sessions.asSequence().map { session ->
+                        buildSessionReminderKey(weekend.season, weekend.round, session) to session
+                    }
+                }
+                .firstOrNull { (key, _) -> key == sessionKey }
+                ?.second
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
         }
     }
 
@@ -741,17 +925,35 @@ class MainViewModel(
         enabled: Boolean = sessionKey !in _uiState.value.reminderSessionKeys
     ) {
         viewModelScope.launch {
-            preferencesMutex.withLock {
-                try {
-                    val appContext = getApplication<Application>()
-                    repository.setSessionReminder(sessionKey, enabled)
-                    SessionReminderScheduler.syncReminders(appContext, repository)
-                    WidgetRefreshScheduler.triggerImmediateRefresh(appContext)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    // Ignore DataStore write or reminder sync failures
+            try {
+                val session = findSessionByReminderKey(sessionKey)
+                val nowMillis = System.currentTimeMillis()
+                if (enabled) {
+                    val sessionEpoch = session?.utcEpochMillis
+                    if (session == null || sessionEpoch == null || sessionEpoch <= nowMillis) {
+                        emitFeedback("Cannot set reminder for past or unscheduled session")
+                        return@launch
+                    }
                 }
+
+                val appContext = getApplication<Application>().applicationContext
+                preferencesMutex.withLock {
+                    repository.setSessionReminder(sessionKey, enabled)
+                }
+                SessionReminderScheduler.syncReminders(appContext, repository)
+                WidgetRefreshScheduler.triggerImmediateRefresh(appContext)
+
+                val sessionLabel = session?.fullName?.ifBlank { session.shortName }
+                val message = if (enabled) {
+                    if (!sessionLabel.isNullOrBlank()) "Reminder set for $sessionLabel" else "Reminder set"
+                } else {
+                    if (!sessionLabel.isNullOrBlank()) "Reminder removed for $sessionLabel" else "Reminder removed"
+                }
+                emitFeedback(message)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                emitFeedback("Failed to update session reminder")
             }
         }
     }
@@ -760,28 +962,42 @@ class MainViewModel(
         _uiState.update { it.copy(userPreferences = newPrefs) }
 
         viewModelScope.launch {
-            preferencesMutex.withLock {
-                try {
+            try {
+                preferencesMutex.withLock {
                     preferencesStore.updateAllPreferences(newPrefs)
-
-                    val appContext = context ?: getApplication<Application>()
-                    SessionReminderScheduler.syncReminders(getApplication(), repository)
-                    WidgetRefreshScheduler.triggerImmediateRefresh(getApplication())
-
-                    // Trigger widget updates ONLY after all preferences are successfully committed
-                    com.reva2473.f1widget.widget.NextRaceCountdownWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.WeekendScheduleWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.DriverStandingsWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.ConstructorStandingsWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.FavoriteDriverWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.FavoriteTeamWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.LastRacePodiumWidget().updateAll(appContext)
-                    com.reva2473.f1widget.widget.LiveTimingBannerWidget().updateAll(appContext)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    // Ignore widget update errors if widgets aren't currently bound on home screen
                 }
+
+                val appContext = (context ?: getApplication<Application>()).applicationContext
+                SessionReminderScheduler.syncReminders(appContext, repository)
+                WidgetRefreshScheduler.triggerImmediateRefresh(appContext)
+
+                val widgets = listOf(
+                    com.reva2473.f1widget.widget.NextRaceCountdownWidget(),
+                    com.reva2473.f1widget.widget.WeekendScheduleWidget(),
+                    com.reva2473.f1widget.widget.DriverStandingsWidget(),
+                    com.reva2473.f1widget.widget.ConstructorStandingsWidget(),
+                    com.reva2473.f1widget.widget.FavoriteDriverWidget(),
+                    com.reva2473.f1widget.widget.FavoriteTeamWidget(),
+                    com.reva2473.f1widget.widget.LastRacePodiumWidget(),
+                    com.reva2473.f1widget.widget.LiveTimingBannerWidget()
+                )
+                coroutineScope {
+                    widgets.map { widget ->
+                        async {
+                            try {
+                                widget.updateAll(appContext)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                // Ignore widget update errors if widgets aren't currently bound on home screen
+                            }
+                        }
+                    }.awaitAll()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Ignore DataStore or widget update errors
             }
         }
     }

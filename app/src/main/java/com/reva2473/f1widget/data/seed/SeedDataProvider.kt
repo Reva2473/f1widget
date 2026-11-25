@@ -28,27 +28,32 @@ import com.reva2473.f1widget.domain.model.WeatherSnapshot
  */
 object SeedDataProvider {
 
+    private fun utcMillis(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0): Long {
+        return java.time.ZonedDateTime.of(year, month, day, hour, minute, 0, 0, java.time.ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
+    }
+
     // ========================================================================
-    // 1. Next Race Weekend (Bahrain Grand Prix in Malaysia - Sepang)
-    // Matches home-1080.webp
+    // 1. Round 16 Race Weekend (Madrid Grand Prix - 2026)
     // ========================================================================
     fun getNextRaceWeekend(): RaceWeekend {
         return RaceWeekend(
             season = 2026,
             round = 16,
-            grandPrixName = "Bahrain Grand Prix in Malaysia",
-            circuitName = "Sepang International Circuit",
-            location = "Kuala Lumpur, Malaysia",
-            countryFlagEmoji = "🇲🇾",
+            grandPrixName = "Madrid Grand Prix",
+            circuitName = "Circuito de Madring",
+            location = "Madrid, Spain",
+            countryFlagEmoji = "🇪🇸",
             dateRangeText = "FRI 28 AUG - SUN 30 AUG",
             daysToGo = 1,
-            circuitLengthKm = "5.543",
-            totalLaps = 56,
-            totalCorners = 15,
+            circuitLengthKm = "5.474",
+            totalLaps = 57,
+            totalCorners = 20,
             speedTrapNormalizedX = 0.24f,
             speedTrapNormalizedY = 0.27f,
-            circuitType = "SEPANG",
-            circuitId = "SEPANG",
+            circuitType = "MADRID",
+            circuitId = "MADRID",
             sessions = listOf(
                 SessionScheduleItem(
                     shortName = "FP1",
@@ -57,9 +62,10 @@ object SeedDataProvider {
                     fullDayName = "Friday",
                     dateDay = "28",
                     dateMonth = "Aug",
-                    localTime = "05:30",
+                    localTime = "11:30",
                     countdownBadge = "Completed",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 8, 28, 11, 30)
                 ),
                 SessionScheduleItem(
                     shortName = "FP2",
@@ -68,9 +74,10 @@ object SeedDataProvider {
                     fullDayName = "Friday",
                     dateDay = "28",
                     dateMonth = "Aug",
-                    localTime = "09:00",
+                    localTime = "15:00",
                     countdownBadge = "Completed",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 8, 28, 15, 0)
                 ),
                 SessionScheduleItem(
                     shortName = "FP3",
@@ -79,9 +86,10 @@ object SeedDataProvider {
                     fullDayName = "Saturday",
                     dateDay = "29",
                     dateMonth = "Aug",
-                    localTime = "05:30",
+                    localTime = "10:30",
                     countdownBadge = "In 1 day",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 8, 29, 10, 30)
                 ),
                 SessionScheduleItem(
                     shortName = "Quali",
@@ -90,9 +98,10 @@ object SeedDataProvider {
                     fullDayName = "Saturday",
                     dateDay = "29",
                     dateMonth = "Aug",
-                    localTime = "09:00",
+                    localTime = "14:00",
                     countdownBadge = "In 1 day",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 8, 29, 14, 0)
                 ),
                 SessionScheduleItem(
                     shortName = "Race",
@@ -101,9 +110,10 @@ object SeedDataProvider {
                     fullDayName = "Sunday",
                     dateDay = "30",
                     dateMonth = "Aug",
-                    localTime = "08:00",
+                    localTime = "13:00",
                     countdownBadge = "Race in 1 day",
-                    isRace = true
+                    isRace = true,
+                    utcEpochMillis = utcMillis(2026, 8, 30, 13, 0)
                 )
             ),
             results = emptyList(),
@@ -142,7 +152,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "15:30",
                     countdownBadge = "69 days",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 11, 6, 15, 30)
                 ),
                 SessionScheduleItem(
                     shortName = "FP2",
@@ -153,7 +164,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "19:00",
                     countdownBadge = "69 days",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 11, 6, 19, 0)
                 ),
                 SessionScheduleItem(
                     shortName = "FP3",
@@ -164,7 +176,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "14:30",
                     countdownBadge = "70 days",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 11, 7, 14, 30)
                 ),
                 SessionScheduleItem(
                     shortName = "Quali",
@@ -175,7 +188,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "18:00",
                     countdownBadge = "70 days",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2026, 11, 7, 18, 0)
                 ),
                 SessionScheduleItem(
                     shortName = "Race",
@@ -186,7 +200,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "17:00",
                     countdownBadge = "Race in 71 days",
-                    isRace = true
+                    isRace = true,
+                    utcEpochMillis = utcMillis(2026, 11, 8, 17, 0)
                 )
             ),
             results = emptyList(),
@@ -225,7 +240,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "11:30",
                     countdownBadge = "Final",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2024, 11, 1, 14, 30)
                 ),
                 SessionScheduleItem(
                     shortName = "SQ",
@@ -236,7 +252,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "15:30",
                     countdownBadge = "Final",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2024, 11, 1, 18, 30)
                 ),
                 SessionScheduleItem(
                     shortName = "Sprint",
@@ -247,7 +264,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "11:00",
                     countdownBadge = "Final",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2024, 11, 2, 14, 0)
                 ),
                 SessionScheduleItem(
                     shortName = "Quali",
@@ -258,7 +276,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "15:00",
                     countdownBadge = "Final",
-                    isRace = false
+                    isRace = false,
+                    utcEpochMillis = utcMillis(2024, 11, 2, 18, 0)
                 ),
                 SessionScheduleItem(
                     shortName = "Race",
@@ -269,7 +288,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "15:30",
                     countdownBadge = "Final",
-                    isRace = true
+                    isRace = true,
+                    utcEpochMillis = utcMillis(2024, 11, 3, 15, 30)
                 )
             ),
             results = listOf(
@@ -459,7 +479,8 @@ object SeedDataProvider {
                     dateMonth = "Nov",
                     localTime = "17:00",
                     countdownBadge = "Final",
-                    isRace = true
+                    isRace = true,
+                    utcEpochMillis = utcMillis(2023, 11, 26, 13, 0)
                 )
             ),
             results = listOf(
@@ -634,7 +655,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 12.4,
                 racesCount = 15,
                 gapToLeader = "-116 to leader",
-                gapToPrev = "13 pts to P3",
+                gapToPrev = "-13 to P3",
                 last3Summary = "P4, P2, P4 (42 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P4", "(12pts)", 4),
@@ -658,7 +679,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 11.9,
                 racesCount = 15,
                 gapToLeader = "-123 to leader",
-                gapToPrev = "7 pts to P4",
+                gapToPrev = "-7 to P4",
                 last3Summary = "P2, P3, P5 (43 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P2", "(18pts)", 2),
@@ -682,7 +703,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 10.9,
                 racesCount = 15,
                 gapToLeader = "-139 to leader",
-                gapToPrev = "16 pts to P5",
+                gapToPrev = "-16 to P5",
                 last3Summary = "P6, P6, P6 (24 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P6", "(8pts)", 6),
@@ -706,7 +727,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 8.0,
                 racesCount = 15,
                 gapToLeader = "-182 to leader",
-                gapToPrev = "43 pts to P6",
+                gapToPrev = "-43 to P6",
                 last3Summary = "P7, P7, P7 (18 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P7", "(6pts)", 7),
@@ -730,7 +751,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 5.7,
                 racesCount = 15,
                 gapToLeader = "-216 to leader",
-                gapToPrev = "34 pts to P7",
+                gapToPrev = "-34 to P7",
                 last3Summary = "P8, P8, P8 (12 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P8", "(4pts)", 8),
@@ -754,7 +775,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 4.1,
                 racesCount = 15,
                 gapToLeader = "-240 to leader",
-                gapToPrev = "24 pts to P8",
+                gapToPrev = "-24 to P8",
                 last3Summary = "P9, P9, P9 (6 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P9", "(2pts)", 9),
@@ -778,7 +799,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 3.2,
                 racesCount = 15,
                 gapToLeader = "-254 to leader",
-                gapToPrev = "14 pts to P9",
+                gapToPrev = "-14 to P9",
                 last3Summary = "P10, P10, P10 (3 pts)",
                 recentRaces = listOf(
                     RaceRecentResult("Azerbaijan Grand Prix", "P10", "(1pt)", 10),
@@ -802,7 +823,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 2.4,
                 racesCount = 15,
                 gapToLeader = "-266 to leader",
-                gapToPrev = "12 pts to P10",
+                gapToPrev = "-12 to P10",
                 last3Summary = "P11, P12, P11 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -822,7 +843,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 2.1,
                 racesCount = 15,
                 gapToLeader = "-270 to leader",
-                gapToPrev = "4 pts to P11",
+                gapToPrev = "-4 to P11",
                 last3Summary = "P12, P11, P12 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -842,7 +863,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 2.0,
                 racesCount = 15,
                 gapToLeader = "-272 to leader",
-                gapToPrev = "2 pts to P12",
+                gapToPrev = "-2 to P12",
                 last3Summary = "P13, P13, P13 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -862,7 +883,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 1.6,
                 racesCount = 15,
                 gapToLeader = "-278 to leader",
-                gapToPrev = "6 pts to P13",
+                gapToPrev = "-6 to P13",
                 last3Summary = "P14, P14, P14 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -882,7 +903,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 1.3,
                 racesCount = 15,
                 gapToLeader = "-282 to leader",
-                gapToPrev = "4 pts to P14",
+                gapToPrev = "-4 to P14",
                 last3Summary = "P15, P15, P15 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -902,7 +923,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 1.1,
                 racesCount = 15,
                 gapToLeader = "-286 to leader",
-                gapToPrev = "4 pts to P15",
+                gapToPrev = "-4 to P15",
                 last3Summary = "P16, P16, P16 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -922,7 +943,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 0.8,
                 racesCount = 15,
                 gapToLeader = "-290 to leader",
-                gapToPrev = "4 pts to P16",
+                gapToPrev = "-4 to P16",
                 last3Summary = "P17, P17, P17 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -942,7 +963,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 0.5,
                 racesCount = 15,
                 gapToLeader = "-294 to leader",
-                gapToPrev = "4 pts to P17",
+                gapToPrev = "-4 to P17",
                 last3Summary = "P18, P18, P18 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -962,7 +983,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 0.3,
                 racesCount = 15,
                 gapToLeader = "-298 to leader",
-                gapToPrev = "4 pts to P18",
+                gapToPrev = "-4 to P18",
                 last3Summary = "P19, P19, P19 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -982,7 +1003,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 0.1,
                 racesCount = 15,
                 gapToLeader = "-300 to leader",
-                gapToPrev = "2 pts to P19",
+                gapToPrev = "-2 to P19",
                 last3Summary = "P20, P20, P20 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -1002,7 +1023,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 0.07,
                 racesCount = 15,
                 gapToLeader = "-301 to leader",
-                gapToPrev = "1 pt to P20",
+                gapToPrev = "-1 to P20",
                 last3Summary = "P21, P21, P21 (0 pts)",
                 recentRaces = emptyList()
             ),
@@ -1022,7 +1043,7 @@ object SeedDataProvider {
                 avgPtsPerRace = 0.0,
                 racesCount = 15,
                 gapToLeader = "-302 to leader",
-                gapToPrev = "1 pt to P21",
+                gapToPrev = "-1 to P21",
                 last3Summary = "P22, P22, P22 (0 pts)",
                 recentRaces = emptyList()
             )
@@ -1526,8 +1547,8 @@ object SeedDataProvider {
     fun getSaoPauloLiveSessionState(): LiveSessionState {
         val radio1 = TeamRadioClip(
             id = "r1",
-            driverCode = "SLA",
-            driverName = "Freddie Slater",
+            driverCode = "HUL",
+            driverName = "Nico Hülkenberg",
             team = F1TeamId.AUDI_SAUBER,
             timestamp = "15:43:57",
             transcript = "Front grip is coming in nicely through Sector 2, balance feels good.",
@@ -1688,9 +1709,9 @@ object SeedDataProvider {
                 ),
                 LiveDriverTiming(
                     position = 8,
-                    code = "BRO",
-                    fullName = "Luke Browning",
-                    team = F1TeamId.WILLIAMS,
+                    code = "HUL",
+                    fullName = "Nico Hülkenberg",
+                    team = F1TeamId.AUDI_SAUBER,
                     bestLapTime = "1:13.990",
                     lastLapTime = "1:13.990",
                     gapToLeader = "+1.031",
@@ -1709,8 +1730,8 @@ object SeedDataProvider {
                 ),
                 LiveDriverTiming(
                     position = 9,
-                    code = "HER",
-                    fullName = "Colton Herta",
+                    code = "BOT",
+                    fullName = "Valtteri Bottas",
                     team = F1TeamId.CADILLAC,
                     bestLapTime = "1:14.050",
                     lastLapTime = "1:14.050",
@@ -1898,8 +1919,8 @@ object SeedDataProvider {
                 ),
                 LiveDriverTiming(
                     position = 18,
-                    code = "CAM",
-                    fullName = "Rafael Camara",
+                    code = "PER",
+                    fullName = "Sergio Pérez",
                     team = F1TeamId.CADILLAC,
                     bestLapTime = "1:14.710",
                     lastLapTime = "1:14.710",
@@ -2000,7 +2021,7 @@ object SeedDataProvider {
                     sector1Time = "19.030",
                     sector2Time = "36.120",
                     sector3Time = "19.860",
-                    trackProgress = 0.0f
+                    trackProgress = 0.98f
                 )
         )
         return LiveSessionState(
@@ -2053,7 +2074,8 @@ object SeedDataProvider {
                 windDirection = "SSE",
                 rainfallPercent = 0,
                 pressureMbar = 1018.0
-            )
+            ),
+            isLive = false
         )
     }
 
@@ -2587,7 +2609,8 @@ object SeedDataProvider {
                 windDirection = "NNW",
                 rainfallPercent = 0,
                 pressureMbar = 1014.2
-            )
+            ),
+            isLive = false
         )
     }
 
@@ -2622,7 +2645,7 @@ object SeedDataProvider {
                 circuitType = "MELBOURNE",
                 circuitId = "MELBOURNE",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "15", "Mar", "06:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "15", "Mar", "06:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 3, 15, 4, 0))
                 )
             ),
             RaceWeekend(
@@ -2640,7 +2663,7 @@ object SeedDataProvider {
                 circuitType = "SHANGHAI",
                 circuitId = "SHANGHAI",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Mar", "08:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Mar", "08:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 3, 29, 7, 0))
                 )
             ),
             RaceWeekend(
@@ -2658,7 +2681,7 @@ object SeedDataProvider {
                 circuitType = "SUZUKA",
                 circuitId = "SUZUKA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "12", "Apr", "06:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "12", "Apr", "06:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 4, 12, 5, 0))
                 )
             ),
             RaceWeekend(
@@ -2676,7 +2699,7 @@ object SeedDataProvider {
                 circuitType = "BAHRAIN",
                 circuitId = "BAHRAIN",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "26", "Apr", "16:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "26", "Apr", "16:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 4, 26, 15, 0))
                 )
             ),
             RaceWeekend(
@@ -2694,7 +2717,7 @@ object SeedDataProvider {
                 circuitType = "JEDDAH",
                 circuitId = "JEDDAH",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "03", "May", "18:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "03", "May", "18:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 5, 3, 17, 0))
                 )
             ),
             RaceWeekend(
@@ -2712,7 +2735,7 @@ object SeedDataProvider {
                 circuitType = "MIAMI",
                 circuitId = "MIAMI",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "10", "May", "20:30", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "10", "May", "20:30", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 5, 10, 20, 0))
                 )
             ),
             RaceWeekend(
@@ -2730,7 +2753,7 @@ object SeedDataProvider {
                 circuitType = "IMOLA",
                 circuitId = "IMOLA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "17", "May", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "17", "May", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 5, 17, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2748,7 +2771,7 @@ object SeedDataProvider {
                 circuitType = "MONACO",
                 circuitId = "MONACO",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "24", "May", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "24", "May", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 5, 24, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2766,7 +2789,7 @@ object SeedDataProvider {
                 circuitType = "CATALUNYA",
                 circuitId = "CATALUNYA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "07", "Jun", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "07", "Jun", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 6, 7, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2784,7 +2807,7 @@ object SeedDataProvider {
                 circuitType = "MONTREAL",
                 circuitId = "MONTREAL",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "21", "Jun", "19:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "21", "Jun", "19:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 6, 21, 18, 0))
                 )
             ),
             RaceWeekend(
@@ -2802,7 +2825,7 @@ object SeedDataProvider {
                 circuitType = "SPIELBERG",
                 circuitId = "SPIELBERG",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "05", "Jul", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "05", "Jul", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 7, 5, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2820,7 +2843,7 @@ object SeedDataProvider {
                 circuitType = "SILVERSTONE",
                 circuitId = "SILVERSTONE",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "19", "Jul", "15:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "19", "Jul", "15:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 7, 19, 14, 0))
                 )
             ),
             RaceWeekend(
@@ -2838,7 +2861,7 @@ object SeedDataProvider {
                 circuitType = "SPA",
                 circuitId = "SPA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "02", "Aug", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "02", "Aug", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 8, 2, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2856,7 +2879,7 @@ object SeedDataProvider {
                 circuitType = "HUNGARORING",
                 circuitId = "HUNGARORING",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "16", "Aug", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "16", "Aug", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 8, 16, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2874,10 +2897,10 @@ object SeedDataProvider {
                 circuitType = "ZANDVOORT",
                 circuitId = "ZANDVOORT",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "23", "Aug", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "23", "Aug", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(2026, 8, 23, 13, 0))
                 )
             ),
-            getNextRaceWeekend(), // Round 16: Sepang
+            getNextRaceWeekend(), // Round 16: Madrid
             RaceWeekend(
                 season = 2026,
                 round = 17,
@@ -2893,7 +2916,7 @@ object SeedDataProvider {
                 circuitType = "MONZA",
                 circuitId = "MONZA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "06", "Sep", "14:00", "In 8 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "06", "Sep", "14:00", "In 8 days", isRace = true, utcEpochMillis = utcMillis(2026, 9, 6, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -2911,7 +2934,7 @@ object SeedDataProvider {
                 circuitType = "BAKU",
                 circuitId = "BAKU",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "20", "Sep", "12:00", "In 22 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "20", "Sep", "12:00", "In 22 days", isRace = true, utcEpochMillis = utcMillis(2026, 9, 20, 11, 0))
                 )
             ),
             RaceWeekend(
@@ -2929,7 +2952,7 @@ object SeedDataProvider {
                 circuitType = "SINGAPORE",
                 circuitId = "SINGAPORE",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "04", "Oct", "13:00", "In 36 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "04", "Oct", "13:00", "In 36 days", isRace = true, utcEpochMillis = utcMillis(2026, 10, 4, 12, 0))
                 )
             ),
             RaceWeekend(
@@ -2947,7 +2970,7 @@ object SeedDataProvider {
                 circuitType = "COTA",
                 circuitId = "COTA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "25", "Oct", "19:00", "In 57 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "25", "Oct", "19:00", "In 57 days", isRace = true, utcEpochMillis = utcMillis(2026, 10, 25, 19, 0))
                 )
             ),
             RaceWeekend(
@@ -2965,7 +2988,7 @@ object SeedDataProvider {
                 circuitType = "MEXICO",
                 circuitId = "MEXICO",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "01", "Nov", "20:00", "In 64 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "01", "Nov", "20:00", "In 64 days", isRace = true, utcEpochMillis = utcMillis(2026, 11, 1, 20, 0))
                 )
             ),
             getBrazilianGpWeekend2026(), // Round 22: São Paulo
@@ -2984,7 +3007,7 @@ object SeedDataProvider {
                 circuitType = "LAS_VEGAS",
                 circuitId = "LAS_VEGAS",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sat", "Saturday", "21", "Nov", "22:00", "In 84 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sat", "Saturday", "21", "Nov", "22:00", "In 84 days", isRace = true, utcEpochMillis = utcMillis(2026, 11, 22, 6, 0))
                 )
             ),
             RaceWeekend(
@@ -3002,7 +3025,7 @@ object SeedDataProvider {
                 circuitType = "YAS_MARINA",
                 circuitId = "YAS_MARINA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Nov", "16:00", "In 92 days", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "29", "Nov", "16:00", "In 92 days", isRace = true, utcEpochMillis = utcMillis(2026, 11, 29, 13, 0))
                 )
             )
         )
@@ -3024,7 +3047,9 @@ object SeedDataProvider {
                 totalCorners = 14,
                 circuitType = "MELBOURNE",
                 circuitId = "MELBOURNE",
-                sessions = emptyList()
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "16", "Mar", "04:00", "Final", isRace = true, utcEpochMillis = utcMillis(2025, 3, 16, 4, 0))
+                )
             )
         )
     }
@@ -3046,7 +3071,9 @@ object SeedDataProvider {
                 totalCorners = 16,
                 circuitType = "YAS_MARINA",
                 circuitId = "YAS_MARINA",
-                sessions = emptyList()
+                sessions = listOf(
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "08", "Dec", "13:00", "Final", isRace = true, utcEpochMillis = utcMillis(2024, 12, 8, 13, 0))
+                )
             )
         )
     }
@@ -3074,7 +3101,7 @@ object SeedDataProvider {
                 circuitType = "SILVERSTONE",
                 circuitId = "SILVERSTONE",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sat", "Saturday", "13", "May", "14:30", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sat", "Saturday", "13", "May", "14:30", "Final", isRace = true, utcEpochMillis = utcMillis(1950, 5, 13, 14, 30))
                 ),
                 results = listOf(
                     RaceDriverResult(
@@ -3107,7 +3134,7 @@ object SeedDataProvider {
                 circuitType = "MONACO",
                 circuitId = "MONACO",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "21", "May", "14:30", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "21", "May", "14:30", "Final", isRace = true, utcEpochMillis = utcMillis(1950, 5, 21, 14, 30))
                 )
             ),
             RaceWeekend(
@@ -3125,7 +3152,7 @@ object SeedDataProvider {
                 circuitType = "MONZA",
                 circuitId = "MONZA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "03", "Sep", "14:30", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "03", "Sep", "14:30", "Final", isRace = true, utcEpochMillis = utcMillis(1950, 9, 3, 14, 30))
                 )
             )
         )
@@ -3148,7 +3175,7 @@ object SeedDataProvider {
                 circuitType = "MONACO",
                 circuitId = "MONACO",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "25", "May", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "25", "May", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(season, 5, 25, 13, 0))
                 )
             ),
             RaceWeekend(
@@ -3166,7 +3193,7 @@ object SeedDataProvider {
                 circuitType = "SILVERSTONE",
                 circuitId = "SILVERSTONE",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "15", "Jul", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "15", "Jul", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(season, 7, 15, 14, 0))
                 )
             ),
             RaceWeekend(
@@ -3184,7 +3211,7 @@ object SeedDataProvider {
                 circuitType = "MONZA",
                 circuitId = "MONZA",
                 sessions = listOf(
-                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "08", "Sep", "14:00", "Final", isRace = true)
+                    SessionScheduleItem("Race", "Race", "Sun", "Sunday", "08", "Sep", "14:00", "Final", isRace = true, utcEpochMillis = utcMillis(season, 9, 8, 13, 0))
                 )
             )
         )

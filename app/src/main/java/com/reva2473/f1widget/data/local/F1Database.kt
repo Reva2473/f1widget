@@ -2,6 +2,7 @@ package com.reva2473.f1widget.data.local
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -107,10 +108,14 @@ interface F1Dao {
 
 class F1Database internal constructor(internal val cacheDir: File) {
 
-    constructor(context: Context) : this(File(context.applicationContext.filesDir, "f1_offline_cache"))
+    internal constructor(context: Context) : this(File(context.applicationContext.filesDir, "f1_offline_cache"))
 
     private val mutex = Mutex()
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+    }
 
     private fun ensureCacheDir() {
         if (!cacheDir.exists()) {
@@ -311,7 +316,10 @@ class F1Database internal constructor(internal val cacheDir: File) {
 // DataStore Preferences for UserPreferencesState
 // ============================================================================
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "user_preferences",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
 
 class UserPreferencesStore(private val dataStore: DataStore<Preferences>) {
 
@@ -456,6 +464,7 @@ class UserPreferencesStore(private val dataStore: DataStore<Preferences>) {
             return fallbackDataStores[canonicalPath] ?: synchronized(fallbackDataStores) {
                 fallbackDataStores.getOrPut(canonicalPath) {
                     PreferenceDataStoreFactory.create(
+                        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
                         scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
                         produceFile = { file }
                     )

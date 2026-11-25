@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,7 +45,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -134,6 +134,7 @@ fun CircularHeaderButton(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true, color = if (isDark) Color.White else Color.Black),
+                role = Role.Button,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -184,6 +185,7 @@ fun FloatingPillBottomBar(
         ) {
             Row(
                 modifier = Modifier
+                    .selectableGroup()
                     .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -304,7 +306,7 @@ fun TyreCompoundBadge(
     val ringColor = if (!isDark) {
         when (compound) {
             TyreCompound.HARD -> Color(0xFF4A4A56)
-            TyreCompound.MEDIUM -> P1TTheme.sectorYellow
+            TyreCompound.MEDIUM -> Color(0xFF8C6200)
             TyreCompound.INTERMEDIATE -> P1TTheme.sectorGreen
             TyreCompound.WET -> Color(0xFF007EA7)
             TyreCompound.SOFT -> P1TTheme.accentRed

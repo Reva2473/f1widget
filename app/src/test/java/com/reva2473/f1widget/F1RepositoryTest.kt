@@ -21,6 +21,7 @@ import com.reva2473.f1widget.data.remote.LapTimeDto
 import com.reva2473.f1widget.data.remote.LocationDto
 import com.reva2473.f1widget.data.remote.MRData
 import com.reva2473.f1widget.data.remote.OpenF1ApiService
+import com.reva2473.f1widget.data.remote.OpenF1DriverDto
 import com.reva2473.f1widget.data.remote.OpenF1IntervalDto
 import com.reva2473.f1widget.data.remote.OpenF1LapDto
 import com.reva2473.f1widget.data.remote.OpenF1OvertakeDto
@@ -30,6 +31,8 @@ import com.reva2473.f1widget.data.remote.OpenF1SessionDto
 import com.reva2473.f1widget.data.remote.OpenF1StintDto
 import com.reva2473.f1widget.data.remote.OpenF1TeamRadioDto
 import com.reva2473.f1widget.data.remote.OpenF1WeatherDto
+import com.reva2473.f1widget.data.remote.PitStopDto
+import com.reva2473.f1widget.data.remote.QualifyingResultDto
 import com.reva2473.f1widget.data.remote.RaceDto
 import com.reva2473.f1widget.data.remote.RaceTableWrapper
 import com.reva2473.f1widget.data.remote.ResultDto
@@ -53,10 +56,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -74,7 +79,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Unit tests verifying SeedDataProvider integrity, standings calculations,
@@ -84,26 +91,38 @@ import java.util.Locale
  */
 class F1RepositoryTest {
 
+    private val testPreferenceScopes = CopyOnWriteArrayList<CoroutineScope>()
+
+    @After
+    fun tearDown() {
+        testPreferenceScopes.forEach { it.cancel() }
+        testPreferenceScopes.clear()
+        F1Repository.clearLiveSessionCacheForTesting()
+    }
+
     @Test
-    fun testNextRaceWeekendMatchesSepangHero() {
+    fun testNextRaceWeekendMatchesMadridRound16() {
         val weekend = SeedDataProvider.getNextRaceWeekend()
         assertEquals(2026, weekend.season)
         assertEquals(16, weekend.round)
-        assertEquals("Bahrain Grand Prix in Malaysia", weekend.grandPrixName)
-        assertEquals("Sepang International Circuit", weekend.circuitName)
-        assertEquals("Kuala Lumpur, Malaysia", weekend.location)
-        assertEquals("5.543", weekend.circuitLengthKm)
-        assertEquals(56, weekend.totalLaps)
-        assertEquals(15, weekend.totalCorners)
+        assertEquals("Madrid Grand Prix", weekend.grandPrixName)
+        assertEquals("Circuito de Madring", weekend.circuitName)
+        assertEquals("Madrid, Spain", weekend.location)
+        assertEquals("🇪🇸", weekend.countryFlagEmoji)
+        assertEquals("5.474", weekend.circuitLengthKm)
+        assertEquals(57, weekend.totalLaps)
+        assertEquals(20, weekend.totalCorners)
         assertEquals(1, weekend.daysToGo)
+        assertEquals("MADRID", weekend.circuitType)
+        assertEquals("MADRID", weekend.circuitId)
         assertEquals(5, weekend.sessions.size)
 
         val fp1 = weekend.sessions.first { it.shortName == "FP1" }
-        assertEquals("05:30", fp1.localTime)
+        assertEquals("11:30", fp1.localTime)
         assertEquals("Fri", fp1.dayOfWeek)
 
         val race = weekend.sessions.first { it.shortName == "Race" }
-        assertEquals("08:00", race.localTime)
+        assertEquals("13:00", race.localTime)
         assertEquals("Sun", race.dayOfWeek)
         assertTrue(race.isRace)
     }
@@ -597,11 +616,12 @@ class F1RepositoryTest {
         try {
             val (repository, db) = createRepository(tempDir)
 
-            // 1. Next Race Weekend
+            // 1. Next Race Weekend resolves from current season schedule (never hardcoded Sepang)
             val nextWeekend = repository.getNextRaceWeekend()
-            assertEquals("Bahrain Grand Prix in Malaysia", nextWeekend.grandPrixName)
-            assertEquals("Sepang International Circuit", nextWeekend.circuitName)
-            assertEquals(56, nextWeekend.totalLaps)
+            val currentSchedule = repository.getSeasonSchedule(LocalDate.now().year)
+            assertTrue(currentSchedule.any { it.round == nextWeekend.round && it.grandPrixName == nextWeekend.grandPrixName })
+            assertFalse(nextWeekend.grandPrixName.contains("Malaysia", ignoreCase = true))
+            assertFalse(nextWeekend.circuitId == "SEPANG")
 
             // 2. Brazilian GP 2026 Weekend
             val brazil2026 = repository.getBrazilianGpWeekend2026()
@@ -655,7 +675,10 @@ class F1RepositoryTest {
             // 9. Season Schedule & specific round lookup
             val round16 = repository.getRaceWeekend(2026, 16)
             assertEquals(16, round16.round)
-            assertEquals("Sepang International Circuit", round16.circuitName)
+            assertEquals("Madrid Grand Prix", round16.grandPrixName)
+            assertEquals("Circuito de Madring", round16.circuitName)
+            assertEquals("MADRID", round16.circuitId)
+            assertEquals(57, round16.totalLaps)
         } finally {
             tempDir.deleteRecursively()
         }
@@ -1521,8 +1544,8 @@ class F1RepositoryTest {
         assertEquals("INTERLAGOS", weekend.circuitId.ifBlank { weekend.circuitType })
 
         val nextRace = SeedDataProvider.getNextRaceWeekend()
-        assertEquals("SEPANG", nextRace.circuitType)
-        assertEquals("SEPANG", nextRace.circuitId)
+        assertEquals("MADRID", nextRace.circuitType)
+        assertEquals("MADRID", nextRace.circuitId)
 
         val brazil2026 = SeedDataProvider.getBrazilianGpWeekend2026()
         assertEquals("INTERLAGOS", brazil2026.circuitType)
@@ -1985,6 +2008,7 @@ class F1RepositoryTest {
                     )
                 }
             )
+            F1Repository.clearLiveSessionCacheForTesting()
             val (repo, _) = createRepository(tempDir, openF1Api = fakeOpenF1)
 
             // Named fixtures never call OpenF1
@@ -1994,7 +2018,7 @@ class F1RepositoryTest {
             assertEquals("Bahrain Grand Prix", bahrain.grandPrixName)
             assertEquals(0, openF1Invocations)
 
-            // Numeric session key enriches weather & race control with deterministic IDs
+            // Numeric session key enriches weather & race control with deterministic indexed IDs
             val firstLive = repo.getLiveSessionState("9801")
             assertEquals(2, openF1Invocations)
             assertEquals(20.0, firstLive.weather.windSpeedKmh, 0.001)
@@ -2005,14 +2029,15 @@ class F1RepositoryTest {
             assertEquals(2, firstLive.raceControlMessages.size)
             assertEquals("RED", firstLive.raceControlMessages[0].title)
             assertEquals("INFO", firstLive.raceControlMessages[0].category)
-            assertEquals("rc_9801_2026-09-06T13:07:00Z_0", firstLive.raceControlMessages[0].id)
+            assertEquals("rc_9801_2026-09-06T13:07:00Z_0_0", firstLive.raceControlMessages[0].id)
             assertEquals("DOUBLE YELLOW IN SECTOR 2", firstLive.raceControlMessages[1].title)
             assertEquals(
-                "rc_9801_2026-09-06T13:05:10Z_${"DOUBLE YELLOW IN SECTOR 2".hashCode()}",
+                "rc_9801_2026-09-06T13:05:10Z_1_${"DOUBLE YELLOW IN SECTOR 2".hashCode()}",
                 firstLive.raceControlMessages[1].id
             )
 
-            // Calling again produces identical deterministic RC IDs
+            // Calling again after clearing cache produces identical deterministic RC IDs
+            F1Repository.clearLiveSessionCacheForTesting()
             val secondLive = repo.getLiveSessionState("9801")
             assertEquals(firstLive.raceControlMessages.map { it.id }, secondLive.raceControlMessages.map { it.id })
 
@@ -2020,15 +2045,18 @@ class F1RepositoryTest {
             currentRainfall = 0.0
             currentWindDir = 0.0
             currentWindSpeed = 10.0
+            F1Repository.clearLiveSessionCacheForTesting()
             val dryNorth = repo.getLiveSessionState("latest")
             assertEquals(0, dryNorth.weather.rainfallPercent)
             assertEquals("N", dryNorth.weather.windDirection)
             assertEquals(36.0, dryNorth.weather.windSpeedKmh, 0.001)
 
             currentWindDir = 90.0
+            F1Repository.clearLiveSessionCacheForTesting()
             val eastWind = repo.getLiveSessionState("LATEST")
             assertEquals("E", eastWind.weather.windDirection)
         } finally {
+            F1Repository.clearLiveSessionCacheForTesting()
             tempDir.deleteRecursively()
         }
     }
@@ -2483,13 +2511,560 @@ class F1RepositoryTest {
         }
     }
 
+    // ========================================================================
+    // 33. Wave 1 Fixes: Dynamic Next Race, Qualifying JSON, PitStops/Fallback,
+    //     OpenF1 Live Enrichment, Turkish Locale Safety & Seed UTC Epochs
+    // ========================================================================
+    @Test
+    fun testGetNextRaceWeekendResolvesUpcomingRaceFromSchedule() = runBlocking {
+        val tempDir = Files.createTempDirectory("f1_next_race_schedule_test").toFile()
+        try {
+            val now = Instant.now()
+            val pastInstant = now.minus(3, ChronoUnit.DAYS)
+            val nextInstant = now.plus(4, ChronoUnit.DAYS)
+            val laterInstant = now.plus(18, ChronoUnit.DAYS)
+            val currentYear = LocalDate.now().year.toString()
+
+            val fakeJolpica = createFakeJolpicaApi(
+                onGetSeasonSchedule = { season, _, _ ->
+                    JolpicaResponse(
+                        mrData = MRData(
+                            raceTable = RaceTableWrapper(
+                                season = season,
+                                races = listOf(
+                                    RaceDto(
+                                        season = currentYear,
+                                        round = "1",
+                                        raceName = "Past Grand Prix",
+                                        circuit = CircuitDto("bahrain", circuitName = "Bahrain International Circuit", location = LocationDto("Sakhir", "Bahrain")),
+                                        date = pastInstant.atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                                        time = DateTimeFormatter.ISO_LOCAL_TIME.format(pastInstant.atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(ChronoUnit.SECONDS)) + "Z"
+                                    ),
+                                    RaceDto(
+                                        season = currentYear,
+                                        round = "2",
+                                        raceName = "Upcoming Monza Grand Prix",
+                                        circuit = CircuitDto("monza", circuitName = "Autodromo Nazionale Monza", location = LocationDto("Monza", "Italy")),
+                                        date = nextInstant.atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                                        time = DateTimeFormatter.ISO_LOCAL_TIME.format(nextInstant.atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(ChronoUnit.SECONDS)) + "Z"
+                                    ),
+                                    RaceDto(
+                                        season = currentYear,
+                                        round = "3",
+                                        raceName = "Later Suzuka Grand Prix",
+                                        circuit = CircuitDto("suzuka", circuitName = "Suzuka International Racing Course", location = LocationDto("Suzuka", "Japan")),
+                                        date = laterInstant.atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                                        time = DateTimeFormatter.ISO_LOCAL_TIME.format(laterInstant.atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(ChronoUnit.SECONDS)) + "Z"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                }
+            )
+
+            val (repo, _) = createRepository(tempDir, jolpicaApi = fakeJolpica)
+            val next = repo.getNextRaceWeekend()
+            assertEquals(2, next.round)
+            assertEquals("Upcoming Monza Grand Prix", next.grandPrixName)
+            assertEquals("MONZA", next.circuitId)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testQualifyingResultDtoRealJsonUppercaseKeysPopulateQualifyingTime() = runBlocking {
+        val tempDir = Files.createTempDirectory("f1_quali_json_test").toFile()
+        try {
+            val json = Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                coerceInputValues = true
+            }
+            val qualifyingPayload = """
+                {
+                  "MRData": {
+                    "RaceTable": {
+                      "season": "2026",
+                      "round": "5",
+                      "Races": [
+                        {
+                          "season": "2026",
+                          "round": "5",
+                          "raceName": "Miami Grand Prix",
+                          "QualifyingResults": [
+                            {
+                              "number": "16",
+                              "position": "1",
+                              "Driver": {"driverId": "leclerc", "code": "LEC", "givenName": "Charles", "familyName": "Leclerc"},
+                              "Constructor": {"constructorId": "ferrari", "name": "Ferrari"},
+                              "Q1": "1:27.900",
+                              "Q2": "1:27.450",
+                              "Q3": "1:27.111"
+                            },
+                            {
+                              "number": "23",
+                              "position": "12",
+                              "Driver": {"driverId": "albon", "code": "ALB", "givenName": "Alexander", "familyName": "Albon"},
+                              "Constructor": {"constructorId": "williams", "name": "Williams"},
+                              "Q1": "1:28.300",
+                              "Q2": "1:28.012"
+                            },
+                            {
+                              "number": "18",
+                              "position": "18",
+                              "Driver": {"driverId": "stroll", "code": "STR", "givenName": "Lance", "familyName": "Stroll"},
+                              "Constructor": {"constructorId": "aston_martin", "name": "Aston Martin"},
+                              "Q1": "1:28.990"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+            """.trimIndent()
+
+            val parsedResponse = json.decodeFromString<JolpicaResponse<RaceTableWrapper>>(qualifyingPayload)
+            val qualiDtos = parsedResponse.mrData.raceTable?.races?.firstOrNull()?.qualifyingResults.orEmpty()
+            assertEquals(3, qualiDtos.size)
+            assertEquals("1:27.900", qualiDtos[0].q1)
+            assertEquals("1:27.450", qualiDtos[0].q2)
+            assertEquals("1:27.111", qualiDtos[0].q3)
+            assertNull(qualiDtos[1].q3)
+            assertEquals("1:28.012", qualiDtos[1].q2)
+            assertNull(qualiDtos[2].q2)
+            assertEquals("1:28.990", qualiDtos[2].q1)
+
+            val pastDate = LocalDate.now(ZoneOffset.UTC).minusDays(4).toString()
+            val fakeJolpica = createFakeJolpicaApi(
+                onGetSeasonSchedule = { season, _, _ ->
+                    JolpicaResponse(
+                        mrData = MRData(
+                            raceTable = RaceTableWrapper(
+                                season = season,
+                                races = listOf(
+                                    RaceDto(
+                                        season = season,
+                                        round = "5",
+                                        raceName = "Miami Grand Prix",
+                                        circuit = CircuitDto("miami", circuitName = "Miami International Autodrome", location = LocationDto("Miami", "USA")),
+                                        date = pastDate,
+                                        time = "20:00:00Z"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                },
+                onGetRaceResults = { season, round ->
+                    JolpicaResponse(
+                        mrData = MRData(
+                            raceTable = RaceTableWrapper(
+                                season = season,
+                                round = round,
+                                races = listOf(
+                                    RaceDto(
+                                        season = season,
+                                        round = round,
+                                        raceName = "Miami Grand Prix",
+                                        results = listOf(
+                                            ResultDto("16", "1", points = "25", driver = DriverDto("leclerc", code = "LEC", givenName = "Charles", familyName = "Leclerc"), constructor = ConstructorDto("ferrari", name = "Ferrari"), laps = "57", status = "Finished", time = TimeDto(time = "1:28:00.000")),
+                                            ResultDto("23", "11", points = "0", driver = DriverDto("albon", code = "ALB", givenName = "Alexander", familyName = "Albon"), constructor = ConstructorDto("williams", name = "Williams"), laps = "57", status = "+42.100"),
+                                            ResultDto("18", "17", points = "0", driver = DriverDto("stroll", code = "STR", givenName = "Lance", familyName = "Stroll"), constructor = ConstructorDto("aston_martin", name = "Aston Martin"), laps = "56", status = "+1 Lap")
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                },
+                onGetQualifyingResults = { _, _ -> parsedResponse }
+            )
+
+            val (repo, _) = createRepository(tempDir, jolpicaApi = fakeJolpica)
+            val weekend = repo.getRaceWeekend(2026, 5)
+            assertEquals(3, weekend.results.size)
+            assertEquals("P1", weekend.results[0].qualifyingPosition)
+            assertEquals("1:27.111", weekend.results[0].qualifyingTime)
+            assertEquals("P12", weekend.results[1].qualifyingPosition)
+            assertEquals("1:28.012", weekend.results[1].qualifyingTime)
+            assertEquals("P18", weekend.results[2].qualifyingPosition)
+            assertEquals("1:28.990", weekend.results[2].qualifyingTime)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testGetLatestCompletedRaceFallsBackToPreviousRoundMapsPitStopsAndGuardsBlankFastestLapRank() = runBlocking {
+        val tempDir = Files.createTempDirectory("f1_prev_round_pitstops_test").toFile()
+        try {
+            val now = Instant.now()
+            val round10Instant = now.minus(9, ChronoUnit.DAYS)
+            val round11Instant = now.minus(2, ChronoUnit.DAYS)
+            val testSeason = round10Instant.atZone(ZoneOffset.UTC).year
+            val requestedRounds = mutableListOf<String>()
+
+            val fakeJolpica = createFakeJolpicaApi(
+                onGetSeasonSchedule = { season, _, _ ->
+                    val races = buildList {
+                        add(
+                            RaceDto(
+                                season = season,
+                                round = "10",
+                                raceName = "Spanish Grand Prix",
+                                circuit = CircuitDto("catalunya", circuitName = "Circuit de Barcelona-Catalunya", location = LocationDto("Barcelona", "Spain")),
+                                date = round10Instant.atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                                time = DateTimeFormatter.ISO_LOCAL_TIME.format(round10Instant.atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(ChronoUnit.SECONDS)) + "Z"
+                            )
+                        )
+                        if (round11Instant.atZone(ZoneOffset.UTC).year == testSeason) {
+                            add(
+                                RaceDto(
+                                    season = season,
+                                    round = "11",
+                                    raceName = "Austrian Grand Prix",
+                                    circuit = CircuitDto("red_bull_ring", circuitName = "Red Bull Ring", location = LocationDto("Spielberg", "Austria")),
+                                    date = round11Instant.atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                                    time = DateTimeFormatter.ISO_LOCAL_TIME.format(round11Instant.atZone(ZoneOffset.UTC).toLocalTime().truncatedTo(ChronoUnit.SECONDS)) + "Z"
+                                )
+                            )
+                        }
+                    }
+                    JolpicaResponse(mrData = MRData(raceTable = RaceTableWrapper(season = season, races = races)))
+                },
+                onGetRaceResults = { season, round ->
+                    requestedRounds.add(round)
+                    val results = if (round == "10") {
+                        listOf(
+                            ResultDto(
+                                position = "1",
+                                points = "25",
+                                driver = DriverDto("verstappen", code = "VER", givenName = "Max", familyName = "Verstappen"),
+                                constructor = ConstructorDto("red_bull", name = "Red Bull"),
+                                laps = "66",
+                                status = "Finished",
+                                time = TimeDto(time = "1:28:11.200"),
+                                fastestLap = FastestLapDto(rank = "1", lap = "54", time = LapTimeDto("1:17.200"))
+                            ),
+                            ResultDto(
+                                position = "2",
+                                points = "18",
+                                driver = DriverDto("norris", code = "NOR", givenName = "Lando", familyName = "Norris"),
+                                constructor = ConstructorDto("mclaren", name = "McLaren"),
+                                laps = "66",
+                                status = "+3.400",
+                                time = TimeDto(time = "+3.400"),
+                                fastestLap = FastestLapDto(rank = "   ", lap = "55", time = LapTimeDto("1:17.550"))
+                            )
+                        )
+                    } else {
+                        emptyList()
+                    }
+                    JolpicaResponse(
+                        mrData = MRData(
+                            raceTable = RaceTableWrapper(
+                                season = season,
+                                round = round,
+                                races = listOf(RaceDto(season = season, round = round, results = results))
+                            )
+                        )
+                    )
+                },
+                onGetPitStops = { season, round, _, _ ->
+                    val stops = if (round == "10") {
+                        listOf(
+                            PitStopDto(driverId = "verstappen", lap = "18", stop = "1", time = "14:25:00", duration = "22.4"),
+                            PitStopDto(driverId = "verstappen", lap = "42", stop = "2", time = "14:58:00", duration = "21.8s")
+                        )
+                    } else {
+                        emptyList()
+                    }
+                    JolpicaResponse(
+                        mrData = MRData(
+                            raceTable = RaceTableWrapper(
+                                season = season,
+                                round = round,
+                                races = listOf(RaceDto(season = season, round = round, pitStops = stops))
+                            )
+                        )
+                    )
+                }
+            )
+
+            val (repo, _) = createRepository(tempDir, jolpicaApi = fakeJolpica)
+            val latest = repo.getLatestCompletedRace(testSeason)
+
+            if (round11Instant.atZone(ZoneOffset.UTC).year == testSeason) {
+                assertEquals(listOf("11", "10"), requestedRounds)
+            } else {
+                assertEquals(listOf("10"), requestedRounds)
+            }
+            assertEquals(10, latest.round)
+            assertEquals("Spanish Grand Prix", latest.grandPrixName)
+            assertEquals(2, latest.results.size)
+
+            val ver = latest.results[0]
+            assertEquals("P1", ver.fastestLapPosition)
+            assertEquals("1:17.200", ver.fastestLapTime)
+            assertEquals(3, ver.stints.size)
+            assertEquals(TyreCompound.MEDIUM, ver.stints[0].compound)
+            assertEquals(18, ver.stints[0].lapsCount)
+            assertEquals(18, ver.stints[0].pitStopLap)
+            assertEquals("22.4s", ver.stints[0].pitStopDuration)
+            assertEquals(TyreCompound.HARD, ver.stints[1].compound)
+            assertEquals(24, ver.stints[1].lapsCount)
+            assertEquals(42, ver.stints[1].pitStopLap)
+            assertEquals("21.8s", ver.stints[1].pitStopDuration)
+            assertEquals(TyreCompound.HARD, ver.stints[2].compound)
+            assertEquals(24, ver.stints[2].lapsCount)
+            assertNull(ver.stints[2].pitStopLap)
+            assertNull(ver.stints[2].pitStopDuration)
+
+            // Blank fastestLap.rank must NOT produce "P" or "P   "
+            val nor = latest.results[1]
+            assertEquals("", nor.fastestLapPosition)
+            assertEquals("1:17.550", nor.fastestLapTime)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testGetLiveSessionStateLatestOpenF1EnrichmentIsLiveWeatherAndUniqueRcIds() = runBlocking {
+        val tempDir = Files.createTempDirectory("f1_live_latest_enrichment_test").toFile()
+        try {
+            F1Repository.clearLiveSessionCacheForTesting()
+            val now = Instant.now()
+            val fakeOpenF1 = createFakeOpenF1Api(
+                onGetSessions = { _ ->
+                    listOf(
+                        OpenF1SessionDto(
+                            sessionKey = 9955,
+                            sessionName = "Qualifying",
+                            dateStart = now.minusSeconds(1200).toString(),
+                            dateEnd = now.plusSeconds(1200).toString(),
+                            circuitShortName = "Monza",
+                            countryName = "Italy",
+                            location = "Monza"
+                        )
+                    )
+                },
+                onGetWeather = { _ ->
+                    listOf(
+                        OpenF1WeatherDto(
+                            airTemperature = 25.4,
+                            trackTemperature = 38.9,
+                            humidity = 48.2,
+                            pressure = 1016.4,
+                            rainfall = 0.0,
+                            sessionKey = 9955,
+                            windDirection = 180.0,
+                            windSpeed = 4.0 // 14.4 km/h
+                        )
+                    )
+                },
+                onGetRaceControl = { _ ->
+                    listOf(
+                        OpenF1RaceControlDto(
+                            sessionKey = 9955,
+                            date = "2026-09-05T14:10:00Z",
+                            message = "TRACK LIMITS - TURN 11",
+                            category = "Other"
+                        ),
+                        OpenF1RaceControlDto(
+                            sessionKey = 9955,
+                            date = "2026-09-05T14:10:00Z",
+                            message = "TRACK LIMITS - TURN 11",
+                            category = "Other"
+                        )
+                    )
+                },
+                onGetDrivers = { _ ->
+                    listOf(
+                        OpenF1DriverDto(driverNumber = 16, nameAcronym = "LEC", fullName = "Charles Leclerc", teamName = "Ferrari", sessionKey = 9955)
+                    )
+                },
+                onGetPositions = { _ ->
+                    listOf(OpenF1PositionDto(driverNumber = 16, position = 1, sessionKey = 9955))
+                },
+                onGetLaps = { _ ->
+                    listOf(OpenF1LapDto(driverNumber = 16, lapNumber = 5, lapDuration = 79.456, sessionKey = 9955))
+                }
+            )
+
+            val (repo, _) = createRepository(tempDir, openF1Api = fakeOpenF1)
+            val state = repo.getLiveSessionState("latest")
+
+            assertTrue(state.isLive)
+            assertEquals("Italy Grand Prix", state.grandPrixName)
+            assertEquals("Qualifying", state.sessionName)
+            assertEquals("Q", state.shortSessionCode)
+            assertEquals("MONZA", state.circuitId)
+
+            // Weather conversion
+            assertEquals(38.9, state.weather.trackTempC, 0.001)
+            assertEquals(25.4, state.weather.airTempC, 0.001)
+            assertEquals(48, state.weather.humidityPercent)
+            assertEquals(14.4, state.weather.windSpeedKmh, 0.001)
+            assertEquals("S", state.weather.windDirection)
+            assertEquals(0, state.weather.rainfallPercent)
+
+            // Identical message + timestamp still yields unique IDs via index
+            assertEquals(2, state.raceControlMessages.size)
+            assertEquals(2, state.raceControlMessages.map { it.id }.toSet().size)
+            assertTrue(state.raceControlMessages[0].id.contains("_0_"))
+            assertTrue(state.raceControlMessages[1].id.contains("_1_"))
+        } finally {
+            F1Repository.clearLiveSessionCacheForTesting()
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testTurkishLocaleSafetyForTeamsFlagsAndDriverCodes() = runBlocking {
+        val tempDir = Files.createTempDirectory("f1_turkish_locale_test").toFile()
+        val previousLocale = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale("tr", "TR"))
+
+            // F1TeamId.fromName with uppercase ASCII "I" under tr-TR
+            assertEquals(F1TeamId.WILLIAMS, F1TeamId.fromName("WILLIAMS"))
+            assertEquals(F1TeamId.WILLIAMS, F1TeamId.fromName("WILLIAMS RACING"))
+            assertEquals(F1TeamId.FERRARI, F1TeamId.fromName("FERRARI"))
+            assertEquals(F1TeamId.RACING_BULLS, F1TeamId.fromName("RACING BULLS"))
+            assertEquals(F1TeamId.ALPINE, F1TeamId.fromName("ALPINE"))
+            assertEquals(F1TeamId.AUDI_SAUBER, F1TeamId.fromName("AUDI"))
+            assertEquals(F1TeamId.CADILLAC, F1TeamId.fromName("CADILLAC"))
+
+            // Country flags & circuit specs under tr-TR
+            val fakeJolpica = createFakeJolpicaApi(
+                onGetDriverStandings = { season, _, _ ->
+                    JolpicaResponse(
+                        mrData = MRData(
+                            standingsTable = StandingsTableWrapper(
+                                season = season,
+                                round = "1",
+                                standingsLists = listOf(
+                                    StandingsListDto(
+                                        season = season,
+                                        round = "1",
+                                        driverStandings = listOf(
+                                            DriverStandingDto(
+                                                position = "1",
+                                                points = "25",
+                                                wins = "1",
+                                                driver = DriverDto(driverId = "ickx", givenName = "Jacky", familyName = "ickx", code = null),
+                                                constructors = listOf(ConstructorDto("ferrari", name = "FERRARI"))
+                                            ),
+                                            DriverStandingDto(
+                                                position = "2",
+                                                points = "18",
+                                                wins = "0",
+                                                driver = DriverDto(driverId = "ricciardo", givenName = "Daniel", familyName = "ricciardo", code = ""),
+                                                constructors = listOf(ConstructorDto("rb", name = "RACING BULLS"))
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                }
+            )
+
+            val (repo, _) = createRepository(tempDir, jolpicaApi = fakeJolpica)
+            assertEquals("🇮🇹", repo.getCountryFlag("ITALY"))
+            assertEquals("🇪🇸", repo.getCountryFlag("SPAIN"))
+            assertEquals("🇬🇧", repo.getCountryFlag("UNITED KINGDOM"))
+            assertEquals("🇮🇳", repo.getCountryFlag("INDIA"))
+            assertEquals("🇹🇷", repo.getCountryFlag("TURKEY"))
+            assertEquals("SILVERSTONE", F1Repository.lookupCircuitSpecs("SILVERSTONE", "Silverstone").circuitId)
+            assertEquals("IMOLA", F1Repository.lookupCircuitSpecs("IMOLA", "Imola").circuitId)
+
+            val standings = repo.getDriverStandings(2026, forceRefresh = true)
+            assertEquals(2, standings.size)
+            assertEquals("ICK", standings[0].code)
+            assertEquals(F1TeamId.FERRARI, standings[0].team)
+            assertEquals("RIC", standings[1].code)
+            assertEquals(F1TeamId.RACING_BULLS, standings[1].team)
+        } finally {
+            Locale.setDefault(previousLocale)
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testSeedDataProviderSessionsHaveNonNullUtcEpochMillis() {
+        val standaloneWeekends = listOf(
+            SeedDataProvider.getNextRaceWeekend(),
+            SeedDataProvider.getBrazilianGpWeekend2026(),
+            SeedDataProvider.getSaoPaulo2024Results(),
+            SeedDataProvider.getAbuDhabi2023Results()
+        )
+        standaloneWeekends.forEach { weekend ->
+            assertTrue("Weekend ${weekend.grandPrixName} must have sessions", weekend.sessions.isNotEmpty())
+            weekend.sessions.forEach { session ->
+                assertNotNull(
+                    "Session ${session.shortName} in ${weekend.grandPrixName} must have non-null utcEpochMillis",
+                    session.utcEpochMillis
+                )
+            }
+        }
+
+        val seasons = listOf(2026, 2025, 2024, 2023, 1950, 2020)
+        seasons.forEach { season ->
+            val schedule = SeedDataProvider.getSeasonSchedule(season)
+            assertTrue("Season $season schedule must not be empty", schedule.isNotEmpty())
+            schedule.forEach { weekend ->
+                assertTrue("Season $season round ${weekend.round} must have sessions", weekend.sessions.isNotEmpty())
+                weekend.sessions.forEach { session ->
+                    assertNotNull(
+                        "Season $season round ${weekend.round} session ${session.shortName} must have non-null utcEpochMillis",
+                        session.utcEpochMillis
+                    )
+                }
+            }
+        }
+    }
+
+    private fun createPreferencesStore(tempDir: File): UserPreferencesStore {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        testPreferenceScopes.add(scope)
+        val dataStore = PreferenceDataStoreFactory.create(
+            scope = scope,
+            produceFile = { File(tempDir, "user_preferences_${System.nanoTime()}.preferences_pb") }
+        )
+        return UserPreferencesStore(dataStore)
+    }
+
+    private fun createRepository(
+        tempDir: File,
+        jolpicaApi: JolpicaApiService? = null,
+        openF1Api: OpenF1ApiService? = null
+    ): Pair<F1Repository, F1Database> {
+        val db = createDatabaseInstance(tempDir)
+        val prefs = createPreferencesStore(tempDir)
+        val repo = F1Repository(
+            context = null,
+            jolpicaApi = jolpicaApi,
+            openF1Api = openF1Api,
+            database = db,
+            preferencesStore = prefs
+        )
+        return Pair(repo, db)
+    }
+
     companion object {
         private fun createFakeJolpicaApi(
             onGetSeasonSchedule: suspend (season: String, limit: Int, offset: Int) -> JolpicaResponse<RaceTableWrapper> = { _, _, _ -> JolpicaResponse() },
             onGetDriverStandings: suspend (season: String, limit: Int, offset: Int) -> JolpicaResponse<StandingsTableWrapper> = { _, _, _ -> JolpicaResponse() },
             onGetConstructorStandings: suspend (season: String, limit: Int, offset: Int) -> JolpicaResponse<StandingsTableWrapper> = { _, _, _ -> JolpicaResponse() },
             onGetRaceResults: suspend (season: String, round: String) -> JolpicaResponse<RaceTableWrapper> = { _, _ -> JolpicaResponse() },
-            onGetQualifyingResults: suspend (season: String, round: String) -> JolpicaResponse<RaceTableWrapper> = { _, _ -> JolpicaResponse() }
+            onGetQualifyingResults: suspend (season: String, round: String) -> JolpicaResponse<RaceTableWrapper> = { _, _ -> JolpicaResponse() },
+            onGetPitStops: suspend (season: String, round: String, limit: Int, offset: Int) -> JolpicaResponse<RaceTableWrapper> = { _, _, _, _ -> JolpicaResponse() }
         ): JolpicaApiService = object : JolpicaApiService {
             override suspend fun getSeasons(limit: Int, offset: Int): JolpicaResponse<com.reva2473.f1widget.data.remote.SeasonTableWrapper> =
                 JolpicaResponse()
@@ -2504,50 +3079,35 @@ class F1RepositoryTest {
             override suspend fun getQualifyingResults(season: String, round: String): JolpicaResponse<RaceTableWrapper> =
                 onGetQualifyingResults(season, round)
             override suspend fun getPitStops(season: String, round: String, limit: Int, offset: Int): JolpicaResponse<RaceTableWrapper> =
-                JolpicaResponse()
+                onGetPitStops(season, round, limit, offset)
         }
 
         private fun createFakeOpenF1Api(
+            onGetSessions: suspend (String?) -> List<OpenF1SessionDto> = { emptyList() },
+            onGetPositions: suspend (String) -> List<OpenF1PositionDto> = { emptyList() },
+            onGetIntervals: suspend (String) -> List<OpenF1IntervalDto> = { emptyList() },
+            onGetLaps: suspend (String) -> List<OpenF1LapDto> = { emptyList() },
+            onGetStints: suspend (String) -> List<OpenF1StintDto> = { emptyList() },
+            onGetTeamRadio: suspend (String) -> List<OpenF1TeamRadioDto> = { emptyList() },
+            onGetRaceControl: suspend (String) -> List<OpenF1RaceControlDto> = { emptyList() },
+            onGetOvertakes: suspend (String) -> List<OpenF1OvertakeDto> = { emptyList() },
             onGetWeather: suspend (String) -> List<OpenF1WeatherDto> = { emptyList() },
-            onGetRaceControl: suspend (String) -> List<OpenF1RaceControlDto> = { emptyList() }
+            onGetDrivers: suspend (String) -> List<OpenF1DriverDto> = { emptyList() }
         ): OpenF1ApiService = object : OpenF1ApiService {
-            override suspend fun getSessions(sessionKey: String?, sessionName: String?, sessionType: String?, year: Int?, countryName: String?, circuitShortName: String?): List<OpenF1SessionDto> = emptyList()
-            override suspend fun getPositions(sessionKey: String, driverNumber: Int?): List<OpenF1PositionDto> = emptyList()
-            override suspend fun getIntervals(sessionKey: String, driverNumber: Int?): List<OpenF1IntervalDto> = emptyList()
-            override suspend fun getLaps(sessionKey: String, driverNumber: Int?, lapNumber: Int?): List<OpenF1LapDto> = emptyList()
-            override suspend fun getStints(sessionKey: String, driverNumber: Int?): List<OpenF1StintDto> = emptyList()
-            override suspend fun getTeamRadio(sessionKey: String, driverNumber: Int?): List<OpenF1TeamRadioDto> = emptyList()
+            override suspend fun getSessions(sessionKey: String?, sessionName: String?, sessionType: String?, year: Int?, countryName: String?, circuitShortName: String?): List<OpenF1SessionDto> = onGetSessions(sessionKey)
+            override suspend fun getPositions(sessionKey: String, driverNumber: Int?): List<OpenF1PositionDto> = onGetPositions(sessionKey)
+            override suspend fun getIntervals(sessionKey: String, driverNumber: Int?): List<OpenF1IntervalDto> = onGetIntervals(sessionKey)
+            override suspend fun getLaps(sessionKey: String, driverNumber: Int?, lapNumber: Int?): List<OpenF1LapDto> = onGetLaps(sessionKey)
+            override suspend fun getStints(sessionKey: String, driverNumber: Int?): List<OpenF1StintDto> = onGetStints(sessionKey)
+            override suspend fun getTeamRadio(sessionKey: String, driverNumber: Int?): List<OpenF1TeamRadioDto> = onGetTeamRadio(sessionKey)
             override suspend fun getRaceControl(sessionKey: String, category: String?, flag: String?): List<OpenF1RaceControlDto> = onGetRaceControl(sessionKey)
-            override suspend fun getOvertakes(sessionKey: String): List<OpenF1OvertakeDto> = emptyList()
+            override suspend fun getOvertakes(sessionKey: String): List<OpenF1OvertakeDto> = onGetOvertakes(sessionKey)
             override suspend fun getWeather(sessionKey: String): List<OpenF1WeatherDto> = onGetWeather(sessionKey)
-        }
-        private fun createPreferencesStore(tempDir: File): UserPreferencesStore {
-            val dataStore = PreferenceDataStoreFactory.create(
-                scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-                produceFile = { File(tempDir, "user_preferences_${System.nanoTime()}.preferences_pb") }
-            )
-            return UserPreferencesStore(dataStore)
+            override suspend fun getDrivers(sessionKey: String): List<OpenF1DriverDto> = onGetDrivers(sessionKey)
         }
 
         private fun createDatabaseInstance(tempDir: File): F1Database {
             return F1Database(File(tempDir, "f1_offline_cache"))
-        }
-
-        private fun createRepository(
-            tempDir: File,
-            jolpicaApi: JolpicaApiService? = null,
-            openF1Api: OpenF1ApiService? = null
-        ): Pair<F1Repository, F1Database> {
-            val db = createDatabaseInstance(tempDir)
-            val prefs = createPreferencesStore(tempDir)
-            val repo = F1Repository(
-                context = null,
-                jolpicaApi = jolpicaApi,
-                openF1Api = openF1Api,
-                database = db,
-                preferencesStore = prefs
-            )
-            return Pair(repo, db)
         }
     }
 }

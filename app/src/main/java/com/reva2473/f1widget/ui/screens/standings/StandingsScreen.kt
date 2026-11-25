@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -76,12 +78,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.reva2473.f1widget.domain.model.ConstructorDriverPoints
+import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.ConstructorStanding
-import com.reva2473.f1widget.domain.model.ConstructorWinItem
 import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
-import com.reva2473.f1widget.domain.model.RaceRecentResult
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
@@ -126,249 +126,25 @@ fun StandingsScreen(
     showBottomBar: Boolean = true,
     onYearSelected: (Int) -> Unit = {},
     onBackClick: () -> Unit = {},
-    onTabSelected: (String) -> Unit = {}
+    onTabSelected: (String) -> Unit = {},
+    navigationToken: Int = 0,
+    onRefresh: (() -> Unit)? = null
 ) {
     var selectedTab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
     var lastAppliedInitialTab by rememberSaveable { mutableStateOf(initialTab) }
-    LaunchedEffect(initialTab) {
-        if (initialTab != lastAppliedInitialTab) {
+    var lastAppliedNavigationToken by rememberSaveable { mutableStateOf(navigationToken) }
+    LaunchedEffect(initialTab, navigationToken) {
+        if (initialTab != lastAppliedInitialTab || navigationToken != lastAppliedNavigationToken) {
             selectedTab = initialTab
             lastAppliedInitialTab = initialTab
+            lastAppliedNavigationToken = navigationToken
         }
     }
     var yearPickerOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Mock/Sample Driver Standings matching driver-standings-1080.webp
-    val sampleDrivers = remember {
-        listOf(
-            DriverStanding(
-                position = 1,
-                driverId = "antonelli",
-                code = "ANT",
-                firstName = "Kimi",
-                lastName = "Antonelli",
-                fullName = "Kimi Antonelli",
-                nationality = "ITA",
-                team = F1TeamId.MERCEDES,
-                points = 302.0,
-                wins = 8,
-                podiums = 12,
-                poles = 6,
-                avgPtsPerRace = 18.88,
-                racesCount = 16,
-                gapToLeader = null,
-                gapToPrev = null,
-                last3Summary = "P5, P1, P1 (60 pts)",
-                recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P5", "(10pts)", 5),
-                    RaceRecentResult("Spanish Grand Prix", "P1", "(25pts)", 1),
-                    RaceRecentResult("Italian Grand Prix", "P1", "(25pts)", 1)
-                )
-            ),
-            DriverStanding(
-                position = 2,
-                driverId = "russell",
-                code = "RUS",
-                firstName = "George",
-                lastName = "Russell",
-                fullName = "George Russell",
-                nationality = "GBR",
-                team = F1TeamId.MERCEDES,
-                points = 236.0,
-                wins = 3,
-                podiums = 10,
-                poles = 4,
-                avgPtsPerRace = 14.75,
-                racesCount = 16,
-                gapToLeader = "-66 to leader",
-                gapToPrev = "-66 to P1",
-                last3Summary = "P3, P2, P2 (51 pts)",
-                recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P3", "(15pts)", 3),
-                    RaceRecentResult("Spanish Grand Prix", "P2", "(18pts)", 2),
-                    RaceRecentResult("Italian Grand Prix", "P2", "(18pts)", 2)
-                )
-            ),
-            DriverStanding(
-                position = 3,
-                driverId = "hamilton",
-                code = "HAM",
-                firstName = "Lewis",
-                lastName = "Hamilton",
-                fullName = "Lewis Hamilton",
-                nationality = "GBR",
-                team = F1TeamId.FERRARI,
-                points = 199.0,
-                wins = 2,
-                podiums = 7,
-                poles = 2,
-                avgPtsPerRace = 12.44,
-                racesCount = 16,
-                gapToLeader = "-103 to leader",
-                gapToPrev = "-37 to P2",
-                last3Summary = "P4, P3, P4 (36 pts)",
-                recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P4", "(12pts)", 4),
-                    RaceRecentResult("Spanish Grand Prix", "P3", "(15pts)", 3),
-                    RaceRecentResult("Italian Grand Prix", "P4", "(12pts)", 4)
-                )
-            ),
-            DriverStanding(
-                position = 4,
-                driverId = "norris",
-                code = "NOR",
-                firstName = "Lando",
-                lastName = "Norris",
-                fullName = "Lando Norris",
-                nationality = "GBR",
-                team = F1TeamId.MCLAREN,
-                points = 184.0,
-                wins = 1,
-                podiums = 6,
-                poles = 3,
-                avgPtsPerRace = 11.50,
-                racesCount = 16,
-                gapToLeader = "-118 to leader",
-                gapToPrev = "-15 to P3",
-                last3Summary = "P2, P4, P3 (45 pts)",
-                recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P2", "(18pts)", 2),
-                    RaceRecentResult("Spanish Grand Prix", "P4", "(12pts)", 4),
-                    RaceRecentResult("Italian Grand Prix", "P3", "(15pts)", 3)
-                )
-            ),
-            DriverStanding(
-                position = 5,
-                driverId = "leclerc",
-                code = "LEC",
-                firstName = "Charles",
-                lastName = "Leclerc",
-                fullName = "Charles Leclerc",
-                nationality = "MON",
-                team = F1TeamId.FERRARI,
-                points = 179.0,
-                wins = 2,
-                podiums = 5,
-                poles = 4,
-                avgPtsPerRace = 11.18,
-                racesCount = 16,
-                gapToLeader = "-123 to leader",
-                gapToPrev = "-5 to P4",
-                last3Summary = "P1, P5, DNF (35 pts)",
-                recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P1", "(25pts)", 1),
-                    RaceRecentResult("Spanish Grand Prix", "P5", "(10pts)", 5),
-                    RaceRecentResult("Italian Grand Prix", "DNF", "(0pts)", 19)
-                )
-            ),
-            DriverStanding(
-                position = 6,
-                driverId = "verstappen",
-                code = "VER",
-                firstName = "Max",
-                lastName = "Verstappen",
-                fullName = "Max Verstappen",
-                nationality = "NED",
-                team = F1TeamId.RED_BULL,
-                points = 165.0,
-                wins = 3,
-                podiums = 5,
-                poles = 2,
-                avgPtsPerRace = 10.31,
-                racesCount = 16,
-                gapToLeader = "-137 to leader",
-                gapToPrev = "-14 to P5",
-                last3Summary = "P6, P6, P5 (26 pts)",
-                recentRaces = listOf(
-                    RaceRecentResult("Azerbaijan Grand Prix", "P6", "(8pts)", 6),
-                    RaceRecentResult("Spanish Grand Prix", "P6", "(8pts)", 6),
-                    RaceRecentResult("Italian Grand Prix", "P5", "(10pts)", 5)
-                )
-            )
-        )
-    }
-
-    // Mock/Sample Constructor Standings matching constructor-standings-1080.webp
-    val sampleConstructors = remember {
-        listOf(
-            ConstructorStanding(
-                position = 1,
-                team = F1TeamId.MERCEDES,
-                points = 538.0,
-                wins = 11,
-                gapToP1 = null,
-                gapToPrev = null,
-                drivers = listOf(
-                    ConstructorDriverPoints("Kimi Antonelli", 302.0),
-                    ConstructorDriverPoints("George Russell", 236.0)
-                ),
-                seasonWins = listOf(
-                    ConstructorWinItem("Bahrain Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Saudi Arabian Grand Prix", "George Russell"),
-                    ConstructorWinItem("Australian Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Japanese Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Chinese Grand Prix", "George Russell"),
-                    ConstructorWinItem("Miami Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Monaco Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Canadian Grand Prix", "George Russell"),
-                    ConstructorWinItem("Spanish Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Italian Grand Prix", "Kimi Antonelli"),
-                    ConstructorWinItem("Singapore Grand Prix", "Kimi Antonelli")
-                )
-            ),
-            ConstructorStanding(
-                position = 2,
-                team = F1TeamId.FERRARI,
-                points = 378.0,
-                wins = 4,
-                gapToP1 = "160 to P1",
-                gapToPrev = "160 to P1",
-                drivers = listOf(
-                    ConstructorDriverPoints("Lewis Hamilton", 199.0),
-                    ConstructorDriverPoints("Charles Leclerc", 179.0)
-                ),
-                seasonWins = listOf(
-                    ConstructorWinItem("Emilia Romagna Grand Prix", "Charles Leclerc"),
-                    ConstructorWinItem("British Grand Prix", "Lewis Hamilton"),
-                    ConstructorWinItem("Belgian Grand Prix", "Lewis Hamilton"),
-                    ConstructorWinItem("Azerbaijan Grand Prix", "Charles Leclerc")
-                )
-            ),
-            ConstructorStanding(
-                position = 3,
-                team = F1TeamId.MCLAREN,
-                points = 306.0,
-                wins = 2,
-                gapToP1 = "232 to P1",
-                gapToPrev = "72 to P2",
-                drivers = listOf(
-                    ConstructorDriverPoints("Lando Norris", 184.0),
-                    ConstructorDriverPoints("Oscar Piastri", 122.0)
-                ),
-                seasonWins = listOf(
-                    ConstructorWinItem("Hungarian Grand Prix", "Oscar Piastri"),
-                    ConstructorWinItem("Dutch Grand Prix", "Lando Norris")
-                )
-            ),
-            ConstructorStanding(
-                position = 4,
-                team = F1TeamId.RED_BULL,
-                points = 210.0,
-                wins = 3,
-                gapToP1 = "328 to P1",
-                gapToPrev = "96 to P3",
-                drivers = listOf(
-                    ConstructorDriverPoints("Max Verstappen", 165.0),
-                    ConstructorDriverPoints("Isack Hadjar", 45.0)
-                ),
-                seasonWins = listOf(
-                    ConstructorWinItem("Austrian Grand Prix", "Max Verstappen"),
-                    ConstructorWinItem("São Paulo Grand Prix", "Max Verstappen"),
-                    ConstructorWinItem("Las Vegas Grand Prix", "Max Verstappen")
-                )
-            )
-        )
-    }
+    // Preview/fallback data synced directly with SeedDataProvider
+    val sampleDrivers = remember { SeedDataProvider.getDriverStandings2026() }
+    val sampleConstructors = remember { SeedDataProvider.getConstructorStandings2026() }
 
     // Distinguish null (preview default for 2026) vs emptyList() (no data for selectedYear)
     val activeDrivers = driverStandings ?: if (selectedYear == 2026) sampleDrivers else emptyList()
@@ -389,7 +165,8 @@ fun StandingsScreen(
                 onBackClick = onBackClick,
                 onToggleTab = {
                     selectedTab = if (selectedTab == StandingsTab.DRIVERS) StandingsTab.CONSTRUCTORS else StandingsTab.DRIVERS
-                }
+                },
+                onRefresh = onRefresh
             )
 
             // TOGGLE PILL: "Driver Standings" / "Constructor Standings"
@@ -714,7 +491,8 @@ private fun StandingsTopBar(
     selectedYear: Int,
     onOpenYearPicker: () -> Unit,
     onBackClick: () -> Unit,
-    onToggleTab: (() -> Unit)? = null
+    onToggleTab: (() -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null
 ) {
     var moreMenuExpanded by remember { mutableStateOf(false) }
 
@@ -783,6 +561,20 @@ private fun StandingsTopBar(
                 onDismissRequest = { moreMenuExpanded = false },
                 modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
+                if (onRefresh != null) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Refresh Standings",
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        onClick = {
+                            moreMenuExpanded = false
+                            onRefresh()
+                        }
+                    )
+                }
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -793,6 +585,18 @@ private fun StandingsTopBar(
                     onClick = {
                         moreMenuExpanded = false
                         onToggleTab?.invoke()
+                    }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "Select Season Year",
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    onClick = {
+                        moreMenuExpanded = false
+                        onOpenYearPicker()
                     }
                 )
             }
@@ -808,14 +612,20 @@ private fun StandingsToggleBar(
     selectedTab: StandingsTab,
     onTabSelect: (StandingsTab) -> Unit
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.Center
     ) {
+        val isNarrow = maxWidth < 340.dp
+        val tabHorizontalPadding = if (isNarrow) 8.dp else 14.dp
+        val tabFontSize = if (isNarrow) 12.sp else 13.sp
+
         Row(
             modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 420.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(24.dp))
@@ -826,40 +636,44 @@ private fun StandingsToggleBar(
             // Driver Standings
             Box(
                 modifier = Modifier
+                    .weight(1f)
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(if (selectedTab == StandingsTab.DRIVERS) P1TTheme.pillSelectedBg else Color.Transparent)
                     .clickable { onTabSelect(StandingsTab.DRIVERS) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = tabHorizontalPadding, vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "Driver Standings",
                     color = if (selectedTab == StandingsTab.DRIVERS) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontSize = tabFontSize,
                     fontWeight = if (selectedTab == StandingsTab.DRIVERS) FontWeight.Bold else FontWeight.Medium,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
-                    softWrap = false
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             // Constructor Standings
             Box(
                 modifier = Modifier
+                    .weight(1f)
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(if (selectedTab == StandingsTab.CONSTRUCTORS) P1TTheme.pillSelectedBg else Color.Transparent)
                     .clickable { onTabSelect(StandingsTab.CONSTRUCTORS) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = tabHorizontalPadding, vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "Constructor Standings",
                     color = if (selectedTab == StandingsTab.CONSTRUCTORS) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontSize = tabFontSize,
                     fontWeight = if (selectedTab == StandingsTab.CONSTRUCTORS) FontWeight.Bold else FontWeight.Medium,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
-                    softWrap = false
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -1015,40 +829,60 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                         )
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Leaderboard,
-                            contentDescription = "Podiums",
-                            tint = P1TTheme.textMuted,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "${driver.podiums} Podiums",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    if (driver.podiums > 0 || driver.poles > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Leaderboard,
+                                contentDescription = "Podiums",
+                                tint = P1TTheme.textMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "${driver.podiums} Podiums",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "Poles",
-                            tint = P1TTheme.textMuted,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "${driver.poles} Poles",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = "Poles",
+                                tint = P1TTheme.textMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "${driver.poles} Poles",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    } else if (driver.racesCount > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Flag,
+                                contentDescription = "Races",
+                                tint = P1TTheme.textMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "${driver.racesCount} Races",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
 
@@ -1079,27 +913,31 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // Avg Points Per Race
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Avg points per race",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp
-                            )
-                            Text(
-                                text = String.format(java.util.Locale.US, "%.2f", driver.avgPtsPerRace),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        // Avg Points Per Race (when race count or avg is available)
+                        if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Avg points per race",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.2f", driver.avgPtsPerRace),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
 
                         if (driver.recentRaces.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
 
                             // Last 3 Races Summary Header
                             Text(
@@ -1156,12 +994,23 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                                 }
                             }
                         } else if (driver.last3Summary.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                             Text(
                                 text = "Season form (${driver.last3Summary})",
                                 color = adaptiveTeamColor,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                            Text(
+                                text = "Detailed race-by-race breakdown unavailable",
+                                color = P1TTheme.textMuted,
+                                fontSize = 11.5.sp
                             )
                         }
                     }
@@ -1262,7 +1111,13 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                                 overflow = TextOverflow.Ellipsis
                             )
                             if (!constructor.gapToP1.isNullOrBlank()) {
-                                val formattedGap = if (constructor.gapToP1.startsWith("-")) constructor.gapToP1 else "-${constructor.gapToP1}"
+                                val trimmedGap = constructor.gapToP1.trim()
+                                val formattedGap = when {
+                                    trimmedGap.equals("Leader", ignoreCase = true) ||
+                                        trimmedGap.startsWith("-") ||
+                                        trimmedGap.startsWith("+") -> trimmedGap
+                                    else -> "-$trimmedGap"
+                                }
                                 Text(
                                     text = formattedGap,
                                     color = P1TTheme.textMuted,
@@ -1352,30 +1207,25 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                             .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.EmojiEvents,
-                                contentDescription = null,
-                                tint = P1TTheme.textMuted,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            val winCount = if (constructor.seasonWins.isNotEmpty()) {
-                                constructor.seasonWins.size
-                            } else {
-                                constructor.wins
-                            }
-                            Text(
-                                text = "Season race wins ($winCount wins)",
-                                color = adaptiveTeamColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
                         if (constructor.seasonWins.isNotEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = null,
+                                    tint = P1TTheme.textMuted,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "Season race wins (${constructor.seasonWins.size} wins)",
+                                    color = adaptiveTeamColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
 
                             constructor.seasonWins.forEach { win ->
@@ -1412,11 +1262,43 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                                         color = adaptiveTeamColor,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.End,
                                         maxLines = 1,
-                                        softWrap = false
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
+                        } else if (constructor.wins > 0) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = null,
+                                    tint = P1TTheme.textMuted,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "${constructor.wins} Season Win${if (constructor.wins == 1) "" else "s"}",
+                                    color = adaptiveTeamColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Detailed race-by-race breakdown unavailable",
+                                color = P1TTheme.textMuted,
+                                fontSize = 11.5.sp
+                            )
+                        } else {
+                            Text(
+                                text = "Detailed race-by-race breakdown unavailable",
+                                color = P1TTheme.textMuted,
+                                fontSize = 11.5.sp
+                            )
                         }
                     }
                 }

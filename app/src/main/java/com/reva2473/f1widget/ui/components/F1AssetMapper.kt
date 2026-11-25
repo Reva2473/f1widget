@@ -1,6 +1,7 @@
 package com.reva2473.f1widget.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,7 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -106,11 +113,15 @@ fun getDriverCutoutRes(codeOrName: String): Int? =
  */
 @DrawableRes
 fun getTeamCarRes(teamIdOrName: String): Int {
+    return getTeamCarRes(resolveTeamId(teamIdOrName))
+}
+
+internal fun resolveTeamId(teamIdOrName: String): F1TeamId {
     val trimmed = teamIdOrName.trim()
     val byShortCode = F1TeamId.entries.firstOrNull {
         it != F1TeamId.OTHER && it.shortCode.equals(trimmed, ignoreCase = true)
     }
-    return getTeamCarRes(byShortCode ?: F1TeamId.fromName(trimmed))
+    return byShortCode ?: F1TeamId.fromName(trimmed)
 }
 
 @DrawableRes
@@ -137,25 +148,40 @@ fun getTeamCarRes(team: F1TeamId): Int {
 }
 
 @DrawableRes
-fun getTeamCarResByColor(color: Color): Int {
+fun getTeamCarResByColorOrNull(color: Color): Int? {
     val targetArgb = color.toArgb()
     val matched = F1TeamId.entries.firstOrNull {
-        it != F1TeamId.OTHER && (
-            Color(it.colorHex).toArgb() == targetArgb || Color(it.secondaryHex).toArgb() == targetArgb
-            )
+        Color(it.colorHex).toArgb() == targetArgb || Color(it.secondaryHex).toArgb() == targetArgb
     }
-    if (matched != null) return getTeamCarRes(matched)
+    if (matched != null) return getTeamCarResOrNull(matched)
 
     return when {
+        // Cadillac gold
+        color.red > 0.65f && color.green in 0.50f..0.85f && color.blue < 0.45f -> R.drawable.car_cadillac
+        // Ferrari crimson vs Audi neon red-orange
+        color.red > 0.85f && color.green in 0.12f..0.32f && color.blue < 0.12f -> R.drawable.car_audi_sauber
         color.red > 0.7f && color.green < 0.2f && color.blue < 0.3f -> R.drawable.car_ferrari
-        color.green > 0.7f && color.blue > 0.6f -> R.drawable.car_mercedes
-        color.red > 0.8f && color.green in 0.4f..0.6f -> R.drawable.car_mclaren
-        color.blue > 0.7f && color.red < 0.4f -> R.drawable.car_red_bull
+        // Mercedes teal
+        color.green > 0.7f && color.blue > 0.6f && color.red < 0.3f -> R.drawable.car_mercedes
+        // McLaren papaya
+        color.red > 0.8f && color.green in 0.4f..0.6f && color.blue < 0.25f -> R.drawable.car_mclaren
+        // Williams bright sky blue vs Racing Bulls royal blue vs Red Bull cobalt blue
+        color.blue > 0.85f && color.green > 0.68f && color.red in 0.25f..0.55f -> R.drawable.car_williams
+        color.blue > 0.85f && color.green in 0.45f..0.68f && color.red in 0.25f..0.55f -> R.drawable.car_racing_bulls
+        color.blue > 0.65f && color.red < 0.45f -> R.drawable.car_red_bull
+        // Aston Martin emerald green
         color.green > 0.5f && color.blue in 0.3f..0.6f -> R.drawable.car_aston_martin
+        // Alpine pink
         color.red > 0.8f && color.blue > 0.6f -> R.drawable.car_alpine
+        // Audi green fallback
         color.green > 0.8f && color.blue < 0.4f -> R.drawable.car_audi_sauber
-        else -> R.drawable.car_haas
+        else -> null
     }
+}
+
+@DrawableRes
+fun getTeamCarResByColor(color: Color): Int {
+    return getTeamCarResByColorOrNull(color) ?: R.drawable.car_haas
 }
 
 private fun computeDriverFallbackLabel(driverCodeOrName: String, driverCode: String?): String {
@@ -188,16 +214,29 @@ fun DriverPortraitAvatar(
     useFullCutout: Boolean = false,
     driverCode: String? = null
 ) {
-    val resId = if (useFullCutout) {
-        driverCode?.let(::getDriverCutoutRes)
-            ?: getDriverCutoutRes(driverCodeOrName)
-            ?: driverCode?.let(::getDriverHeadshotRes)
-            ?: getDriverHeadshotRes(driverCodeOrName)
+    val trimmedQuery = driverCodeOrName.trim()
+    val queryTokens = trimmedQuery.split(DRIVER_NAME_SPLIT_REGEX).filter { it.isNotEmpty() }
+    val hasFullNameOrSurname = queryTokens.size >= 2 || (queryTokens.size == 1 && trimmedQuery.length > 3)
+
+    val resId = if (hasFullNameOrSurname) {
+        if (useFullCutout) {
+            getDriverCutoutRes(trimmedQuery) ?: getDriverHeadshotRes(trimmedQuery)
+        } else {
+            getDriverHeadshotRes(trimmedQuery) ?: getDriverCutoutRes(trimmedQuery)
+        }
     } else {
-        driverCode?.let(::getDriverHeadshotRes)
-            ?: getDriverHeadshotRes(driverCodeOrName)
-            ?: driverCode?.let(::getDriverCutoutRes)
-            ?: getDriverCutoutRes(driverCodeOrName)
+        val fallbackCode = driverCode?.trim()?.takeIf { it.isNotEmpty() }
+        if (useFullCutout) {
+            getDriverCutoutRes(trimmedQuery)
+                ?: fallbackCode?.let(::getDriverCutoutRes)
+                ?: getDriverHeadshotRes(trimmedQuery)
+                ?: fallbackCode?.let(::getDriverHeadshotRes)
+        } else {
+            getDriverHeadshotRes(trimmedQuery)
+                ?: fallbackCode?.let(::getDriverHeadshotRes)
+                ?: getDriverCutoutRes(trimmedQuery)
+                ?: fallbackCode?.let(::getDriverCutoutRes)
+        }
     }
 
     Box(
@@ -262,6 +301,105 @@ fun DriverPortraitAvatar(
 }
 
 /**
+ * Clean vector side-profile F1 car silhouette used as fallback when no team car PNG is available
+ * (e.g., historical or unlisted constructors mapped to F1TeamId.OTHER).
+ */
+@Composable
+fun GenericF1CarSideVector(
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        // Carbon floor & diffuser
+        val floorPath = Path().apply {
+            moveTo(0.06f * w, 0.72f * h)
+            lineTo(0.94f * w, 0.72f * h)
+            lineTo(0.96f * w, 0.65f * h)
+            lineTo(0.86f * w, 0.65f * h)
+            lineTo(0.14f * w, 0.67f * h)
+            close()
+        }
+        drawPath(floorPath, color = Color(0xFF1E1E24))
+
+        // Main chassis / engine cover / nose silhouette (facing right)
+        val bodyPath = Path().apply {
+            moveTo(0.10f * w, 0.56f * h) // Rear wing pylon join
+            lineTo(0.24f * w, 0.34f * h) // Airbox / shark fin top
+            lineTo(0.42f * w, 0.34f * h)
+            lineTo(0.50f * w, 0.46f * h) // Cockpit rim
+            lineTo(0.62f * w, 0.46f * h) // Nose bridge
+            lineTo(0.91f * w, 0.62f * h) // Low nose tip
+            lineTo(0.91f * w, 0.67f * h)
+            lineTo(0.12f * w, 0.67f * h)
+            close()
+        }
+        drawPath(bodyPath, color = accentColor)
+        drawPath(
+            bodyPath,
+            color = Color.White.copy(alpha = 0.25f),
+            style = Stroke(width = 1.dp.toPx(), join = StrokeJoin.Round)
+        )
+
+        // Sidepod undercut highlight
+        val sidepodPath = Path().apply {
+            moveTo(0.32f * w, 0.52f * h)
+            lineTo(0.60f * w, 0.52f * h)
+            lineTo(0.56f * w, 0.65f * h)
+            lineTo(0.28f * w, 0.65f * h)
+            close()
+        }
+        drawPath(sidepodPath, color = Color.Black.copy(alpha = 0.24f))
+
+        // Halo hoop over cockpit
+        drawLine(
+            color = Color(0xFF282832),
+            start = Offset(0.43f * w, 0.38f * h),
+            end = Offset(0.58f * w, 0.45f * h),
+            strokeWidth = 2.5.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+
+        // Rear wing
+        drawRect(
+            color = Color(0xFF22222A),
+            topLeft = Offset(0.05f * w, 0.28f * h),
+            size = Size(0.10f * w, 0.28f * h)
+        )
+        drawRect(
+            color = accentColor,
+            topLeft = Offset(0.04f * w, 0.28f * h),
+            size = Size(0.12f * w, 0.06f * h)
+        )
+
+        // Front wing
+        drawRect(
+            color = accentColor,
+            topLeft = Offset(0.84f * w, 0.64f * h),
+            size = Size(0.13f * w, 0.06f * h)
+        )
+
+        // Rear & Front Tyres
+        val tyreRadius = (0.145f * h).coerceAtMost(0.09f * w)
+        val rearWheelCenter = Offset(0.22f * w, 0.64f * h)
+        val frontWheelCenter = Offset(0.77f * w, 0.64f * h)
+        listOf(rearWheelCenter, frontWheelCenter).forEach { center ->
+            drawCircle(color = Color(0xFF111116), radius = tyreRadius, center = center)
+            drawCircle(
+                color = accentColor.copy(alpha = 0.85f),
+                radius = tyreRadius * 0.62f,
+                center = center,
+                style = Stroke(width = 1.6.dp.toPx())
+            )
+            drawCircle(color = Color(0xFF3A3A44), radius = tyreRadius * 0.28f, center = center)
+        }
+    }
+}
+
+/**
  * Reusable F1 team car cutout image component.
  */
 @Composable
@@ -270,12 +408,11 @@ fun TeamCarShowcaseImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit
 ) {
-    val carRes = getTeamCarRes(teamIdOrName)
-    Image(
-        painter = painterResource(id = carRes),
-        contentDescription = "$teamIdOrName Car",
-        contentScale = contentScale,
-        modifier = modifier
+    val team = resolveTeamId(teamIdOrName)
+    TeamCarShowcaseImage(
+        team = team,
+        modifier = modifier,
+        contentScale = contentScale
     )
 }
 
@@ -285,11 +422,18 @@ fun TeamCarShowcaseImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit
 ) {
-    val carRes = getTeamCarRes(team)
-    Image(
-        painter = painterResource(id = carRes),
-        contentDescription = "${team.displayName} Car",
-        contentScale = contentScale,
-        modifier = modifier
-    )
+    val carRes = getTeamCarResOrNull(team)
+    if (carRes != null) {
+        Image(
+            painter = painterResource(id = carRes),
+            contentDescription = "${team.displayName} Car",
+            contentScale = contentScale,
+            modifier = modifier
+        )
+    } else {
+        GenericF1CarSideVector(
+            accentColor = Color(team.colorHex),
+            modifier = modifier
+        )
+    }
 }

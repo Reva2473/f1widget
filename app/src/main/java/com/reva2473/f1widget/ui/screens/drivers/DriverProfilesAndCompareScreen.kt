@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,12 +67,18 @@ fun DriverProfilesScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCompare: () -> Unit,
     onDriverSelected: (DriverStanding) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
+    onRetry: () -> Unit = {}
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showYearDialog by remember { mutableStateOf(false) }
 
-    val yearsList = listOf(2026, 2025, 2024, 2023, 2022)
+    val yearsList = remember(selectedYear) {
+        val base = listOf(2026, 2025, 2024, 2023, 2022)
+        if (selectedYear in base) base else listOf(selectedYear) + base
+    }
 
     val filteredDrivers = remember(drivers, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -292,15 +299,59 @@ fun DriverProfilesScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${filteredDrivers.size} drivers",
+                        text = when {
+                            isLoading -> "Loading..."
+                            !errorMessage.isNullOrBlank() -> "Unavailable"
+                            else -> "${filteredDrivers.size} drivers"
+                        },
                         color = P1TTheme.textMuted,
                         fontSize = 12.sp
                     )
                 }
             }
 
-            // Drivers List Rows or Empty States
-            if (drivers.isEmpty()) {
+            // Drivers List Rows or Loading / Error / Empty States
+            if (isLoading) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent),
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Text(
+                                text = "Loading $selectedYear drivers...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            } else if (!errorMessage.isNullOrBlank()) {
+                item {
+                    EmptyDriversStateCard(
+                        title = "Unable to load $selectedYear drivers",
+                        subtitle = errorMessage,
+                        actionLabel = "Retry",
+                        onAction = onRetry
+                    )
+                }
+            } else if (drivers.isEmpty()) {
                 item {
                     EmptyDriversStateCard(
                         title = "No driver data for $selectedYear",
@@ -431,9 +482,9 @@ private fun DriverRowCard(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Real Driver Portrait Avatar
+            // Real Driver Portrait Avatar (pass fullName to avoid code collisions with historical drivers)
             DriverPortraitAvatar(
-                driverCodeOrName = driver.code,
+                driverCodeOrName = driver.fullName.ifBlank { driver.code },
                 teamColor = Color(driver.team.colorHex),
                 size = 46.dp
             )
@@ -443,17 +494,18 @@ private fun DriverRowCard(
             // Main Info Column
             Column(modifier = Modifier.weight(1f)) {
                 // Top subtitle / wins
+                val winsLabel = if (driver.wins == 1) "1 win" else "${driver.wins} wins"
                 val rawGap = driver.gapToLeader?.trim().orEmpty()
                 val subtitle = when {
                     driver.position == 1 ->
-                        "${driver.wins} wins · Championship Leader"
+                        "$winsLabel · Championship Leader"
                     rawGap.isBlank() || rawGap.equals("Leader", ignoreCase = true) ->
-                        "${driver.wins} wins · —"
+                        "$winsLabel · —"
                     rawGap.contains("to leader", ignoreCase = true) || rawGap.contains("to P1", ignoreCase = true) ->
-                        "${driver.wins} wins · $rawGap"
+                        "$winsLabel · $rawGap"
                     else -> {
                         val signedGap = if (rawGap.startsWith("-") || rawGap.startsWith("+")) rawGap else "-$rawGap"
-                        "${driver.wins} wins · $signedGap to P1"
+                        "$winsLabel · $signedGap to P1"
                     }
                 }
 
@@ -627,6 +679,17 @@ private fun YearSelectionDialog(
     }
 }
 
+private fun isCareerComparisonDriver(
+    driver: DriverCareerComparison,
+    careerDrivers: List<DriverCareerComparison>
+): Boolean {
+    return careerDrivers.any { career ->
+        career.driverId.equals(driver.driverId, ignoreCase = true) ||
+            (career.firstName.equals(driver.firstName, ignoreCase = true) &&
+                career.lastName.equals(driver.lastName, ignoreCase = true))
+    }
+}
+
 /**
  * Screen 2: CompareDriversScreen
  * Exact 1:1 replica of compare-drivers-1080.webp
@@ -641,9 +704,21 @@ fun CompareDriversScreen(
     onSelectDriver2: (DriverCareerComparison) -> Unit,
     onSwapDrivers: () -> Unit,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedYear: Int = 2026
 ) {
     var showDriverPickerForSlot by remember { mutableStateOf<Int?>(null) }
+
+    val seedCareerDrivers = remember { SeedDataProvider.getDriverComparisons() }
+    val careerDriversReference = remember(availableDrivers, seedCareerDrivers) {
+        (availableDrivers + seedCareerDrivers).distinctBy { it.driverId.lowercase() }
+    }
+    val isD1Career = remember(driver1, careerDriversReference) {
+        isCareerComparisonDriver(driver1, careerDriversReference)
+    }
+    val isD2Career = remember(driver2, careerDriversReference) {
+        isCareerComparisonDriver(driver2, careerDriversReference)
+    }
 
     val allAvailableDrivers = remember(availableDrivers) {
         val existingCodes = availableDrivers.map { it.code.uppercase() }.toSet()
@@ -733,9 +808,15 @@ fun CompareDriversScreen(
                 )
             }
 
-            // CAREER STATISTICS Card
+            // CAREER / SEASON STATISTICS Card
             item {
-                CareerStatisticsCard(driver1 = driver1, driver2 = driver2)
+                CareerStatisticsCard(
+                    driver1 = driver1,
+                    driver2 = driver2,
+                    isD1Career = isD1Career,
+                    isD2Career = isD2Career,
+                    selectedYear = selectedYear
+                )
             }
 
             // SUCCESS RATES Card
@@ -744,7 +825,7 @@ fun CompareDriversScreen(
             }
 
             item {
-                Spacer(modifier = Modifier.height(72.dp))
+                Spacer(modifier = Modifier.navigationBarsPadding().height(72.dp))
             }
         }
     }
@@ -782,12 +863,15 @@ private fun SplitHeroBanner(
     val d1TeamColor = Color(driver1.team.colorHex)
     val d1BgOuter = d1TeamColor.copy(alpha = if (isDark) 0.42f else 0.85f).compositeOver(surfaceColor)
     val d1BgInner = d1TeamColor.copy(alpha = if (isDark) 0.26f else 0.68f).compositeOver(surfaceColor)
-    val d1TextColor = P1TTheme.onColor(d1BgInner)
+    val d1TextColor = P1TTheme.onColor(d1BgOuter)
 
     val d2TeamColor = Color(driver2.team.colorHex)
     val d2BgOuter = d2TeamColor.copy(alpha = if (isDark) 0.42f else 0.85f).compositeOver(surfaceColor)
     val d2BgInner = d2TeamColor.copy(alpha = if (isDark) 0.26f else 0.68f).compositeOver(surfaceColor)
-    val d2TextColor = P1TTheme.onColor(d2BgInner)
+    val d2TextColor = P1TTheme.onColor(d2BgOuter)
+
+    val d1FullName = "${driver1.firstName} ${driver1.lastName}".trim().ifBlank { driver1.code }
+    val d2FullName = "${driver2.firstName} ${driver2.lastName}".trim().ifBlank { driver2.code }
 
     Box(
         modifier = Modifier
@@ -809,7 +893,7 @@ private fun SplitHeroBanner(
                     .fillMaxHeight()
                     .background(Brush.horizontalGradient(listOf(d1BgOuter, d1BgInner)))
                     .clickable(onClick = onPickDriver1)
-                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                    .padding(start = 10.dp, end = 22.dp, top = 12.dp, bottom = 12.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 Row(
@@ -817,7 +901,7 @@ private fun SplitHeroBanner(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     DriverPortraitAvatar(
-                        driverCodeOrName = driver1.code,
+                        driverCodeOrName = d1FullName,
                         teamColor = d1TeamColor,
                         size = 46.dp,
                         useFullCutout = true
@@ -826,15 +910,15 @@ private fun SplitHeroBanner(
                     Spacer(modifier = Modifier.width(6.dp))
 
                     Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 18.dp)
+                        modifier = Modifier.weight(1f)
                     ) {
                         Text(
                             text = driver1.code,
                             color = d1TextColor,
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Black
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "${driver1.firstName} ${driver1.lastName.uppercase()}",
@@ -855,7 +939,9 @@ private fun SplitHeroBanner(
                         Text(
                             text = "Tap to change ▾",
                             color = d1TextColor.copy(alpha = 0.82f),
-                            fontSize = 10.sp
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -868,7 +954,7 @@ private fun SplitHeroBanner(
                     .fillMaxHeight()
                     .background(Brush.horizontalGradient(listOf(d2BgInner, d2BgOuter)))
                     .clickable(onClick = onPickDriver2)
-                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                    .padding(start = 22.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Row(
@@ -877,15 +963,15 @@ private fun SplitHeroBanner(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.End,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 18.dp)
+                        modifier = Modifier.weight(1f)
                     ) {
                         Text(
                             text = driver2.code,
                             color = d2TextColor,
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Black
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "${driver2.firstName} ${driver2.lastName.uppercase()}",
@@ -907,14 +993,16 @@ private fun SplitHeroBanner(
                         Text(
                             text = "▾ Tap to change",
                             color = d2TextColor.copy(alpha = 0.82f),
-                            fontSize = 10.sp
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
                     Spacer(modifier = Modifier.width(6.dp))
 
                     DriverPortraitAvatar(
-                        driverCodeOrName = driver2.code,
+                        driverCodeOrName = d2FullName,
                         teamColor = d2TeamColor,
                         size = 46.dp,
                         useFullCutout = true
@@ -944,13 +1032,27 @@ private fun SplitHeroBanner(
 }
 
 /**
- * CAREER STATISTICS Card with dual horizontal comparison bars facing center
+ * CAREER / SEASON STATISTICS Card with dual horizontal comparison bars facing center
  */
 @Composable
 private fun CareerStatisticsCard(
     driver1: DriverCareerComparison,
-    driver2: DriverCareerComparison
+    driver2: DriverCareerComparison,
+    isD1Career: Boolean = true,
+    isD2Career: Boolean = true,
+    selectedYear: Int = 2026
 ) {
+    val sectionTitle = when {
+        isD1Career && isD2Career -> "CAREER STATISTICS"
+        !isD1Career && !isD2Career -> "$selectedYear SEASON STATISTICS"
+        else -> "STATISTICS · CAREER VS $selectedYear SEASON"
+    }
+    val pointsLabel = when {
+        isD1Career && isD2Career -> "Career Points"
+        !isD1Career && !isD2Career -> "$selectedYear Season Points"
+        else -> "Points"
+    }
+
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -963,24 +1065,34 @@ private fun CareerStatisticsCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "CAREER STATISTICS",
+                text = sectionTitle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
+            if (isD1Career != isD2Career) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${driver1.code}: ${if (isD1Career) "Career" else "$selectedYear Season"} · ${driver2.code}: ${if (isD2Career) "Career" else "$selectedYear Season"}",
+                    color = P1TTheme.textMuted,
+                    fontSize = 11.sp
+                )
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            ComparisonStatRow(
-                label = "Championships",
-                val1 = driver1.championships.toDouble(),
-                val2 = driver2.championships.toDouble(),
-                text1 = driver1.championships.toString(),
-                text2 = driver2.championships.toString(),
-                color1 = Color(driver1.team.colorHex),
-                color2 = Color(driver2.team.colorHex)
-            )
+            if (isD1Career || isD2Career) {
+                ComparisonStatRow(
+                    label = "Championships",
+                    val1 = if (isD1Career) driver1.championships.toDouble() else 0.0,
+                    val2 = if (isD2Career) driver2.championships.toDouble() else 0.0,
+                    text1 = if (isD1Career) driver1.championships.toString() else "—",
+                    text2 = if (isD2Career) driver2.championships.toString() else "—",
+                    color1 = Color(driver1.team.colorHex),
+                    color2 = Color(driver2.team.colorHex)
+                )
+            }
 
             ComparisonStatRow(
                 label = "Race Wins",
@@ -1012,18 +1124,20 @@ private fun CareerStatisticsCard(
                 color2 = Color(driver2.team.colorHex)
             )
 
-            ComparisonStatRow(
-                label = "Fastest Laps",
-                val1 = driver1.fastestLaps.toDouble(),
-                val2 = driver2.fastestLaps.toDouble(),
-                text1 = driver1.fastestLaps.toString(),
-                text2 = driver2.fastestLaps.toString(),
-                color1 = Color(driver1.team.colorHex),
-                color2 = Color(driver2.team.colorHex)
-            )
+            if (isD1Career || isD2Career) {
+                ComparisonStatRow(
+                    label = "Fastest Laps",
+                    val1 = if (isD1Career) driver1.fastestLaps.toDouble() else 0.0,
+                    val2 = if (isD2Career) driver2.fastestLaps.toDouble() else 0.0,
+                    text1 = if (isD1Career) driver1.fastestLaps.toString() else "—",
+                    text2 = if (isD2Career) driver2.fastestLaps.toString() else "—",
+                    color1 = Color(driver1.team.colorHex),
+                    color2 = Color(driver2.team.colorHex)
+                )
+            }
 
             ComparisonStatRow(
-                label = "Career Points",
+                label = pointsLabel,
                 val1 = driver1.careerPoints,
                 val2 = driver2.careerPoints,
                 text1 = formatCleanNumber(driver1.careerPoints),
@@ -1042,17 +1156,19 @@ private fun CareerStatisticsCard(
                 color2 = Color(driver2.team.colorHex)
             )
 
-            // For DNFs: lower value is better!
-            ComparisonStatRow(
-                label = "DNFs",
-                val1 = driver1.dnfs.toDouble(),
-                val2 = driver2.dnfs.toDouble(),
-                text1 = driver1.dnfs.toString(),
-                text2 = driver2.dnfs.toString(),
-                color1 = Color(driver1.team.colorHex),
-                color2 = Color(driver2.team.colorHex),
-                lowerIsBetter = true
-            )
+            if (isD1Career || isD2Career) {
+                // For DNFs: lower value is better!
+                ComparisonStatRow(
+                    label = "DNFs",
+                    val1 = if (isD1Career) driver1.dnfs.toDouble() else 0.0,
+                    val2 = if (isD2Career) driver2.dnfs.toDouble() else 0.0,
+                    text1 = if (isD1Career) driver1.dnfs.toString() else "—",
+                    text2 = if (isD2Career) driver2.dnfs.toString() else "—",
+                    color1 = Color(driver1.team.colorHex),
+                    color2 = Color(driver2.team.colorHex),
+                    lowerIsBetter = true
+                )
+            }
         }
     }
 }
@@ -1135,37 +1251,23 @@ private fun ComparisonStatRow(
 ) {
     val clean1 = if (val1.isNaN() || val1.isInfinite()) 0.0 else val1.coerceAtLeast(0.0)
     val clean2 = if (val2.isNaN() || val2.isInfinite()) 0.0 else val2.coerceAtLeast(0.0)
+    val hasMissing = text1 == "—" || text2 == "—"
 
+    // Always render actual relative magnitude so 0 DNFs renders 0 width rather than a misleading 100% bar
     val (ratio1, ratio2) = when {
-        clean1 == 0.0 && clean2 == 0.0 -> 0.5f to 0.5f
+        clean1 == 0.0 && clean2 == 0.0 -> 0f to 0f
         clean1 == clean2 -> 0.5f to 0.5f
-        lowerIsBetter -> {
-            when {
-                clean1 == 0.0 -> 1f to 0f
-                clean2 == 0.0 -> 0f to 1f
-                else -> {
-                    val total = clean1 + clean2
-                    val inv1 = (1f - (clean1 / total).toFloat()).coerceIn(0.08f, 0.92f)
-                    val inv2 = (1f - (clean2 / total).toFloat()).coerceIn(0.08f, 0.92f)
-                    inv1 to inv2
-                }
-            }
-        }
+        clean1 == 0.0 -> 0f to 1f
+        clean2 == 0.0 -> 1f to 0f
         else -> {
-            when {
-                clean1 == 0.0 -> 0f to 1f
-                clean2 == 0.0 -> 1f to 0f
-                else -> {
-                    val total = clean1 + clean2
-                    (clean1 / total).toFloat().coerceIn(0.08f, 0.92f) to
-                        (clean2 / total).toFloat().coerceIn(0.08f, 0.92f)
-                }
-            }
+            val total = clean1 + clean2
+            (clean1 / total).toFloat().coerceIn(0.08f, 0.92f) to
+                (clean2 / total).toFloat().coerceIn(0.08f, 0.92f)
         }
     }
 
-    val is1Better = if (lowerIsBetter) clean1 < clean2 else clean1 > clean2
-    val is2Better = if (lowerIsBetter) clean2 < clean1 else clean2 > clean1
+    val is1Better = !hasMissing && if (lowerIsBetter) clean1 < clean2 else clean1 > clean2
+    val is2Better = !hasMissing && if (lowerIsBetter) clean2 < clean1 else clean2 > clean1
     val adaptiveColor1 = P1TTheme.adaptiveTeamText(color1)
     val adaptiveColor2 = P1TTheme.adaptiveTeamText(color2)
 
@@ -1185,14 +1287,33 @@ private fun ComparisonStatRow(
                 modifier = Modifier.weight(1f)
             )
 
-            Text(
-                text = label,
-                color = P1TTheme.textMuted,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(horizontal = 8.dp)
-            )
+            ) {
+                Text(
+                    text = label,
+                    color = P1TTheme.textMuted,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+                if (lowerIsBetter) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = P1TTheme.pillBg
+                    ) {
+                        Text(
+                            text = "Lower better",
+                            color = P1TTheme.textMuted,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
 
             Text(
                 text = text2,
@@ -1217,16 +1338,20 @@ private fun ComparisonStatRow(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp))
+                    .background(P1TTheme.dividerSubtle.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(ratio1)
-                        .clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp))
-                        .background(if (is1Better) color1 else color1.copy(alpha = 0.4f))
-                )
+                if (ratio1 > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(ratio1)
+                            .clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp))
+                            .background(if (is1Better) color1 else color1.copy(alpha = 0.4f))
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(4.dp))
@@ -1235,16 +1360,20 @@ private fun ComparisonStatRow(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                    .background(P1TTheme.dividerSubtle.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(ratio2)
-                        .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
-                        .background(if (is2Better) color2 else color2.copy(alpha = 0.4f))
-                )
+                if (ratio2 > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(ratio2)
+                            .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                            .background(if (is2Better) color2 else color2.copy(alpha = 0.4f))
+                    )
+                }
             }
         }
     }
@@ -1301,7 +1430,10 @@ private fun DriverPickerDialog(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(availableDrivers, key = { it.driverId.ifBlank { it.code } }) { drv ->
+                    itemsIndexed(
+                        items = availableDrivers,
+                        key = { index, it -> "${it.driverId}_${it.code}_$index" }
+                    ) { _, drv ->
                         val isCurrent = drv.code == currentSelectedCode
                         val isOpposite = drv.code == oppositeSelectedCode
                         val isEnabled = !isOpposite

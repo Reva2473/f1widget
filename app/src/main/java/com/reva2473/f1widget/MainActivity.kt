@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -18,7 +19,12 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -39,7 +45,7 @@ import com.reva2473.f1widget.ui.screens.settings.SettingsAndWidgetsScreen
 import com.reva2473.f1widget.ui.screens.standings.StandingsScreen
 import com.reva2473.f1widget.ui.screens.weekend.RaceWeekendScreen
 import com.reva2473.f1widget.ui.theme.F1WidgetTheme
-import com.reva2473.f1widget.worker.WidgetRefreshScheduler
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -52,10 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        WidgetRefreshScheduler.schedulePeriodicRefresh(applicationContext)
-        if (savedInstanceState == null) {
-            handleIntent(intent)
-        }
+        handleIntent(intent)
         addOnNewIntentListener { newIntent ->
             setIntent(newIntent)
             handleIntent(newIntent)
@@ -71,11 +74,33 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val context = LocalContext.current
+            var pendingReminderAction by remember { mutableStateOf<(() -> Unit)?>(null) }
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission()
-            ) { _ -> }
+            ) { granted ->
+                val action = pendingReminderAction
+                pendingReminderAction = null
+                if (granted) {
+                    action?.invoke()
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Notification permission is required for session reminders",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            LaunchedEffect(viewModel, context) {
+                viewModel.userFeedback.collect { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            }
+
             val state by viewModel.uiState.collectAsStateWithLifecycle()
-            val isDark = when (state.userPreferences.themeMode) {
+            val currentSeasonDrivers = state.currentSeasonDriverStandings.ifEmpty { state.driverStandings }
+            val currentSeasonConstructors = state.currentSeasonConstructorStandings.ifEmpty { state.constructorStandings }
+            val isDark = when (state.userPreferences.themeMode.trim().uppercase(Locale.ROOT)) {
                 "LIGHT" -> false
                 "SYSTEM" -> isSystemInDarkTheme()
                 else -> true
@@ -108,151 +133,172 @@ class MainActivity : ComponentActivity() {
                 themeMode = state.userPreferences.themeMode
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Screen Content Router with animated transitions
+                    val stateHolder = rememberSaveableStateHolder()
+                    // Screen Content Router with animated transitions and preserved tab state
                     AnimatedContent(
                         targetState = state.currentScreen,
                         label = "ScreenTransition"
                     ) { targetScreen ->
-                        when (targetScreen) {
-                            AppScreen.HOME -> {
-                                HomeScreen(
-                                    weekend = state.raceWeekend,
-                                    liveSession = state.liveSession,
-                                    driverStandings = state.driverStandings,
-                                    constructorStandings = state.constructorStandings,
-                                    lastCompletedRace = state.lastCompletedRace,
-                                    showBottomBar = false,
-                                    onNavigateToLiveTiming = { viewModel.navigateTo(AppScreen.LIVE_TIMING) },
-                                    onNavigateToStandings = { viewModel.navigateTo(AppScreen.STANDINGS) },
-                                    onNavigateToWeekend = { viewModel.navigateTo(AppScreen.RACE_WEEKEND) },
-                                    onNavigateToExplore = { viewModel.navigateTo(AppScreen.DRIVER_PROFILES) },
-                                    onNavigateToSettings = { viewModel.navigateTo(AppScreen.SETTINGS_WIDGETS) },
-                                    onTabSelected = { tab -> handleBottomTabSelection(tab, viewModel) }
-                                )
-                            }
+                        stateHolder.SaveableStateProvider(targetScreen) {
+                            when (targetScreen) {
+                                AppScreen.HOME -> {
+                                    val liveSession by viewModel.liveSessionFlow.collectAsStateWithLifecycle()
+                                    HomeScreen(
+                                        weekend = state.raceWeekend,
+                                        liveSession = liveSession,
+                                        driverStandings = currentSeasonDrivers,
+                                        constructorStandings = currentSeasonConstructors,
+                                        lastCompletedRace = state.lastCompletedRace,
+                                        showBottomBar = false,
+                                        onNavigateToLiveTiming = { viewModel.navigateTo(AppScreen.LIVE_TIMING) },
+                                        onNavigateToStandings = { viewModel.navigateTo(AppScreen.STANDINGS) },
+                                        onNavigateToWeekend = { viewModel.navigateTo(AppScreen.RACE_WEEKEND) },
+                                        onNavigateToExplore = { viewModel.navigateTo(AppScreen.DRIVER_PROFILES) },
+                                        onNavigateToSettings = { viewModel.navigateTo(AppScreen.SETTINGS_WIDGETS) },
+                                        onLastRaceTap = { viewModel.openLastCompletedRace() },
+                                        onArchiveTap = { viewModel.navigateTo(AppScreen.STANDINGS) },
+                                        onTabSelected = { tab -> handleBottomTabSelection(tab, viewModel) }
+                                    )
+                                }
 
-                            AppScreen.STANDINGS -> {
-                                StandingsScreen(
-                                    driverStandings = state.driverStandings,
-                                    constructorStandings = state.constructorStandings,
-                                    selectedYear = state.selectedYear,
-                                    initialTab = state.standingsInitialTab,
-                                    isLoading = state.isStandingsLoading,
-                                    errorMessage = state.standingsError,
-                                    showBottomBar = false,
-                                    onYearSelected = { viewModel.setYear(it) },
-                                    onBackClick = { viewModel.navigateBack() },
-                                    onTabSelected = { tab -> handleBottomTabSelection(tab, viewModel) }
-                                )
-                            }
+                                AppScreen.STANDINGS -> {
+                                    StandingsScreen(
+                                        driverStandings = state.driverStandings,
+                                        constructorStandings = state.constructorStandings,
+                                        selectedYear = state.selectedYear,
+                                        initialTab = state.standingsInitialTab,
+                                        navigationToken = state.navigationToken,
+                                        isLoading = state.isStandingsLoading,
+                                        errorMessage = state.standingsError,
+                                        showBottomBar = false,
+                                        onYearSelected = { viewModel.setYear(it) },
+                                        onBackClick = { viewModel.navigateBack() },
+                                        onTabSelected = { tab -> handleBottomTabSelection(tab, viewModel) }
+                                    )
+                                }
 
-                            AppScreen.RACE_WEEKEND -> {
-                                RaceWeekendScreen(
-                                    weekend = state.raceWeekend,
-                                    schedule = state.fullSchedule2026,
-                                    initialTab = state.raceWeekendInitialTab,
-                                    reminderSessionKeys = state.reminderSessionKeys,
-                                    showBottomBar = false,
-                                    onToggleSessionReminder = { sessionKey, enabled ->
-                                        if (enabled &&
-                                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                            !SessionReminderScheduler.hasNotificationPermission(context)
-                                        ) {
-                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                AppScreen.RACE_WEEKEND -> {
+                                    RaceWeekendScreen(
+                                        weekend = state.raceWeekend,
+                                        selectedGrandPrix = state.selectedGrandPrix,
+                                        schedule = state.fullSchedule2026,
+                                        initialTab = state.raceWeekendInitialTab,
+                                        navigationToken = state.navigationToken,
+                                        reminderSessionKeys = state.reminderSessionKeys,
+                                        showBottomBar = false,
+                                        onToggleSessionReminder = { sessionKey, enabled ->
+                                            if (enabled &&
+                                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                                !SessionReminderScheduler.hasNotificationPermission(context)
+                                            ) {
+                                                pendingReminderAction = {
+                                                    viewModel.toggleSessionReminder(sessionKey, true)
+                                                }
+                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            } else {
+                                                viewModel.toggleSessionReminder(sessionKey, enabled)
+                                            }
+                                        },
+                                        onSelectGrandPrix = { viewModel.selectGrandPrix(it) },
+                                        onBackClick = { viewModel.navigateBack() },
+                                        onTabSelected = { tab -> handleBottomTabSelection(tab, viewModel) }
+                                    )
+                                }
+
+                                AppScreen.DRIVER_PROFILES -> {
+                                    DriverProfilesScreen(
+                                        drivers = state.driverStandings,
+                                        selectedYear = state.selectedYear,
+                                        isLoading = state.isStandingsLoading,
+                                        errorMessage = state.standingsError,
+                                        onRetry = { viewModel.setYear(state.selectedYear) },
+                                        onYearSelected = { viewModel.setYear(it) },
+                                        onNavigateBack = { viewModel.navigateBack() },
+                                        onNavigateToCompare = { viewModel.navigateTo(AppScreen.COMPARE_DRIVERS) },
+                                        onDriverSelected = { driver ->
+                                            // Find matching career comparison driver or construct non-fabricated stats from standing
+                                            val match = state.careerComparisons.firstOrNull {
+                                                it.code.equals(driver.code, ignoreCase = true) ||
+                                                    it.driverId.equals(driver.driverId, ignoreCase = true)
+                                            } ?: SeedDataProvider.getDriverComparisons().firstOrNull {
+                                                it.code.equals(driver.code, ignoreCase = true) ||
+                                                    it.driverId.equals(driver.driverId, ignoreCase = true)
+                                            } ?: run {
+                                                val raceStarts = driver.racesCount.coerceAtLeast(0)
+                                                val poles = driver.poles.coerceAtLeast(0)
+                                                DriverCareerComparison(
+                                                    driverId = driver.driverId,
+                                                    code = driver.code,
+                                                    firstName = driver.firstName,
+                                                    lastName = driver.lastName,
+                                                    nationality = driver.nationality,
+                                                    team = driver.team,
+                                                    championships = 0,
+                                                    raceWins = driver.wins,
+                                                    podiums = driver.podiums,
+                                                    polePositions = poles,
+                                                    fastestLaps = 0,
+                                                    careerPoints = driver.points,
+                                                    raceStarts = raceStarts,
+                                                    dnfs = 0,
+                                                    winRatePercent = if (raceStarts > 0) (driver.wins * 100.0 / raceStarts).coerceAtLeast(0.0) else 0.0,
+                                                    podiumRatePercent = if (raceStarts > 0) (driver.podiums * 100.0 / raceStarts).coerceAtLeast(0.0) else 0.0,
+                                                    poleRatePercent = if (raceStarts > 0) (poles * 100.0 / raceStarts).coerceAtLeast(0.0) else 0.0
+                                                )
+                                            }
+                                            viewModel.setCompareDriver1(match)
+                                            viewModel.navigateTo(AppScreen.COMPARE_DRIVERS)
                                         }
-                                        viewModel.toggleSessionReminder(sessionKey, enabled)
-                                    },
-                                    onSelectGrandPrix = { viewModel.selectGrandPrix(it) },
-                                    onBackClick = { viewModel.navigateBack() },
-                                    onTabSelected = { tab -> handleBottomTabSelection(tab, viewModel) }
-                                )
-                            }
+                                    )
+                                }
 
-                            AppScreen.DRIVER_PROFILES -> {
-                                DriverProfilesScreen(
-                                    drivers = state.driverStandings,
-                                    selectedYear = state.selectedYear,
-                                    onYearSelected = { viewModel.setYear(it) },
-                                    onNavigateBack = { viewModel.navigateBack() },
-                                    onNavigateToCompare = { viewModel.navigateTo(AppScreen.COMPARE_DRIVERS) },
-                                    onDriverSelected = { driver ->
-                                        // Find matching career comparison driver or construct non-fabricated stats from standing
-                                        val match = state.careerComparisons.firstOrNull {
-                                            it.code.equals(driver.code, ignoreCase = true) ||
-                                                it.driverId.equals(driver.driverId, ignoreCase = true)
-                                        } ?: SeedDataProvider.getDriverComparisons().firstOrNull {
-                                            it.code.equals(driver.code, ignoreCase = true) ||
-                                                it.driverId.equals(driver.driverId, ignoreCase = true)
-                                        } ?: run {
-                                            val raceStarts = driver.racesCount.coerceAtLeast(0)
-                                            val poles = driver.poles.coerceAtLeast(0)
-                                            DriverCareerComparison(
-                                                driverId = driver.driverId,
-                                                code = driver.code,
-                                                firstName = driver.firstName,
-                                                lastName = driver.lastName,
-                                                nationality = driver.nationality,
-                                                team = driver.team,
-                                                championships = 0,
-                                                raceWins = driver.wins,
-                                                podiums = driver.podiums,
-                                                polePositions = poles,
-                                                fastestLaps = 0,
-                                                careerPoints = driver.points,
-                                                raceStarts = raceStarts,
-                                                dnfs = 0,
-                                                winRatePercent = if (raceStarts > 0) (driver.wins * 100.0 / raceStarts).coerceAtLeast(0.0) else 0.0,
-                                                podiumRatePercent = if (raceStarts > 0) (driver.podiums * 100.0 / raceStarts).coerceAtLeast(0.0) else 0.0,
-                                                poleRatePercent = if (raceStarts > 0) (poles * 100.0 / raceStarts).coerceAtLeast(0.0) else 0.0
-                                            )
-                                        }
-                                        viewModel.setCompareDriver1(match)
-                                        viewModel.navigateTo(AppScreen.COMPARE_DRIVERS)
-                                    }
-                                )
-                            }
+                                AppScreen.COMPARE_DRIVERS -> {
+                                    CompareDriversScreen(
+                                        driver1 = state.compareDriver1,
+                                        driver2 = state.compareDriver2,
+                                        availableDrivers = state.careerComparisons,
+                                        onSelectDriver1 = { viewModel.setCompareDriver1(it) },
+                                        onSelectDriver2 = { viewModel.setCompareDriver2(it) },
+                                        onSwapDrivers = { viewModel.swapCompareDrivers() },
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+                                }
 
-                            AppScreen.COMPARE_DRIVERS -> {
-                                CompareDriversScreen(
-                                    driver1 = state.compareDriver1,
-                                    driver2 = state.compareDriver2,
-                                    availableDrivers = state.careerComparisons,
-                                    onSelectDriver1 = { viewModel.setCompareDriver1(it) },
-                                    onSelectDriver2 = { viewModel.setCompareDriver2(it) },
-                                    onSwapDrivers = { viewModel.swapCompareDrivers() },
-                                    onNavigateBack = { viewModel.navigateBack() }
-                                )
-                            }
+                                AppScreen.LIVE_TIMING -> {
+                                    val liveSession by viewModel.liveSessionFlow.collectAsStateWithLifecycle()
+                                    LiveTimingScreen(
+                                        sessionState = liveSession,
+                                        onClose = { viewModel.navigateBack() }
+                                    )
+                                }
 
-                            AppScreen.LIVE_TIMING -> {
-                                LiveTimingScreen(
-                                    sessionState = state.liveSession,
-                                    onClose = { viewModel.navigateBack() }
-                                )
-                            }
-
-                            AppScreen.SETTINGS_WIDGETS -> {
-                                SettingsAndWidgetsScreen(
-                                    userPreferences = state.userPreferences,
-                                    driverStandings = state.driverStandings,
-                                    constructorStandings = state.constructorStandings,
-                                    liveSession = state.liveSession,
-                                    nextWeekend = state.raceWeekend,
-                                    lastCompletedRace = state.lastCompletedRace,
-                                    schedule = state.fullSchedule2026,
-                                    onUpdatePreferences = { newPrefs ->
-                                        val oldPrefs = state.userPreferences
-                                        if (!oldPrefs.sessionRemindersEnabled &&
-                                            newPrefs.sessionRemindersEnabled &&
-                                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                            !SessionReminderScheduler.hasNotificationPermission(context)
-                                        ) {
-                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                        viewModel.updatePreferences(newPrefs)
-                                    },
-                                    onNavigateToArchive = { viewModel.navigateTo(AppScreen.DRIVER_PROFILES) }
-                                )
+                                AppScreen.SETTINGS_WIDGETS -> {
+                                    SettingsAndWidgetsScreen(
+                                        userPreferences = state.userPreferences,
+                                        driverStandings = currentSeasonDrivers,
+                                        constructorStandings = currentSeasonConstructors,
+                                        liveSession = state.liveSession,
+                                        nextWeekend = state.raceWeekend,
+                                        lastCompletedRace = state.lastCompletedRace,
+                                        schedule = state.fullSchedule2026,
+                                        onUpdatePreferences = { newPrefs ->
+                                            val oldPrefs = state.userPreferences
+                                            if (!oldPrefs.sessionRemindersEnabled &&
+                                                newPrefs.sessionRemindersEnabled &&
+                                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                                !SessionReminderScheduler.hasNotificationPermission(context)
+                                            ) {
+                                                pendingReminderAction = {
+                                                    viewModel.updatePreferences(newPrefs, context)
+                                                }
+                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            } else {
+                                                viewModel.updatePreferences(newPrefs, context)
+                                            }
+                                        },
+                                        onNavigateToArchive = { viewModel.navigateTo(AppScreen.STANDINGS) }
+                                    )
+                                }
                             }
                         }
                     }

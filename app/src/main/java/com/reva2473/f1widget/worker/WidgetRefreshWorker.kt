@@ -3,9 +3,11 @@ package com.reva2473.f1widget.worker
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.updateAll
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -22,6 +24,10 @@ import com.reva2473.f1widget.widget.WeekendScheduleWidget
 import java.time.Year
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Background WorkManager worker that refreshes all ApexGrid Glance widgets
@@ -34,7 +40,9 @@ class WidgetRefreshWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            warmActiveRaceWindow()
+            withTimeoutOrNull(WARM_TIMEOUT_MS) {
+                warmActiveRaceWindow()
+            }
 
             val widgets: List<GlanceAppWidget> = listOf(
                 NextRaceCountdownWidget(),
@@ -47,18 +55,22 @@ class WidgetRefreshWorker(
                 LiveTimingBannerWidget()
             )
 
-            var failureCount = 0
-            for (widget in widgets) {
-                try {
-                    widget.updateAll(applicationContext)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    failureCount++
-                }
+            val failureCount = coroutineScope {
+                widgets.map { widget ->
+                    async {
+                        try {
+                            widget.updateAll(applicationContext)
+                            0
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Throwable) {
+                            1
+                        }
+                    }
+                }.awaitAll().sum()
             }
 
-            if (failureCount == widgets.size && runAttemptCount < MAX_RETRY_ATTEMPTS) {
+            if (failureCount > 0 && runAttemptCount < MAX_RETRY_ATTEMPTS) {
                 Result.retry()
             } else {
                 Result.success()
@@ -102,6 +114,7 @@ class WidgetRefreshWorker(
 
     private companion object {
         const val MAX_RETRY_ATTEMPTS = 3
+        const val WARM_TIMEOUT_MS = 10_000L
     }
 }
 
@@ -115,14 +128,20 @@ object WidgetRefreshScheduler {
     private const val REFRESH_INTERVAL_MINUTES = 30L
 
     /**
-     * Enqueues a 30-minute unconstrained periodic widget refresh so countdowns
-     * and offline-cached widgets continue ticking around midnight and session starts.
+     * Enqueues a 30-minute network-connected periodic widget refresh so countdowns
+     * and remote widget data stay updated without spinning offline.
      */
     fun schedulePeriodicRefresh(context: Context) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
         val workRequest = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(
             REFRESH_INTERVAL_MINUTES,
             TimeUnit.MINUTES
-        ).build()
+        )
+            .setConstraints(constraints)
+            .build()
 
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
             PERIODIC_WORK_NAME,

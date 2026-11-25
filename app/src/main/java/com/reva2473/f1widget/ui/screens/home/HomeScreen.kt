@@ -2,6 +2,11 @@ package com.reva2473.f1widget.ui.screens.home
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -14,10 +19,12 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,7 +41,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Leaderboard
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,9 +48,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -56,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.ConstructorStanding
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.domain.model.DriverStanding
@@ -105,53 +114,13 @@ fun HomeScreen(
     onNavigateToWeekend: () -> Unit = {},
     onNavigateToExplore: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
-    onTabSelected: (String) -> Unit = {}
+    onTabSelected: (String) -> Unit = {},
+    onLastRaceTap: () -> Unit = onNavigateToWeekend,
+    onArchiveTap: () -> Unit = onNavigateToStandings
 ) {
     val scrollState = rememberScrollState()
-
-    // Default sample data matching home-1080.webp if not provided
-    val defaultSessions = remember {
-        listOf(
-            SessionScheduleItem("FP1", "Free Practice 1", "Fri", "Friday", "06", "Nov", "05:30", "38 days"),
-            SessionScheduleItem("FP2", "Free Practice 2", "Fri", "Friday", "06", "Nov", "09:00", "38 days"),
-            SessionScheduleItem("FP3", "Free Practice 3", "Sat", "Saturday", "07", "Nov", "05:30", "37 days"),
-            SessionScheduleItem("Quali", "Qualifying", "Sat", "Saturday", "07", "Nov", "09:00", "37 days"),
-            SessionScheduleItem("Race", "Race", "Sun", "Sunday", "08", "Nov", "08:00", "Race in 1 day", isRace = true)
-        )
-    }
-
-    val sampleLiveDrivers = remember {
-        listOf(
-            LiveDriverTiming(1, "VER", "Max Verstappen", F1TeamId.RED_BULL, "1:36.477", "1:36.477", "Leader", "Leader", trackProgress = 0.88f),
-            LiveDriverTiming(2, "HAD", "Isack Hadjar", F1TeamId.RED_BULL, "1:36.898", "1:36.898", "+0.421", "+0.421", trackProgress = 0.52f),
-            LiveDriverTiming(3, "ANT", "Kimi Antonelli", F1TeamId.MERCEDES, "1:37.041", "1:37.041", "+0.564", "+0.143", trackProgress = 0.35f),
-            LiveDriverTiming(4, "LEC", "Charles Leclerc", F1TeamId.FERRARI, "1:37.120", "1:37.120", "+0.643", "+0.079", trackProgress = 0.22f),
-            LiveDriverTiming(5, "HAM", "Lewis Hamilton", F1TeamId.FERRARI, "1:37.195", "1:37.195", "+0.718", "+0.075", trackProgress = 0.72f),
-            LiveDriverTiming(6, "NOR", "Lando Norris", F1TeamId.MCLAREN, "1:37.310", "1:37.310", "+0.833", "+0.115", trackProgress = 0.12f)
-        )
-    }
-
-    val activeLiveDrivers = liveSession?.drivers ?: sampleLiveDrivers
-
-    val defaultWeekend = remember(defaultSessions) {
-        RaceWeekend(
-            season = 2026,
-            round = 16,
-            grandPrixName = "Bahrain Grand Prix in Malaysia",
-            circuitName = "Sepang International Circuit",
-            location = "Kuala Lumpur, Malaysia",
-            countryFlagEmoji = "🇲🇾",
-            dateRangeText = "FRI 6 NOV - SUN 8 NOV",
-            daysToGo = 1,
-            circuitLengthKm = "5.543",
-            totalLaps = 56,
-            totalCorners = 15,
-            circuitType = "SEPANG",
-            circuitId = "SEPANG",
-            sessions = defaultSessions
-        )
-    }
-    val activeWeekend = weekend ?: defaultWeekend
+    val activeLiveDrivers = liveSession?.drivers.orEmpty()
+    val activeWeekend = weekend ?: remember { SeedDataProvider.getNextRaceWeekend() }
 
     // Strictly bind completed race results to lastCompletedRace (falling back to explicit lastRaceResults only if lastCompletedRace == null)
     val effectiveLastRaceResults = if (lastCompletedRace != null) {
@@ -186,7 +155,9 @@ fun HomeScreen(
                     lastCompletedRace = lastCompletedRace,
                     lastRaceResults = effectiveLastRaceResults,
                     onSlideTap = onNavigateToWeekend,
-                    onStandingsTap = onNavigateToStandings
+                    onStandingsTap = onNavigateToStandings,
+                    onLastRaceTap = onLastRaceTap,
+                    onArchiveTap = onArchiveTap
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -241,12 +212,15 @@ fun HomeScreen(
 }
 
 /**
- * Top bar: Left circular green verified shield badge button (Settings), centered "Home" title, right circular settings gear button.
+ * Top bar: Left non-redundant ApexGrid brand mark, centered "Home" title, right circular settings gear button.
  */
 @Composable
 private fun HomeTopBar(
     onNavigateToSettings: () -> Unit = {}
 ) {
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -254,14 +228,25 @@ private fun HomeTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Shield badge button with green check wired to Settings
-        CircularHeaderButton(onClick = onNavigateToSettings) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = "Settings & Widgets",
-                    tint = P1TTheme.sectorGreen,
-                    modifier = Modifier.size(19.dp)
+        // Non-clickable ApexGrid emblem balancing the right Settings button
+        Box(
+            modifier = Modifier.size(48.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(P1TTheme.accentPillBg(primaryAccent))
+                    .border(1.dp, primaryAccent.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "AG",
+                    color = adaptiveAccent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp
                 )
             }
         }
@@ -301,7 +286,9 @@ private fun HomeHeroPager(
     lastCompletedRace: RaceWeekend? = null,
     lastRaceResults: List<RaceDriverResult>? = null,
     onSlideTap: () -> Unit,
-    onStandingsTap: () -> Unit
+    onStandingsTap: () -> Unit,
+    onLastRaceTap: () -> Unit = onSlideTap,
+    onArchiveTap: () -> Unit = onStandingsTap
 ) {
     val pagerState = rememberPagerState(pageCount = { 5 })
 
@@ -316,13 +303,13 @@ private fun HomeHeroPager(
         ) { page ->
             when (page) {
                 0 -> HeroSlideNextRace(weekend = weekend, sessions = sessions, onClick = onSlideTap)
-                1 -> HeroSlideApexGridWelcome(onClick = onSlideTap)
+                1 -> HeroSlideApexGridWelcome(onClick = onArchiveTap)
                 2 -> HeroSlideWdcLeader(leader = driverLeader, onClick = onStandingsTap)
                 3 -> HeroSlideWccLeader(leader = constructorLeader, onClick = onStandingsTap)
                 4 -> HeroSlideLastRaceWinner(
                     lastCompletedRace = lastCompletedRace,
                     lastRaceResults = lastRaceResults,
-                    onClick = onSlideTap
+                    onClick = onLastRaceTap
                 )
             }
         }
@@ -370,12 +357,11 @@ private fun HeroSlideNextRace(
     val topBadge = "ROUND ${weekend.round}  ·  $countdownText"
     val rawCircuitId = weekend.circuitId.ifBlank { weekend.circuitType }
     val circuitId = when {
-        rawCircuitId.isNotBlank() && !rawCircuitId.equals("SEPANG", ignoreCase = true) -> rawCircuitId
+        rawCircuitId.isNotBlank() -> rawCircuitId
         weekend.circuitName.contains("Pace", ignoreCase = true) ||
             weekend.circuitName.contains("Interlagos", ignoreCase = true) -> "INTERLAGOS"
         weekend.circuitName.contains("Yas", ignoreCase = true) -> "YAS_MARINA"
-        rawCircuitId.isNotBlank() -> rawCircuitId
-        else -> "SEPANG"
+        else -> "MADRID"
     }
 
     Card(
@@ -432,12 +418,13 @@ private fun HeroSlideNextRace(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp),
+                    .height(IntrinsicSize.Min)
+                    .heightIn(min = 140.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Session Table
                 Column(
-                    modifier = Modifier.weight(1.1f),
+                    modifier = Modifier.weight(1.15f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     sessions.take(5).forEach { session ->
@@ -451,13 +438,19 @@ private fun HeroSlideNextRace(
                                 color = if (session.isRace) adaptiveAccent else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp,
                                 fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.Medium,
-                                modifier = Modifier.width(42.dp)
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 44.dp)
+                                    .padding(end = 8.dp)
                             )
                             Text(
                                 text = "${session.dayOfWeek} ${session.localTime}",
                                 color = if (session.isRace) adaptiveAccent else MaterialTheme.colorScheme.onSurface,
                                 fontSize = 12.sp,
-                                fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.SemiBold
+                                fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -468,7 +461,8 @@ private fun HeroSlideNextRace(
                 // Circuit Outline Canvas on right
                 Box(
                     modifier = Modifier
-                        .weight(1.3f)
+                        .weight(1.25f)
+                        .heightIn(min = 130.dp)
                         .fillMaxHeight(),
                     contentAlignment = Alignment.Center
                 ) {
@@ -738,18 +732,65 @@ private fun HeroSlideWdcLeader(
                 )
             }
             Spacer(modifier = Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val showPodiumsAndPoles = leader == null || leader.podiums > 0 || leader.poles > 0
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                    Text(text = "${leader?.wins ?: 8} Wins", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "${leader?.wins ?: 8} Wins",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Leaderboard, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                    Text(text = "${leader?.podiums ?: 12} Podiums", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.History, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                    Text(text = if (leader != null) "${leader.poles} Poles" else "+66 Lead", color = P1TTheme.sectorGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (showPodiumsAndPoles) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Leaderboard, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
+                        Text(
+                            text = "${leader?.podiums ?: 12} Podiums",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        Icon(Icons.Default.History, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
+                        Text(
+                            text = if (leader != null) "${leader.poles} Poles" else "+66 Lead",
+                            color = P1TTheme.sectorGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else if (leader.racesCount > 0) {
+                    Text(
+                        text = "${leader.racesCount} Races",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -768,7 +809,7 @@ private fun HeroSlideWccLeader(
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
     val teamName = leader?.resolvedConstructorName ?: "Mercedes"
     val driversText = if (leader != null && leader.drivers.isNotEmpty()) {
-        leader.drivers.joinToString(" & ") { it.fullName.substringAfterLast(" ") }
+        leader.drivers.take(2).joinToString(" & ") { it.fullName.substringAfterLast(" ") }
     } else {
         "Antonelli & Russell"
     }
@@ -777,7 +818,9 @@ private fun HeroSlideWccLeader(
     val rawGap = leader?.gapToP1?.trim()?.takeIf { it.isNotBlank() }
     val gapText = when {
         rawGap == null -> "$positionText Leader"
-        rawGap.startsWith("-") -> rawGap
+        rawGap.equals("Leader", ignoreCase = true) ||
+            rawGap.startsWith("-") ||
+            rawGap.startsWith("+") -> rawGap
         else -> "-$rawGap"
     }
 
@@ -834,13 +877,41 @@ private fun HeroSlideWccLeader(
                 modifier = Modifier.fillMaxWidth().height(42.dp)
             )
             Spacer(modifier = Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                    Text(text = "${leader?.wins ?: 11} Wins", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "${leader?.wins ?: 11} Wins",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                Text(text = gapText, color = P1TTheme.textMuted, fontSize = 12.sp)
-                Text(text = "Championship $positionText", color = P1TTheme.sectorGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = gapText,
+                    color = P1TTheme.textMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Text(
+                    text = "Championship $positionText",
+                    color = P1TTheme.sectorGreen,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -1105,17 +1176,24 @@ private fun LiveTrackSummaryCard(
     drivers: List<LiveDriverTiming> = liveSession?.drivers.orEmpty(),
     onOpenLiveTiming: () -> Unit
 ) {
-    val sessionBadge = liveSession?.sessionType?.ifBlank { "FP1" } ?: "FP1"
-    val timeRemaining = liveSession?.timeRemaining.orEmpty()
-    val timeRemainingText = if (timeRemaining.isBlank()) {
-        "· 9:56 left"
-    } else if (timeRemaining.contains("left", ignoreCase = true)) {
-        "· $timeRemaining"
-    } else {
-        "· $timeRemaining left"
+    val isActuallyLive = liveSession?.isLive == true
+    val hasSessionData = liveSession != null
+    val sessionBadge = liveSession?.sessionType?.takeIf { it.isNotBlank() }.orEmpty()
+    val timeRemaining = liveSession?.timeRemaining?.trim().orEmpty()
+    val timeRemainingText = when {
+        !hasSessionData || timeRemaining.isBlank() -> ""
+        timeRemaining.contains("left", ignoreCase = true) ||
+            timeRemaining.equals("Finished", ignoreCase = true) -> "· $timeRemaining"
+        else -> "· $timeRemaining left"
     }
-    val trackStatus = liveSession?.trackStatus?.ifBlank { "Track Clear" } ?: "Track Clear"
+    val trackStatus = if (hasSessionData) {
+        liveSession?.trackStatus?.ifBlank { "Track Clear" } ?: "Track Clear"
+    } else {
+        "Standby"
+    }
     val (statusColor, statusBg, statusBorder) = when {
+        !hasSessionData ->
+            Triple(P1TTheme.textMuted, P1TTheme.pillBg, P1TTheme.pillBorder)
         trackStatus.contains("Red", ignoreCase = true) ->
             Triple(P1TTheme.accentRed, P1TTheme.redFlagBg, P1TTheme.redFlagBorder)
         trackStatus.contains("Clear", ignoreCase = true) ||
@@ -1125,9 +1203,25 @@ private fun LiveTrackSummaryCard(
             Triple(P1TTheme.sectorYellow, P1TTheme.sectorYellowBg, P1TTheme.sectorYellowBorder)
     }
 
+    val liveDotAlpha = if (isActuallyLive) {
+        val infiniteTransition = rememberInfiniteTransition(label = "livePulse")
+        val alpha by infiniteTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 0.25f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 800),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "liveDotAlpha"
+        )
+        alpha
+    } else {
+        1.0f
+    }
+
     val circuitId = liveSession?.circuitId?.ifBlank { null }
         ?: weekend?.circuitId?.ifBlank { weekend.circuitType }?.ifBlank { null }
-        ?: "INTERLAGOS"
+        ?: "MADRID"
 
     Card(
         shape = RoundedCornerShape(22.dp),
@@ -1143,47 +1237,70 @@ private fun LiveTrackSummaryCard(
                 .fillMaxWidth()
                 .padding(18.dp)
         ) {
-            // Live Header Row
+            // Live / Replay / Standby Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Red flashing LIVE dot
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val statusBadgeLabel = when {
+                        isActuallyLive -> "LIVE"
+                        hasSessionData -> "SESSION REPLAY"
+                        else -> "NO LIVE SESSION"
+                    }
+                    val statusBadgeColor = if (isActuallyLive) P1TTheme.accentRed else P1TTheme.textMuted
+
                     Box(
                         modifier = Modifier
                             .size(9.dp)
+                            .alpha(liveDotAlpha)
                             .clip(CircleShape)
-                            .background(P1TTheme.accentRed)
+                            .background(statusBadgeColor)
                     )
                     Text(
-                        text = "LIVE",
-                        color = P1TTheme.accentRed,
+                        text = statusBadgeLabel,
+                        color = statusBadgeColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
+                        letterSpacing = 1.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = "·",
-                        color = P1TTheme.textMuted,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = sessionBadge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text(
-                        text = timeRemainingText,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    if (sessionBadge.isNotBlank()) {
+                        Text(
+                            text = "·",
+                            color = P1TTheme.textMuted,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = sessionBadge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (timeRemainingText.isNotBlank()) {
+                        Text(
+                            text = timeRemainingText,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
-                // Track Clear Pill + >
+                // Track Status Pill + >
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
@@ -1203,7 +1320,9 @@ private fun LiveTrackSummaryCard(
                         text = trackStatus,
                         color = statusColor,
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1223,52 +1342,79 @@ private fun LiveTrackSummaryCard(
                     .height(140.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Top 3 Drivers Column
-                Column(
-                    modifier = Modifier
-                        .weight(1.1f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    drivers.take(3).forEach { d ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Position
-                            Text(
-                                text = "${d.position}",
-                                color = P1TTheme.textMuted,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(16.dp)
-                            )
-                            // Team Stripe
-                            Box(
-                                modifier = Modifier
-                                    .width(3.dp)
-                                    .height(14.dp)
-                                    .clip(RoundedCornerShape(1.5.dp))
-                                    .background(Color(d.team.colorHex))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            // Code
-                            Text(
-                                text = d.code,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.width(36.dp)
-                            )
-                            // Time / Gap
-                            Text(
-                                text = if (d.position == 1) d.bestLapTime else d.gapToLeader,
-                                color = if (d.position == 1) P1TTheme.sectorPurple else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.End,
-                                modifier = Modifier.weight(1f)
-                            )
+                if (drivers.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = weekend?.grandPrixName?.takeIf { it.isNotBlank() } ?: "Track Telemetry",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "No live timing session active. Tap to open Live Timing.",
+                            color = P1TTheme.textMuted,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                } else {
+                    // Top 3 Drivers Column
+                    Column(
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        drivers.take(3).forEach { d ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Position
+                                Text(
+                                    text = "${d.position}",
+                                    color = P1TTheme.textMuted,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(16.dp)
+                                )
+                                // Team Stripe
+                                Box(
+                                    modifier = Modifier
+                                        .width(3.dp)
+                                        .height(14.dp)
+                                        .clip(RoundedCornerShape(1.5.dp))
+                                        .background(Color(d.team.colorHex))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                // Code
+                                Text(
+                                    text = d.code,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.width(36.dp)
+                                )
+                                // Time / Gap
+                                Text(
+                                    text = if (d.position == 1) d.bestLapTime else d.gapToLeader,
+                                    color = if (d.position == 1) P1TTheme.sectorPurple else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.End,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
@@ -1295,8 +1441,7 @@ private fun LiveTrackSummaryCard(
 
 /**
  * 5. 3-column Bento card:
- * (WEEKEND: LEC fastest in FP2 with red top border | TITLE: +66 Antonelli leads | RACE: 08:00 Sun)
- * + bottom headline "Leclerc sets the pace in FP2" and "🇲🇾 Bahrain GP in Malaysia · Round 16 · so far".
+ * (WEEKEND | TITLE | RACE) + bottom headline & subheadline without cross-GP text splicing.
  */
 @Composable
 private fun HomeBentoCard(
@@ -1305,27 +1450,47 @@ private fun HomeBentoCard(
     liveSession: LiveSessionState? = null,
     onClick: () -> Unit = {}
 ) {
-    // Column 1: WEEKEND — only label "fastest" when a driver genuinely holds the fastest lap
-    val fastestLiveDriver = liveSession?.drivers?.firstOrNull { it.isOverallBest }
-        ?: liveSession?.bestLapDriverCode?.takeIf { it.isNotBlank() }?.let { code ->
-            liveSession.drivers.firstOrNull { it.code.equals(code, ignoreCase = true) }
-        }
-    val p1LiveDriver = liveSession?.drivers?.minByOrNull { it.position }
+    val weekendGpName = weekend?.grandPrixName?.trim().orEmpty()
+    val liveGpName = liveSession?.grandPrixName?.trim().orEmpty()
+    val isSameWeekendLive = liveSession != null && (
+        liveGpName.isBlank() ||
+            weekendGpName.isBlank() ||
+            liveGpName.equals(weekendGpName, ignoreCase = true) ||
+            liveGpName.contains(weekendGpName, ignoreCase = true) ||
+            weekendGpName.contains(liveGpName, ignoreCase = true)
+        )
+
+    // Column 1: WEEKEND — only use liveSession timing when it belongs to the active weekend
+    val fastestLiveDriver = if (isSameWeekendLive) {
+        liveSession?.drivers?.firstOrNull { it.isOverallBest }
+            ?: liveSession?.bestLapDriverCode?.takeIf { it.isNotBlank() }?.let { code ->
+                liveSession.drivers.firstOrNull { it.code.equals(code, ignoreCase = true) }
+            }
+    } else {
+        null
+    }
+    val p1LiveDriver = if (isSameWeekendLive) {
+        liveSession?.drivers?.minByOrNull { it.position }
+    } else {
+        null
+    }
     val sessionName = liveSession?.shortSessionCode?.ifBlank { liveSession.sessionName }?.ifBlank { "Session" } ?: "Session"
     val weekendColText = when {
         fastestLiveDriver != null -> "${fastestLiveDriver.code} fastest in $sessionName"
         p1LiveDriver != null -> "${p1LiveDriver.code} leads $sessionName"
+        weekend != null && weekend.daysToGo > 0 ->
+            "In ${weekend.daysToGo} day${if (weekend.daysToGo == 1) "" else "s"}"
         else -> "Weekend schedule ready"
     }
 
-    // Column 2: TITLE (e.g. P1 leader gap over P2, handling ties cleanly without "+0")
+    // Column 2: TITLE (e.g. P1 leader gap over P2, handling ties cleanly without "+0" or "(0 pts)")
     val p1 = driverStandings?.getOrNull(0)
     val p2 = driverStandings?.getOrNull(1)
     val titleColText = if (p1 != null && p2 != null) {
         val gap = (p1.points - p2.points).coerceAtLeast(0.0)
         val roundedGap = (gap * 10.0).roundToInt() / 10.0
         if (roundedGap <= 0.0) {
-            "Level · ${p1.lastName} (0 pts)"
+            "Tied · ${formatPointsValue(p1.points)} pts"
         } else {
             "+${formatPointsValue(roundedGap)} ${p1.lastName} leads"
         }
@@ -1344,16 +1509,21 @@ private fun HomeBentoCard(
     }
 
     // Bottom Headline & Subheadline
+    val gpName = weekendGpName.ifBlank { "Grand Prix" }
     val headline = when {
         fastestLiveDriver != null -> "${fastestLiveDriver.fullName} sets the pace in $sessionName"
         p1LiveDriver != null -> "${p1LiveDriver.fullName} leads $sessionName"
-        else -> "${weekend?.grandPrixName?.takeIf { it.isNotBlank() } ?: "Grand Prix"} weekend ahead"
+        else -> "$gpName weekend ahead"
     }
 
     val flag = weekend?.countryFlagEmoji?.takeIf { it.isNotBlank() } ?: "🏁"
-    val gpName = weekend?.grandPrixName?.takeIf { it.isNotBlank() } ?: "Grand Prix"
     val roundText = if (weekend != null && weekend.round > 0) "Round ${weekend.round}" else "Season"
-    val subHeadline = if (liveSession != null) "$flag $gpName · $roundText · so far" else "$flag $gpName · $roundText"
+    val subHeadline = when {
+        isSameWeekendLive && liveSession?.isLive == true -> "$flag $gpName · $roundText · Live"
+        isSameWeekendLive -> "$flag $gpName · $roundText · Session replay"
+        !weekend?.dateRangeText.isNullOrBlank() -> "$flag $gpName · $roundText · ${weekend?.dateRangeText}"
+        else -> "$flag $gpName · $roundText"
+    }
 
     Card(
         shape = RoundedCornerShape(22.dp),

@@ -76,6 +76,11 @@ interface OpenF1ApiService {
         @Query("session_key") sessionKey: String
     ): List<OpenF1WeatherDto>
 
+    @GET("drivers")
+    suspend fun getDrivers(
+        @Query("session_key") sessionKey: String = "latest"
+    ): List<OpenF1DriverDto> = emptyList()
+
     companion object {
         fun create(
             client: OkHttpClient = OkHttpClient.Builder().build(),
@@ -193,13 +198,21 @@ data class OpenF1RaceControlDto(
 
 @Serializable
 data class OpenF1OvertakeDto(
-    val date: String? = null,
-    @SerialName("driver_number") val driverNumber: Int? = null,
-    @SerialName("overtaken_driver_number") val overtakenDriverNumber: Int? = null,
-    val lap_number: Int? = null,
-    val position: Int? = null,
-    @SerialName("session_key") val sessionKey: Int? = null,
-    val corner: String? = null
+    @SerialName("overtaking_driver_number") val overtakingDriverNumber: Int = 0,
+    @SerialName("overtaken_driver_number") val overtakenDriverNumber: Int = 0,
+    val date: String = "",
+    @SerialName("session_key") val sessionKey: Int = 0,
+    val position: Int? = null
+)
+
+@Serializable
+data class OpenF1DriverDto(
+    @SerialName("driver_number") val driverNumber: Int = 0,
+    @SerialName("name_acronym") val nameAcronym: String = "",
+    @SerialName("full_name") val fullName: String = "",
+    @SerialName("team_name") val teamName: String = "",
+    @SerialName("team_colour") val teamColour: String? = null,
+    @SerialName("session_key") val sessionKey: Int = 0
 )
 
 @Serializable

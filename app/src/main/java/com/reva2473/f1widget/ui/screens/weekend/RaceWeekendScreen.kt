@@ -27,11 +27,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -58,7 +56,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,21 +111,22 @@ fun RaceWeekendScreen(
     onToggleSessionReminder: (sessionKey: String, enabled: Boolean) -> Unit = { _, _ -> },
     onSelectGrandPrix: (String) -> Unit = {},
     onBackClick: () -> Unit = {},
-    onTabSelected: (String) -> Unit = {}
+    onTabSelected: (String) -> Unit = {},
+    navigationToken: Int = 0,
+    selectedYear: Int = weekend?.season ?: schedule.firstOrNull()?.season ?: 2026
 ) {
     var selectedFilter by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
-    LaunchedEffect(initialTab) {
-        selectedFilter = initialTab
+    var lastAppliedInitialTab by rememberSaveable { mutableStateOf(initialTab) }
+    var lastAppliedNavigationToken by rememberSaveable { mutableStateOf(navigationToken) }
+    LaunchedEffect(initialTab, navigationToken) {
+        if (initialTab != lastAppliedInitialTab || navigationToken != lastAppliedNavigationToken) {
+            selectedFilter = initialTab
+            lastAppliedInitialTab = initialTab
+            lastAppliedNavigationToken = navigationToken
+        }
     }
-    var currentSelectedGp by rememberSaveable(
-        selectedGrandPrix,
-        weekend?.season,
-        weekend?.round,
-        weekend?.grandPrixName
-    ) {
-        mutableStateOf(selectedGrandPrix)
-    }
-    LaunchedEffect(selectedGrandPrix, weekend?.season, weekend?.round, weekend?.grandPrixName) {
+    var currentSelectedGp by rememberSaveable { mutableStateOf(selectedGrandPrix) }
+    LaunchedEffect(selectedGrandPrix, navigationToken) {
         currentSelectedGp = selectedGrandPrix
     }
     var gpDropdownExpanded by remember { mutableStateOf(false) }
@@ -139,19 +137,27 @@ fun RaceWeekendScreen(
         else "${rw.grandPrixName} ${rw.season}"
     }
 
-    val gpOptions = remember(schedule, weekend) {
+    val activeSeason = weekend?.season ?: schedule.firstOrNull()?.season ?: selectedYear
+    val effectiveSchedule = remember(schedule, activeSeason) {
+        val seasonMatched = schedule.filter { it.season == activeSeason }
+        when {
+            seasonMatched.isNotEmpty() -> seasonMatched
+            schedule.isNotEmpty() && activeSeason == 2026 -> schedule
+            else -> SeedDataProvider.getSeasonSchedule(activeSeason).ifEmpty { schedule }
+        }
+    }
+
+    val gpOptions = remember(effectiveSchedule, weekend) {
         buildList {
             weekend?.let { add(formatGpLabel(it)) }
-            schedule.forEach { rw -> add(formatGpLabel(rw)) }
-            add("São Paulo Grand Prix 2024")
-            add("Abu Dhabi Grand Prix 2023")
+            effectiveSchedule.forEach { rw -> add(formatGpLabel(rw)) }
         }.distinct()
     }
 
-    val effectiveWeekend: RaceWeekend = remember(weekend, schedule, currentSelectedGp, selectedGrandPrix) {
+    val effectiveWeekend: RaceWeekend = remember(weekend, effectiveSchedule, currentSelectedGp, selectedGrandPrix, activeSeason) {
         val target = currentSelectedGp.ifBlank { selectedGrandPrix }.trim()
         if (target.isBlank()) {
-            weekend ?: schedule.firstOrNull() ?: SeedDataProvider.getBrazilianGpWeekend2026()
+            weekend ?: effectiveSchedule.firstOrNull() ?: SeedDataProvider.getNextRaceWeekend()
         } else {
             val explicitYear = yearRegex.find(target)?.groupValues?.get(1)?.toIntOrNull()
             val cleanTarget = target.replace(yearRegex, "").replace(Regex("\\s+"), " ").trim()
@@ -202,8 +208,8 @@ fun RaceWeekendScreen(
                     cleanTarget.contains(rw.location, ignoreCase = true)
             }
 
-            // 1. Exact match against schedule
-            val exactFromSchedule = schedule.firstOrNull(::matchesExactly)
+            // 1. Exact match against active schedule
+            val exactFromSchedule = effectiveSchedule.firstOrNull(::matchesExactly)
             if (exactFromSchedule != null) {
                 if (weekend != null &&
                     weekend.season == exactFromSchedule.season &&
@@ -217,37 +223,24 @@ fun RaceWeekendScreen(
             } else if (weekend != null && matchesExactly(weekend)) {
                 // 2. Exact match against passed-in weekend
                 weekend
-            } else if (explicitYear != null && explicitYear != 2026) {
-                // 3. Historical/year-specific lookup when explicitYear != 2026
-                when {
-                    explicitYear == 2023 && target.contains("Abu Dhabi", ignoreCase = true) ->
-                        SeedDataProvider.getAbuDhabi2023Results()
-                    explicitYear == 2024 && (
-                        target.contains("São Paulo", ignoreCase = true) ||
-                            target.contains("Sao Paulo", ignoreCase = true) ||
-                            target.contains("Brazilian", ignoreCase = true)
-                        ) -> SeedDataProvider.getSaoPaulo2024Results()
-                    else -> {
-                        val historical = SeedDataProvider.getSeasonSchedule(explicitYear)
-                        historical.firstOrNull(::matchesExactly)
-                            ?: historical.firstOrNull(::matchesLoosely)
-                            ?: weekend?.takeIf(::matchesLoosely)
-                            ?: when {
-                                target.contains("São Paulo", ignoreCase = true) ||
-                                    target.contains("Sao Paulo", ignoreCase = true) ||
-                                    target.contains("Brazilian", ignoreCase = true) ->
-                                    historical.firstOrNull { it.circuitType == "INTERLAGOS" }
-                                        ?: SeedDataProvider.getSaoPaulo2024Results()
-                                target.contains("Abu Dhabi", ignoreCase = true) ->
-                                    historical.firstOrNull { it.circuitType == "YAS_MARINA" }
-                                        ?: SeedDataProvider.getAbuDhabi2023Results()
-                                else -> historical.firstOrNull() ?: SeedDataProvider.getBrazilianGpWeekend2026()
-                            }
+            } else if (explicitYear != null && explicitYear != activeSeason) {
+                // 3. Explicit historical/other-season lookup
+                val yearSchedule = SeedDataProvider.getSeasonSchedule(explicitYear)
+                yearSchedule.firstOrNull(::matchesExactly)
+                    ?: yearSchedule.firstOrNull(::matchesLoosely)
+                    ?: when {
+                        explicitYear == 2023 && target.contains("Abu Dhabi", ignoreCase = true) ->
+                            SeedDataProvider.getAbuDhabi2023Results()
+                        explicitYear == 2024 && (
+                            target.contains("São Paulo", ignoreCase = true) ||
+                                target.contains("Sao Paulo", ignoreCase = true) ||
+                                target.contains("Brazilian", ignoreCase = true)
+                            ) -> SeedDataProvider.getSaoPaulo2024Results()
+                        else -> weekend ?: effectiveSchedule.firstOrNull() ?: SeedDataProvider.getNextRaceWeekend()
                     }
-                }
             } else {
-                // 4. Loose match against schedule (rejecting Sakhir vs Malaysia confusion) -> loose match against weekend -> safe fallbacks
-                val looseFromSchedule = schedule.firstOrNull(::matchesLoosely)
+                // 4. Loose match against active schedule -> passed-in weekend -> fallback
+                val looseFromSchedule = effectiveSchedule.firstOrNull(::matchesLoosely)
                 when {
                     looseFromSchedule != null && weekend != null &&
                         weekend.season == looseFromSchedule.season &&
@@ -255,46 +248,7 @@ fun RaceWeekendScreen(
                         weekend.grandPrixName.equals(looseFromSchedule.grandPrixName, ignoreCase = true) -> weekend
                     looseFromSchedule != null -> looseFromSchedule
                     weekend != null && matchesLoosely(weekend) -> weekend
-                    (target.contains("São Paulo", ignoreCase = true) || target.contains("Sao Paulo", ignoreCase = true)) ->
-                        if (explicitYear == 2026) SeedDataProvider.getBrazilianGpWeekend2026()
-                        else SeedDataProvider.getSaoPaulo2024Results()
-                    target.contains("Abu Dhabi", ignoreCase = true) ->
-                        if (explicitYear == 2026) {
-                            SeedDataProvider.getSeasonSchedule(2026)
-                                .firstOrNull { it.grandPrixName.contains("Abu Dhabi", ignoreCase = true) }
-                                ?: SeedDataProvider.getAbuDhabi2023Results()
-                        } else {
-                            SeedDataProvider.getAbuDhabi2023Results()
-                        }
-                    target.contains("Brazilian", ignoreCase = true) -> SeedDataProvider.getBrazilianGpWeekend2026()
-                    target.contains("Bahrain", ignoreCase = true) ||
-                        target.contains("Sepang", ignoreCase = true) ||
-                        target.contains("Malaysia", ignoreCase = true) -> {
-                        if ((explicitYear == null || explicitYear == 2026) &&
-                            target.contains("Bahrain", ignoreCase = true) &&
-                            !target.contains("Malaysia", ignoreCase = true) &&
-                            !target.contains("Sepang", ignoreCase = true)
-                        ) {
-                            SeedDataProvider.getSeasonSchedule(2026)
-                                .firstOrNull { it.grandPrixName.equals("Bahrain Grand Prix", ignoreCase = true) }
-                                ?: SeedDataProvider.getNextRaceWeekend()
-                        } else {
-                            SeedDataProvider.getNextRaceWeekend()
-                        }
-                    }
-                    target.contains("British", ignoreCase = true) || target.contains("Silverstone", ignoreCase = true) ->
-                        SeedDataProvider.getSeasonSchedule(explicitYear ?: 1950)
-                            .firstOrNull { it.circuitType == "SILVERSTONE" }
-                            ?: SeedDataProvider.getNextRaceWeekend()
-                    target.contains("Monaco", ignoreCase = true) ->
-                        SeedDataProvider.getSeasonSchedule(explicitYear ?: 1950)
-                            .firstOrNull { it.circuitType == "MONACO" }
-                            ?: SeedDataProvider.getNextRaceWeekend()
-                    target.contains("Monza", ignoreCase = true) || target.contains("Italian", ignoreCase = true) ->
-                        SeedDataProvider.getSeasonSchedule(explicitYear ?: 1950)
-                            .firstOrNull { it.circuitType == "MONZA" }
-                            ?: SeedDataProvider.getNextRaceWeekend()
-                    else -> weekend ?: SeedDataProvider.getBrazilianGpWeekend2026()
+                    else -> weekend ?: effectiveSchedule.firstOrNull() ?: SeedDataProvider.getNextRaceWeekend()
                 }
             }
         }
@@ -433,6 +387,13 @@ fun RaceWeekendScreen(
                                     subtitle = "Pit stop and tyre stint data available after the Grand Prix"
                                 )
                             }
+                        } else if (activeResults.none { it.stints.isNotEmpty() }) {
+                            item {
+                                EmptyWeekendTabCard(
+                                    title = "Pit stop data unavailable for this race",
+                                    subtitle = "Tyre stint and pit stop timings are not available for ${effectiveWeekend.grandPrixName} (${effectiveWeekend.season})"
+                                )
+                            }
                         } else {
                             items(
                                 items = activeResults,
@@ -451,14 +412,17 @@ fun RaceWeekendScreen(
                                 )
                             }
                         } else {
-                            val sortedQuali = activeResults.sortedBy {
-                                it.qualifyingPosition.removePrefix("P").toIntOrNull() ?: Int.MAX_VALUE
-                            }
-                            itemsIndexed(
+                            val sortedQuali = activeResults.sortedWith(
+                                compareBy(
+                                    { it.qualifyingPosition.removePrefix("P").toIntOrNull() ?: Int.MAX_VALUE },
+                                    { it.position }
+                                )
+                            )
+                            items(
                                 items = sortedQuali,
-                                key = { _, it -> "quali_${effectiveWeekend.season}_${effectiveWeekend.round}_${it.driverCode}" }
-                            ) { index, result ->
-                                QualifyingResultRow(result = result, rank = index + 1)
+                                key = { "quali_${effectiveWeekend.season}_${effectiveWeekend.round}_${it.driverCode}" }
+                            ) { result ->
+                                QualifyingResultRow(result = result)
                             }
                         }
                     }
@@ -490,7 +454,7 @@ fun RaceWeekendScreen(
                 currentTab = "Season",
                 onSelectTab = { tab ->
                     when (tab) {
-                        "Home" -> onBackClick()
+                        "Home" -> onTabSelected("Home")
                         "Season" -> Unit
                         "Standings" -> onTabSelected("Standings")
                         "Settings" -> onTabSelected("Settings")
@@ -617,11 +581,14 @@ private fun WeekendTopBar(
             ) {
                 DropdownMenuItem(
                     text = { Text("Next Grand Prix ↻", color = MaterialTheme.colorScheme.onSurface) },
+                    enabled = options.isNotEmpty(),
                     onClick = {
                         moreMenuExpanded = false
-                        val currentIdx = options.indexOf(currentGpName)
-                        val nextIdx = (if (currentIdx >= 0) currentIdx + 1 else 0) % options.size
-                        onSelectOption(nextIdx)
+                        if (options.isNotEmpty()) {
+                            val currentIdx = options.indexOf(currentGpName)
+                            val nextIdx = (if (currentIdx >= 0) currentIdx + 1 else 0) % options.size
+                            onSelectOption(nextIdx)
+                        }
                     }
                 )
                 if (onToggleView != null) {
@@ -849,7 +816,8 @@ private fun WeekendScheduleSection(
 ) {
     val primaryAccent = LocalF1Accent.current.primaryAccent
     val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
-    val context = LocalContext.current
+    val nowMillis = remember { System.currentTimeMillis() }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -860,6 +828,10 @@ private fun WeekendScheduleSection(
             val sessionCode = session.shortName.ifBlank { session.fullName }
             val sessionKey = "${season}_${round}_$sessionCode"
             val isReminderSet = sessionKey in reminderSessionKeys
+            val badge = session.countdownBadge.trim()
+            val isCompleted = badge.equals("Completed", ignoreCase = true) ||
+                badge.equals("Final", ignoreCase = true) ||
+                (session.utcEpochMillis != null && session.utcEpochMillis < nowMillis)
 
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -925,57 +897,54 @@ private fun WeekendScheduleSection(
                         }
                     }
 
-                    // Countdown Pill & Bell Icon
+                    // Countdown Pill & Bell Icon (bell hidden for completed sessions)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        if (session.isRace) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(P1TTheme.accentPillBg(primaryAccent))
-                                    .border(1.dp, primaryAccent, RoundedCornerShape(12.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
+                        if (badge.isNotBlank()) {
+                            if (session.isRace) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(P1TTheme.accentPillBg(primaryAccent))
+                                        .border(1.dp, primaryAccent, RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = badge,
+                                        color = adaptiveAccent,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            } else {
                                 Text(
-                                    text = session.countdownBadge,
-                                    color = adaptiveAccent,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold
+                                    text = badge,
+                                    color = P1TTheme.textMuted,
+                                    fontSize = 11.sp
                                 )
                             }
-                        } else {
-                            Text(
-                                text = session.countdownBadge,
-                                color = P1TTheme.textMuted,
-                                fontSize = 11.sp
-                            )
                         }
 
-                        IconButton(
-                            onClick = {
-                                val nextEnabled = !isReminderSet
-                                onToggleSessionReminder(sessionKey, nextEnabled)
-                                val msg = if (nextEnabled) {
-                                    "Reminder set for ${session.fullName}"
-                                } else {
-                                    "Reminder removed for ${session.fullName}"
-                                }
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isReminderSet) Icons.Default.NotificationsActive else Icons.Default.Notifications,
-                                contentDescription = if (isReminderSet) {
-                                    "Remove reminder for ${session.fullName}"
-                                } else {
-                                    "Set reminder for ${session.fullName}"
+                        if (!isCompleted) {
+                            IconButton(
+                                onClick = {
+                                    onToggleSessionReminder(sessionKey, !isReminderSet)
                                 },
-                                tint = if (isReminderSet || session.isRace) adaptiveAccent else P1TTheme.textMuted,
-                                modifier = Modifier.size(20.dp)
-                            )
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isReminderSet) Icons.Default.NotificationsActive else Icons.Default.Notifications,
+                                    contentDescription = if (isReminderSet) {
+                                        "Remove reminder for ${session.fullName}"
+                                    } else {
+                                        "Set reminder for ${session.fullName}"
+                                    },
+                                    tint = if (isReminderSet || session.isRace) adaptiveAccent else P1TTheme.textMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1107,64 +1076,75 @@ private fun RaceResultExpandedCard(
                             .padding(top = 14.dp)
                     ) {
                         // SECTION 1: STINTS VISUAL PILLS
-                        Text(
-                            text = "STINTS",
-                            color = P1TTheme.textMuted,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
+                        if (result.stints.isNotEmpty()) {
+                            Text(
+                                text = "STINTS",
+                                color = P1TTheme.textMuted,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        // Horizontal Tyre Stints Flow
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            result.stints.forEachIndexed { idx, stint ->
-                                // Stint Box
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(P1TTheme.surfaceInnerCard)
-                                        .border(1.dp, Color(stint.compound.colorHex).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    TyreCompoundBadge(compound = stint.compound, sizeDp = 18)
-                                    Text(
-                                        text = "${stint.lapsCount}L",
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // Pit Stop connector badge if present
-                                if (stint.pitStopDuration != null && stint.pitStopLap != null) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // Horizontal Tyre Stints Flow
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                result.stints.forEach { stint ->
+                                    // Stint Box
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(P1TTheme.surfaceInnerCard)
+                                            .border(1.dp, Color(stint.compound.colorHex).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        TyreCompoundBadge(compound = stint.compound, sizeDp = 18)
                                         Text(
-                                            text = "⏱️ ${stint.pitStopDuration}",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.SemiBold
+                                            text = "${stint.lapsCount}L",
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
-                                        Text(
-                                            text = "Lap ${stint.pitStopLap}",
-                                            color = P1TTheme.textMuted,
-                                            fontSize = 9.sp
-                                        )
+                                    }
+
+                                    // Pit Stop connector badge if present
+                                    if (stint.pitStopDuration != null) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = "⏱️ ${stint.pitStopDuration}",
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            if (stint.pitStopLap != null) {
+                                                Text(
+                                                    text = "Lap ${stint.pitStopLap}",
+                                                    color = P1TTheme.textMuted,
+                                                    fontSize = 9.sp
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
+                        } else {
+                            Text(
+                                text = "Pit stop data unavailable for this race",
+                                color = P1TTheme.textMuted,
+                                fontSize = 11.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
 
                         // SECTION 2: DRIVER STATS GRID
                         Column(
@@ -1260,6 +1240,8 @@ private fun RaceResultExpandedCard(
 private fun PitStopsSummaryCard(result: RaceDriverResult) {
     val teamColor = Color(result.team.colorHex)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+    val pitStops = result.stints.filter { it.pitStopDuration != null || it.pitStopLap != null }
+    val hasStintData = result.stints.isNotEmpty()
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -1296,23 +1278,48 @@ private fun PitStopsSummaryCard(result: RaceDriverResult) {
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                val pitStopsCount = result.stints.count { it.pitStopDuration != null }.takeIf { it > 0 }
-                    ?: (result.stints.size - 1).coerceAtLeast(0)
-                Text(
-                    text = "$pitStopsCount Pit Stop(s)",
-                    color = adaptiveTeamColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                if (hasStintData) {
+                    val pitStopsCount = pitStops.size.takeIf { it > 0 }
+                        ?: (result.stints.size - 1).coerceAtLeast(0)
+                    Text(
+                        text = "$pitStopsCount Pit Stop(s)",
+                        color = adaptiveTeamColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                } else {
+                    Text(
+                        text = "Unavailable",
+                        color = P1TTheme.textMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
-            result.stints.filter { it.pitStopDuration != null }.forEach { s ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Stop at Lap ${s.pitStopLap}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-                    Text(text = "${s.pitStopDuration}", color = P1TTheme.sectorGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            if (!hasStintData) {
+                Text(
+                    text = "Pit stop data unavailable for this race",
+                    color = P1TTheme.textMuted,
+                    fontSize = 11.sp
+                )
+            } else if (pitStops.isEmpty()) {
+                Text(
+                    text = "No pit stops recorded (${result.stints.first().lapsCount}L stint)",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            } else {
+                pitStops.forEach { s ->
+                    val lapText = if (s.pitStopLap != null) "Stop at Lap ${s.pitStopLap}" else "Pit Stop"
+                    val durationText = s.pitStopDuration?.takeIf { it.isNotBlank() } ?: "—"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = lapText, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                        Text(text = durationText, color = P1TTheme.sectorGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -1323,7 +1330,7 @@ private fun PitStopsSummaryCard(result: RaceDriverResult) {
  * Qualifying Result Row
  */
 @Composable
-private fun QualifyingResultRow(result: RaceDriverResult, rank: Int? = null) {
+private fun QualifyingResultRow(result: RaceDriverResult) {
     val teamColor = Color(result.team.colorHex)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
 
@@ -1353,7 +1360,7 @@ private fun QualifyingResultRow(result: RaceDriverResult, rank: Int? = null) {
                     driverCodeOrName = result.driverCode,
                     teamColor = teamColor,
                     size = 28.dp,
-                    positionBadge = result.qualifyingPosition.ifBlank { rank?.let { "P$it" } ?: "" }
+                    positionBadge = result.qualifyingPosition.ifBlank { "—" }
                 )
                 Text(
                     text = result.driverFullName,

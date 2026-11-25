@@ -23,12 +23,13 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -38,6 +39,8 @@ import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.domain.model.LiveDriverTiming
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
+import java.text.Normalizer
+import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -634,14 +637,629 @@ object SpaCircuitGeometry {
     )
 }
 
+private val COMBINING_MARKS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
+private val SPA_WORD_REGEX = Regex("\\bSPA\\b")
+
+private fun mergeSectorPoints(
+    sector1Points: List<Offset>,
+    sector2Points: List<Offset>,
+    sector3Points: List<Offset>
+): List<Offset> {
+    val list = ArrayList<Offset>(sector1Points.size + sector2Points.size + sector3Points.size)
+    list.addAll(sector1Points)
+    list.addAll(sector2Points.drop(1))
+    list.addAll(sector3Points.drop(1))
+    return list
+}
+
+/**
+ * Normalized geometry for Shanghai International Circuit (China).
+ */
+object ShanghaiCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.28f, 0.78f),
+        Offset(0.56f, 0.80f),
+        Offset(0.76f, 0.82f), // T1 snail entry
+        Offset(0.86f, 0.72f), // T1-T2 snail spiral
+        Offset(0.74f, 0.64f),
+        Offset(0.68f, 0.72f), // T3 exit
+        Offset(0.58f, 0.64f), // T4
+        Offset(0.46f, 0.56f)  // T6 hairpin entry
+    )
+    val sector2Points = listOf(
+        Offset(0.46f, 0.56f),
+        Offset(0.32f, 0.52f), // T6 hairpin
+        Offset(0.28f, 0.36f), // T7-T8
+        Offset(0.40f, 0.24f), // T9-T10
+        Offset(0.54f, 0.30f), // T11
+        Offset(0.62f, 0.22f)  // T12-T13 banked entry
+    )
+    val sector3Points = listOf(
+        Offset(0.62f, 0.22f),
+        Offset(0.82f, 0.26f), // T13
+        Offset(0.76f, 0.42f), // Long back straight
+        Offset(0.42f, 0.66f),
+        Offset(0.18f, 0.74f), // T14 hairpin
+        Offset(0.16f, 0.82f), // T16
+        Offset(0.28f, 0.78f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.85f, 0.72f)),
+        Pair(3, Offset(0.69f, 0.73f)),
+        Pair(6, Offset(0.31f, 0.52f)),
+        Pair(9, Offset(0.40f, 0.23f)),
+        Pair(11, Offset(0.55f, 0.31f)),
+        Pair(13, Offset(0.83f, 0.26f)),
+        Pair(14, Offset(0.17f, 0.74f)),
+        Pair(16, Offset(0.16f, 0.83f))
+    )
+}
+
+/**
+ * Normalized geometry for Jeddah Corniche Circuit (Saudi Arabia).
+ */
+object JeddahCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.78f, 0.82f), // Start/Finish
+        Offset(0.66f, 0.74f), // T1-T2 chicane
+        Offset(0.58f, 0.64f), // T4-T6 Esses
+        Offset(0.48f, 0.54f),
+        Offset(0.40f, 0.42f), // T8-T10
+        Offset(0.30f, 0.30f)  // T12
+    )
+    val sector2Points = listOf(
+        Offset(0.30f, 0.30f),
+        Offset(0.18f, 0.16f), // T13 banked hairpin
+        Offset(0.24f, 0.14f),
+        Offset(0.36f, 0.28f), // T16-T17
+        Offset(0.46f, 0.40f), // T19-T20
+        Offset(0.56f, 0.52f)  // T22 chicane
+    )
+    val sector3Points = listOf(
+        Offset(0.56f, 0.52f),
+        Offset(0.66f, 0.62f), // T24
+        Offset(0.78f, 0.70f),
+        Offset(0.88f, 0.82f), // T27 final hairpin
+        Offset(0.84f, 0.88f),
+        Offset(0.78f, 0.82f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.66f, 0.75f)),
+        Pair(4, Offset(0.57f, 0.64f)),
+        Pair(8, Offset(0.39f, 0.42f)),
+        Pair(13, Offset(0.17f, 0.16f)),
+        Pair(18, Offset(0.37f, 0.28f)),
+        Pair(22, Offset(0.56f, 0.53f)),
+        Pair(27, Offset(0.88f, 0.83f))
+    )
+}
+
+/**
+ * Normalized geometry for Miami International Autodrome (USA).
+ */
+object MiamiCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.26f, 0.74f), // Start/Finish
+        Offset(0.16f, 0.66f), // T1
+        Offset(0.24f, 0.50f), // T2-T3
+        Offset(0.38f, 0.36f), // T4-T6 sweeping
+        Offset(0.54f, 0.28f), // T7
+        Offset(0.62f, 0.38f)  // T8 hairpin
+    )
+    val sector2Points = listOf(
+        Offset(0.62f, 0.38f),
+        Offset(0.74f, 0.32f), // T9-T10
+        Offset(0.86f, 0.24f), // Back straight
+        Offset(0.88f, 0.42f), // T11
+        Offset(0.78f, 0.52f), // T12-T14 tight chicane
+        Offset(0.84f, 0.64f), // T15
+        Offset(0.74f, 0.74f)  // T16
+    )
+    val sector3Points = listOf(
+        Offset(0.74f, 0.74f),
+        Offset(0.52f, 0.76f), // Long straight
+        Offset(0.42f, 0.82f), // T17 hairpin
+        Offset(0.34f, 0.76f), // T18-T19
+        Offset(0.26f, 0.74f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.15f, 0.66f)),
+        Pair(4, Offset(0.38f, 0.35f)),
+        Pair(7, Offset(0.54f, 0.27f)),
+        Pair(11, Offset(0.88f, 0.42f)),
+        Pair(14, Offset(0.77f, 0.52f)),
+        Pair(17, Offset(0.42f, 0.83f))
+    )
+}
+
+/**
+ * Normalized geometry for Autodromo Enzo e Dino Ferrari (Imola, Italy).
+ */
+object ImolaCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.60f, 0.74f), // Start/Finish
+        Offset(0.42f, 0.72f), // Tamburello entry
+        Offset(0.32f, 0.64f), // Tamburello chicane T2-T4
+        Offset(0.24f, 0.52f), // Villeneuve T5-T6
+        Offset(0.16f, 0.40f)  // Tosa hairpin T7
+    )
+    val sector2Points = listOf(
+        Offset(0.16f, 0.40f),
+        Offset(0.26f, 0.24f), // Piratella T9
+        Offset(0.44f, 0.22f), // Acque Minerali entry
+        Offset(0.52f, 0.34f), // Acque Minerali T12-T13
+        Offset(0.66f, 0.28f)  // Variante Alta entry
+    )
+    val sector3Points = listOf(
+        Offset(0.66f, 0.28f),
+        Offset(0.78f, 0.38f), // Variante Alta T14-T15
+        Offset(0.86f, 0.54f), // Downhill to Rivazza
+        Offset(0.82f, 0.74f), // Rivazza 1 T17
+        Offset(0.72f, 0.78f), // Rivazza 2 T18
+        Offset(0.60f, 0.74f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(2, Offset(0.32f, 0.65f)),
+        Pair(5, Offset(0.23f, 0.52f)),
+        Pair(7, Offset(0.15f, 0.40f)),
+        Pair(9, Offset(0.26f, 0.23f)),
+        Pair(12, Offset(0.52f, 0.35f)),
+        Pair(14, Offset(0.78f, 0.38f)),
+        Pair(17, Offset(0.83f, 0.74f))
+    )
+}
+
+/**
+ * Normalized geometry for Circuit de Barcelona-Catalunya (Spain).
+ */
+object CatalunyaCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.36f, 0.80f), // Start/Finish
+        Offset(0.72f, 0.78f), // Main straight
+        Offset(0.84f, 0.66f), // Elf T1-T2
+        Offset(0.78f, 0.48f), // Renault T3 long right
+        Offset(0.62f, 0.44f)  // Repsol T4
+    )
+    val sector2Points = listOf(
+        Offset(0.62f, 0.44f),
+        Offset(0.52f, 0.54f), // Seat T5 hairpin
+        Offset(0.42f, 0.38f), // T7-T8
+        Offset(0.32f, 0.22f), // Campsa T9
+        Offset(0.18f, 0.34f)  // Back straight to La Caixa
+    )
+    val sector3Points = listOf(
+        Offset(0.18f, 0.34f),
+        Offset(0.16f, 0.52f), // La Caixa T10 hairpin
+        Offset(0.28f, 0.58f), // Banc Sabadell T11
+        Offset(0.22f, 0.70f), // T12-T13
+        Offset(0.24f, 0.80f), // Final sweeping T14
+        Offset(0.36f, 0.80f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.85f, 0.66f)),
+        Pair(3, Offset(0.79f, 0.48f)),
+        Pair(4, Offset(0.62f, 0.43f)),
+        Pair(5, Offset(0.52f, 0.55f)),
+        Pair(9, Offset(0.32f, 0.21f)),
+        Pair(10, Offset(0.15f, 0.52f)),
+        Pair(14, Offset(0.23f, 0.81f))
+    )
+}
+
+/**
+ * Normalized geometry for Circuit Gilles Villeneuve (Montreal, Canada).
+ */
+object MontrealCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.30f, 0.78f), // Start/Finish
+        Offset(0.20f, 0.70f), // T1-T2 Senna S
+        Offset(0.26f, 0.56f), // T3-T4 chicane
+        Offset(0.42f, 0.46f), // T5
+        Offset(0.52f, 0.36f)  // T6-T7 chicane
+    )
+    val sector2Points = listOf(
+        Offset(0.52f, 0.36f),
+        Offset(0.68f, 0.26f), // T8-T9 chicane
+        Offset(0.84f, 0.18f), // Approach to Hairpin
+        Offset(0.88f, 0.28f), // T10 L'Epingle hairpin
+        Offset(0.74f, 0.40f), // Casino Straight
+        Offset(0.58f, 0.56f)
+    )
+    val sector3Points = listOf(
+        Offset(0.58f, 0.56f),
+        Offset(0.44f, 0.70f), // Wall of Champions T13-T14
+        Offset(0.38f, 0.78f),
+        Offset(0.30f, 0.78f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.19f, 0.70f)),
+        Pair(3, Offset(0.26f, 0.55f)),
+        Pair(6, Offset(0.52f, 0.35f)),
+        Pair(8, Offset(0.68f, 0.25f)),
+        Pair(10, Offset(0.89f, 0.28f)),
+        Pair(13, Offset(0.44f, 0.71f))
+    )
+}
+
+/**
+ * Normalized geometry for Red Bull Ring (Spielberg, Austria).
+ */
+object SpielbergCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.44f, 0.80f), // Start/Finish
+        Offset(0.76f, 0.76f), // Castrol Edge T1
+        Offset(0.78f, 0.52f), // Uphill straight
+        Offset(0.82f, 0.22f)  // Remus T3 hairpin
+    )
+    val sector2Points = listOf(
+        Offset(0.82f, 0.22f),
+        Offset(0.66f, 0.28f), // Straight to T4
+        Offset(0.46f, 0.22f), // Rauch T4
+        Offset(0.28f, 0.34f), // T6
+        Offset(0.16f, 0.50f)  // T7
+    )
+    val sector3Points = listOf(
+        Offset(0.16f, 0.50f),
+        Offset(0.24f, 0.66f), // T8-T9 Rindt
+        Offset(0.26f, 0.80f), // T10 final corner
+        Offset(0.44f, 0.80f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.77f, 0.76f)),
+        Pair(3, Offset(0.83f, 0.21f)),
+        Pair(4, Offset(0.46f, 0.21f)),
+        Pair(6, Offset(0.28f, 0.33f)),
+        Pair(7, Offset(0.15f, 0.50f)),
+        Pair(9, Offset(0.24f, 0.67f)),
+        Pair(10, Offset(0.26f, 0.81f))
+    )
+}
+
+/**
+ * Normalized geometry for Hungaroring (Budapest, Hungary).
+ */
+object HungaroringCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.22f, 0.68f), // Start/Finish
+        Offset(0.18f, 0.84f), // T1 hairpin
+        Offset(0.36f, 0.80f), // T2-T3
+        Offset(0.42f, 0.64f), // T4 blind crest
+        Offset(0.56f, 0.56f)  // T5 Mansell
+    )
+    val sector2Points = listOf(
+        Offset(0.56f, 0.56f),
+        Offset(0.62f, 0.42f), // T6-T7 chicane
+        Offset(0.74f, 0.36f), // T8-T9
+        Offset(0.84f, 0.26f), // T10-T11
+        Offset(0.72f, 0.18f)
+    )
+    val sector3Points = listOf(
+        Offset(0.72f, 0.18f),
+        Offset(0.56f, 0.24f), // T12 hairpin
+        Offset(0.42f, 0.34f), // T13
+        Offset(0.28f, 0.40f), // T14 final hairpin
+        Offset(0.22f, 0.68f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.17f, 0.85f)),
+        Pair(4, Offset(0.42f, 0.63f)),
+        Pair(6, Offset(0.62f, 0.41f)),
+        Pair(11, Offset(0.85f, 0.26f)),
+        Pair(12, Offset(0.56f, 0.23f)),
+        Pair(14, Offset(0.27f, 0.40f))
+    )
+}
+
+/**
+ * Normalized geometry for Circuit Zandvoort (Netherlands).
+ */
+object ZandvoortCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.38f, 0.82f), // Start/Finish
+        Offset(0.76f, 0.82f), // Tarzanbocht T1 hairpin
+        Offset(0.84f, 0.66f), // Gerlach T2
+        Offset(0.74f, 0.56f), // Hugenholtz T3 banked hairpin
+        Offset(0.82f, 0.36f)  // Hunserug T4-T6
+    )
+    val sector2Points = listOf(
+        Offset(0.82f, 0.36f),
+        Offset(0.68f, 0.22f), // Scheivlak T7
+        Offset(0.50f, 0.24f), // Mastersbocht T8
+        Offset(0.42f, 0.38f), // T9 hairpin
+        Offset(0.30f, 0.30f)  // T10 Hans Ernst
+    )
+    val sector3Points = listOf(
+        Offset(0.30f, 0.30f),
+        Offset(0.18f, 0.46f), // T11-T12 chicane
+        Offset(0.22f, 0.66f), // Kumho T13
+        Offset(0.24f, 0.82f), // Arie Luyendykbocht T14
+        Offset(0.38f, 0.82f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.77f, 0.83f)),
+        Pair(3, Offset(0.73f, 0.56f)),
+        Pair(7, Offset(0.68f, 0.21f)),
+        Pair(9, Offset(0.42f, 0.39f)),
+        Pair(11, Offset(0.17f, 0.46f)),
+        Pair(14, Offset(0.23f, 0.83f))
+    )
+}
+
+/**
+ * Normalized geometry for Baku City Circuit (Azerbaijan).
+ */
+object BakuCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.44f, 0.80f), // Main Straight
+        Offset(0.16f, 0.80f), // T1 90-left
+        Offset(0.16f, 0.64f), // T2 90-left
+        Offset(0.44f, 0.64f), // T3
+        Offset(0.44f, 0.48f), // T4
+        Offset(0.62f, 0.48f)  // T5-T6 chicane
+    )
+    val sector2Points = listOf(
+        Offset(0.62f, 0.48f),
+        Offset(0.62f, 0.28f), // T7
+        Offset(0.76f, 0.20f), // T8-T11 Castle section
+        Offset(0.86f, 0.30f), // T12
+        Offset(0.78f, 0.46f), // T13-T14 sweeping
+        Offset(0.84f, 0.60f)  // T15
+    )
+    val sector3Points = listOf(
+        Offset(0.84f, 0.60f),
+        Offset(0.78f, 0.78f), // T16
+        Offset(0.64f, 0.80f), // T17-T20 flat out
+        Offset(0.44f, 0.80f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.15f, 0.81f)),
+        Pair(2, Offset(0.15f, 0.64f)),
+        Pair(3, Offset(0.45f, 0.64f)),
+        Pair(7, Offset(0.61f, 0.28f)),
+        Pair(8, Offset(0.76f, 0.19f)),
+        Pair(15, Offset(0.85f, 0.60f)),
+        Pair(16, Offset(0.78f, 0.79f))
+    )
+}
+
+/**
+ * Normalized geometry for Marina Bay Street Circuit (Singapore).
+ */
+object SingaporeCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.34f, 0.78f), // Start/Finish
+        Offset(0.20f, 0.74f), // Sheares T1-T3
+        Offset(0.22f, 0.56f), // T4
+        Offset(0.32f, 0.46f), // Memorial T5
+        Offset(0.50f, 0.34f)  // Raffles Blvd
+    )
+    val sector2Points = listOf(
+        Offset(0.50f, 0.34f),
+        Offset(0.72f, 0.24f), // T7
+        Offset(0.82f, 0.36f), // T8-T9
+        Offset(0.74f, 0.50f), // T10-T12
+        Offset(0.84f, 0.64f)  // Anderson Bridge T13 hairpin
+    )
+    val sector3Points = listOf(
+        Offset(0.84f, 0.64f),
+        Offset(0.68f, 0.70f), // Esplanade Drive
+        Offset(0.58f, 0.64f), // T14
+        Offset(0.50f, 0.78f), // T16-T17
+        Offset(0.42f, 0.82f), // T18-T19
+        Offset(0.34f, 0.78f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.19f, 0.74f)),
+        Pair(5, Offset(0.32f, 0.45f)),
+        Pair(7, Offset(0.72f, 0.23f)),
+        Pair(10, Offset(0.73f, 0.50f)),
+        Pair(13, Offset(0.85f, 0.64f)),
+        Pair(16, Offset(0.50f, 0.79f))
+    )
+}
+
+/**
+ * Normalized geometry for Circuit of the Americas (Austin, USA).
+ */
+object CotaCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.64f, 0.76f), // Start/Finish
+        Offset(0.84f, 0.78f), // Steep uphill T1 hairpin
+        Offset(0.74f, 0.64f), // T2-T3
+        Offset(0.64f, 0.58f), // Esses T4-T6
+        Offset(0.56f, 0.50f), // T7-T9
+        Offset(0.46f, 0.42f)  // T10
+    )
+    val sector2Points = listOf(
+        Offset(0.46f, 0.42f),
+        Offset(0.28f, 0.24f), // T11 hairpin
+        Offset(0.16f, 0.28f),
+        Offset(0.26f, 0.48f), // Long back straight
+        Offset(0.36f, 0.66f)  // T12 hairpin
+    )
+    val sector3Points = listOf(
+        Offset(0.36f, 0.66f),
+        Offset(0.44f, 0.58f), // Stadium T13-T15
+        Offset(0.52f, 0.68f), // Carousel T16-T18
+        Offset(0.46f, 0.80f), // T19
+        Offset(0.54f, 0.78f), // T20
+        Offset(0.64f, 0.76f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.85f, 0.78f)),
+        Pair(6, Offset(0.63f, 0.58f)),
+        Pair(11, Offset(0.28f, 0.23f)),
+        Pair(12, Offset(0.36f, 0.67f)),
+        Pair(15, Offset(0.44f, 0.57f)),
+        Pair(20, Offset(0.54f, 0.79f))
+    )
+}
+
+/**
+ * Normalized geometry for Autódromo Hermanos Rodríguez (Mexico City).
+ */
+object MexicoCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.48f, 0.82f), // Start/Finish
+        Offset(0.84f, 0.80f), // Main straight
+        Offset(0.86f, 0.66f), // T1-T3 chicane
+        Offset(0.72f, 0.66f),
+        Offset(0.64f, 0.52f)  // T4-T6
+    )
+    val sector2Points = listOf(
+        Offset(0.64f, 0.52f),
+        Offset(0.52f, 0.36f), // Esses T7-T9
+        Offset(0.36f, 0.24f), // T10-T11
+        Offset(0.22f, 0.32f), // Back straight
+        Offset(0.18f, 0.52f)  // Foro Sol entry T12
+    )
+    val sector3Points = listOf(
+        Offset(0.18f, 0.52f),
+        Offset(0.28f, 0.58f), // Foro Sol stadium T13-T15
+        Offset(0.22f, 0.72f), // Peraltada exit T16
+        Offset(0.28f, 0.82f), // T17
+        Offset(0.48f, 0.82f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.87f, 0.66f)),
+        Pair(4, Offset(0.64f, 0.51f)),
+        Pair(7, Offset(0.52f, 0.35f)),
+        Pair(11, Offset(0.36f, 0.23f)),
+        Pair(13, Offset(0.29f, 0.58f)),
+        Pair(17, Offset(0.28f, 0.83f))
+    )
+}
+
+/**
+ * Normalized geometry for Las Vegas Strip Circuit (USA).
+ */
+object LasVegasCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.66f, 0.78f), // Start/Finish
+        Offset(0.84f, 0.76f), // T1 hairpin
+        Offset(0.80f, 0.58f), // T2-T4 around Sphere
+        Offset(0.86f, 0.42f),
+        Offset(0.72f, 0.28f)  // T5 Koval straight entry
+    )
+    val sector2Points = listOf(
+        Offset(0.72f, 0.28f),
+        Offset(0.48f, 0.26f), // Koval Straight
+        Offset(0.36f, 0.34f), // T6-T9 chicane
+        Offset(0.24f, 0.22f), // T10-T11
+        Offset(0.16f, 0.36f)  // T12 onto Las Vegas Blvd
+    )
+    val sector3Points = listOf(
+        Offset(0.16f, 0.36f),
+        Offset(0.18f, 0.64f), // Las Vegas Strip straight
+        Offset(0.24f, 0.80f), // T14-T16 chicane
+        Offset(0.44f, 0.78f), // T17
+        Offset(0.66f, 0.78f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.85f, 0.76f)),
+        Pair(4, Offset(0.87f, 0.42f)),
+        Pair(7, Offset(0.36f, 0.35f)),
+        Pair(12, Offset(0.15f, 0.36f)),
+        Pair(14, Offset(0.24f, 0.81f)),
+        Pair(17, Offset(0.44f, 0.79f))
+    )
+}
+
+/**
+ * Normalized geometry for Lusail International Circuit (Qatar).
+ */
+object LosailCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.38f, 0.82f), // Main Straight
+        Offset(0.76f, 0.80f), // T1
+        Offset(0.84f, 0.64f), // T2-T3
+        Offset(0.76f, 0.48f), // T4-T5
+        Offset(0.62f, 0.50f)  // T6 hairpin
+    )
+    val sector2Points = listOf(
+        Offset(0.62f, 0.50f),
+        Offset(0.56f, 0.32f), // T7-T9
+        Offset(0.44f, 0.20f), // T10 hairpin
+        Offset(0.28f, 0.26f), // T11
+        Offset(0.20f, 0.42f)  // Triple-apex T12
+    )
+    val sector3Points = listOf(
+        Offset(0.20f, 0.42f),
+        Offset(0.24f, 0.58f), // T13-T14
+        Offset(0.16f, 0.72f), // T15
+        Offset(0.22f, 0.82f), // T16
+        Offset(0.38f, 0.82f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.77f, 0.81f)),
+        Pair(4, Offset(0.77f, 0.48f)),
+        Pair(6, Offset(0.62f, 0.51f)),
+        Pair(10, Offset(0.44f, 0.19f)),
+        Pair(12, Offset(0.19f, 0.42f)),
+        Pair(16, Offset(0.21f, 0.83f))
+    )
+}
+
+/**
+ * Normalized geometry for Madring Circuit (IFEMA Madrid, Spain).
+ */
+object MadridCircuitGeometry {
+    val sector1Points = listOf(
+        Offset(0.36f, 0.80f), // Start/Finish
+        Offset(0.68f, 0.80f), // Main straight
+        Offset(0.84f, 0.72f), // T1-T2 chicane
+        Offset(0.82f, 0.52f), // Fast sweepers T3-T4
+        Offset(0.72f, 0.34f)  // T5-T6
+    )
+    val sector2Points = listOf(
+        Offset(0.72f, 0.34f),
+        Offset(0.56f, 0.20f), // Banked Valdebebas curve
+        Offset(0.36f, 0.22f), // T9-T10
+        Offset(0.24f, 0.36f), // Technical infield T11-T13
+        Offset(0.34f, 0.48f)  // T14
+    )
+    val sector3Points = listOf(
+        Offset(0.34f, 0.48f),
+        Offset(0.20f, 0.58f), // T15-T17
+        Offset(0.18f, 0.76f), // T18-T20 final corner
+        Offset(0.36f, 0.80f)
+    )
+    val allPoints: List<Offset> by lazy { mergeSectorPoints(sector1Points, sector2Points, sector3Points) }
+    val corners = listOf(
+        Pair(1, Offset(0.85f, 0.72f)),
+        Pair(5, Offset(0.73f, 0.34f)),
+        Pair(8, Offset(0.56f, 0.19f)),
+        Pair(11, Offset(0.23f, 0.36f)),
+        Pair(15, Offset(0.19f, 0.58f)),
+        Pair(20, Offset(0.17f, 0.76f))
+    )
+}
+
 /**
  * Resolves circuit geometry by circuit type or circuitId/name string.
  */
 fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
-    val key = circuitType.trim().uppercase()
+    val key = Normalizer.normalize(circuitType.trim(), Normalizer.Form.NFD)
+        .replace(COMBINING_MARKS_REGEX, "")
+        .uppercase(Locale.ROOT)
     return when {
-        key in setOf("INTERLAGOS", "BRAZIL", "SAO_PAULO", "SAO PAULO") ||
-            key.contains("INTERLAGOS") || key.contains("SAO_PAULO") -> CircuitGeometryData(
+        key in setOf("INTERLAGOS", "BRAZIL", "BRAZILIAN", "SAO_PAULO", "SAO PAULO") ||
+            key.contains("INTERLAGOS") || key.contains("SAO_PAULO") || key.contains("SAO PAULO") -> CircuitGeometryData(
             sector1Points = InterlagosCircuitGeometry.sector1Points,
             sector2Points = InterlagosCircuitGeometry.sector2Points,
             sector3Points = InterlagosCircuitGeometry.sector3Points,
@@ -679,7 +1297,7 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             s1CutoffProgress = 0.34f,
             s2CutoffProgress = 0.68f
         )
-        key in setOf("MELBOURNE", "ALBERT_PARK", "ALBERT PARK", "AUSTRALIA") ||
+        key in setOf("MELBOURNE", "ALBERT_PARK", "ALBERT PARK", "AUSTRALIA", "AUSTRALIAN") ||
             key.contains("MELBOURNE") || key.contains("ALBERT") -> CircuitGeometryData(
             sector1Points = MelbourneCircuitGeometry.sector1Points,
             sector2Points = MelbourneCircuitGeometry.sector2Points,
@@ -692,8 +1310,98 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             s1CutoffProgress = 0.34f,
             s2CutoffProgress = 0.68f
         )
-        key in setOf("SILVERSTONE", "GREAT_BRITAIN", "BRITAIN", "UK") ||
-            key.contains("SILVERSTONE") -> CircuitGeometryData(
+        key in setOf("SHANGHAI", "CHINA", "CHINESE") ||
+            key.contains("SHANGHAI") || key.contains("CHIN") -> CircuitGeometryData(
+            sector1Points = ShanghaiCircuitGeometry.sector1Points,
+            sector2Points = ShanghaiCircuitGeometry.sector2Points,
+            sector3Points = ShanghaiCircuitGeometry.sector3Points,
+            allPoints = ShanghaiCircuitGeometry.allPoints,
+            corners = ShanghaiCircuitGeometry.corners,
+            startFinishPos = ShanghaiCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.54f, 0.56f),
+            speedTrapBadgePos = Offset(0.52f, 0.46f),
+            s1CutoffProgress = 0.35f,
+            s2CutoffProgress = 0.67f
+        )
+        key in setOf("JEDDAH", "SAUDI", "SAUDI_ARABIA", "SAUDI ARABIA") ||
+            key.contains("JEDDAH") || key.contains("SAUDI") || key.contains("CORNICHE") -> CircuitGeometryData(
+            sector1Points = JeddahCircuitGeometry.sector1Points,
+            sector2Points = JeddahCircuitGeometry.sector2Points,
+            sector3Points = JeddahCircuitGeometry.sector3Points,
+            allPoints = JeddahCircuitGeometry.allPoints,
+            corners = JeddahCircuitGeometry.corners,
+            startFinishPos = JeddahCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.72f, 0.66f),
+            speedTrapBadgePos = Offset(0.68f, 0.54f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key == "MIAMI" || key.contains("MIAMI") -> CircuitGeometryData(
+            sector1Points = MiamiCircuitGeometry.sector1Points,
+            sector2Points = MiamiCircuitGeometry.sector2Points,
+            sector3Points = MiamiCircuitGeometry.sector3Points,
+            allPoints = MiamiCircuitGeometry.allPoints,
+            corners = MiamiCircuitGeometry.corners,
+            startFinishPos = MiamiCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.60f, 0.76f),
+            speedTrapBadgePos = Offset(0.58f, 0.65f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.69f
+        )
+        key in setOf("IMOLA", "EMILIA", "EMILIA_ROMAGNA", "EMILIA ROMAGNA") ||
+            key.contains("IMOLA") || key.contains("EMILIA") || key.contains("DINO FERRARI") -> CircuitGeometryData(
+            sector1Points = ImolaCircuitGeometry.sector1Points,
+            sector2Points = ImolaCircuitGeometry.sector2Points,
+            sector3Points = ImolaCircuitGeometry.sector3Points,
+            allPoints = ImolaCircuitGeometry.allPoints,
+            corners = ImolaCircuitGeometry.corners,
+            startFinishPos = ImolaCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.46f, 0.72f),
+            speedTrapBadgePos = Offset(0.46f, 0.61f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.67f
+        )
+        key in setOf("CATALUNYA", "BARCELONA", "SPAIN", "SPANISH", "MONTMELO") ||
+            key.contains("CATALUNYA") || key.contains("BARCELONA") || key.contains("SPANISH") || key.contains("SPAIN") -> CircuitGeometryData(
+            sector1Points = CatalunyaCircuitGeometry.sector1Points,
+            sector2Points = CatalunyaCircuitGeometry.sector2Points,
+            sector3Points = CatalunyaCircuitGeometry.sector3Points,
+            allPoints = CatalunyaCircuitGeometry.allPoints,
+            corners = CatalunyaCircuitGeometry.corners,
+            startFinishPos = CatalunyaCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.58f, 0.79f),
+            speedTrapBadgePos = Offset(0.56f, 0.68f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("MONTREAL", "VILLENEUVE", "CANADA", "CANADIAN") ||
+            key.contains("MONTREAL") || key.contains("VILLENEUVE") || key.contains("CANAD") -> CircuitGeometryData(
+            sector1Points = MontrealCircuitGeometry.sector1Points,
+            sector2Points = MontrealCircuitGeometry.sector2Points,
+            sector3Points = MontrealCircuitGeometry.sector3Points,
+            allPoints = MontrealCircuitGeometry.allPoints,
+            corners = MontrealCircuitGeometry.corners,
+            startFinishPos = MontrealCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.64f, 0.50f),
+            speedTrapBadgePos = Offset(0.60f, 0.40f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.69f
+        )
+        key in setOf("SPIELBERG", "RED_BULL_RING", "RED BULL RING", "AUSTRIA", "AUSTRIAN") ||
+            key.contains("SPIELBERG") || key.contains("RED BULL RING") || key.contains("AUSTRIA") -> CircuitGeometryData(
+            sector1Points = SpielbergCircuitGeometry.sector1Points,
+            sector2Points = SpielbergCircuitGeometry.sector2Points,
+            sector3Points = SpielbergCircuitGeometry.sector3Points,
+            allPoints = SpielbergCircuitGeometry.allPoints,
+            corners = SpielbergCircuitGeometry.corners,
+            startFinishPos = SpielbergCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.80f, 0.38f),
+            speedTrapBadgePos = Offset(0.66f, 0.42f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("SILVERSTONE", "GREAT_BRITAIN", "BRITAIN", "BRITISH", "UK") ||
+            key.contains("SILVERSTONE") || key.contains("BRIT") -> CircuitGeometryData(
             sector1Points = SilverstoneCircuitGeometry.sector1Points,
             sector2Points = SilverstoneCircuitGeometry.sector2Points,
             sector3Points = SilverstoneCircuitGeometry.sector3Points,
@@ -719,7 +1427,7 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             s2CutoffProgress = 0.67f
         )
         key in setOf("MONZA", "ITALY", "ITALIAN") ||
-            key.contains("MONZA") -> CircuitGeometryData(
+            key.contains("MONZA") || key.contains("ITAL") -> CircuitGeometryData(
             sector1Points = MonzaCircuitGeometry.sector1Points,
             sector2Points = MonzaCircuitGeometry.sector2Points,
             sector3Points = MonzaCircuitGeometry.sector3Points,
@@ -732,7 +1440,7 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             s2CutoffProgress = 0.67f
         )
         key in setOf("SUZUKA", "JAPAN", "JAPANESE") ||
-            key.contains("SUZUKA") -> CircuitGeometryData(
+            key.contains("SUZUKA") || key.contains("JAPAN") -> CircuitGeometryData(
             sector1Points = SuzukaCircuitGeometry.sector1Points,
             sector2Points = SuzukaCircuitGeometry.sector2Points,
             sector3Points = SuzukaCircuitGeometry.sector3Points,
@@ -745,7 +1453,7 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             s2CutoffProgress = 0.68f
         )
         key in setOf("SPA", "SPA_FRANCORCHAMPS", "SPA-FRANCORCHAMPS", "BELGIUM", "BELGIAN") ||
-            key.contains("SPA") -> CircuitGeometryData(
+            key.contains("FRANCORCHAMPS") || key.contains("BELGI") || SPA_WORD_REGEX.containsMatchIn(key) -> CircuitGeometryData(
             sector1Points = SpaCircuitGeometry.sector1Points,
             sector2Points = SpaCircuitGeometry.sector2Points,
             sector3Points = SpaCircuitGeometry.sector3Points,
@@ -755,6 +1463,123 @@ fun getCircuitGeometry(circuitType: String): CircuitGeometryData {
             speedTrapPos = Offset(0.56f, 0.16f),
             speedTrapBadgePos = Offset(0.56f, 0.25f),
             s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("HUNGARORING", "HUNGARY", "HUNGARIAN", "BUDAPEST") ||
+            key.contains("HUNGAR") || key.contains("BUDAPEST") -> CircuitGeometryData(
+            sector1Points = HungaroringCircuitGeometry.sector1Points,
+            sector2Points = HungaroringCircuitGeometry.sector2Points,
+            sector3Points = HungaroringCircuitGeometry.sector3Points,
+            allPoints = HungaroringCircuitGeometry.allPoints,
+            corners = HungaroringCircuitGeometry.corners,
+            startFinishPos = HungaroringCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.20f, 0.76f),
+            speedTrapBadgePos = Offset(0.32f, 0.72f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("ZANDVOORT", "NETHERLANDS", "DUTCH") ||
+            key.contains("ZANDVOORT") || key.contains("NETHERLAND") || key.contains("DUTCH") -> CircuitGeometryData(
+            sector1Points = ZandvoortCircuitGeometry.sector1Points,
+            sector2Points = ZandvoortCircuitGeometry.sector2Points,
+            sector3Points = ZandvoortCircuitGeometry.sector3Points,
+            allPoints = ZandvoortCircuitGeometry.allPoints,
+            corners = ZandvoortCircuitGeometry.corners,
+            startFinishPos = ZandvoortCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.60f, 0.82f),
+            speedTrapBadgePos = Offset(0.58f, 0.71f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.67f
+        )
+        key in setOf("MADRID", "MADRING", "IFEMA") ||
+            key.contains("MADRID") || key.contains("MADRING") -> CircuitGeometryData(
+            sector1Points = MadridCircuitGeometry.sector1Points,
+            sector2Points = MadridCircuitGeometry.sector2Points,
+            sector3Points = MadridCircuitGeometry.sector3Points,
+            allPoints = MadridCircuitGeometry.allPoints,
+            corners = MadridCircuitGeometry.corners,
+            startFinishPos = MadridCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.58f, 0.80f),
+            speedTrapBadgePos = Offset(0.56f, 0.69f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("BAKU", "AZERBAIJAN") ||
+            key.contains("BAKU") || key.contains("AZERBAIJAN") -> CircuitGeometryData(
+            sector1Points = BakuCircuitGeometry.sector1Points,
+            sector2Points = BakuCircuitGeometry.sector2Points,
+            sector3Points = BakuCircuitGeometry.sector3Points,
+            allPoints = BakuCircuitGeometry.allPoints,
+            corners = BakuCircuitGeometry.corners,
+            startFinishPos = BakuCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.54f, 0.80f),
+            speedTrapBadgePos = Offset(0.54f, 0.69f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("SINGAPORE", "MARINA_BAY", "MARINA BAY") ||
+            key.contains("SINGAPORE") || key.contains("MARINA BAY") -> CircuitGeometryData(
+            sector1Points = SingaporeCircuitGeometry.sector1Points,
+            sector2Points = SingaporeCircuitGeometry.sector2Points,
+            sector3Points = SingaporeCircuitGeometry.sector3Points,
+            allPoints = SingaporeCircuitGeometry.allPoints,
+            corners = SingaporeCircuitGeometry.corners,
+            startFinishPos = SingaporeCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.58f, 0.30f),
+            speedTrapBadgePos = Offset(0.56f, 0.41f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("COTA", "AMERICAS", "AUSTIN", "UNITED_STATES", "UNITED STATES") ||
+            key.contains("COTA") || key.contains("AMERICAS") || key.contains("AUSTIN") || key.contains("UNITED STATES") -> CircuitGeometryData(
+            sector1Points = CotaCircuitGeometry.sector1Points,
+            sector2Points = CotaCircuitGeometry.sector2Points,
+            sector3Points = CotaCircuitGeometry.sector3Points,
+            allPoints = CotaCircuitGeometry.allPoints,
+            corners = CotaCircuitGeometry.corners,
+            startFinishPos = CotaCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.28f, 0.52f),
+            speedTrapBadgePos = Offset(0.38f, 0.44f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("MEXICO", "RODRIGUEZ", "HERMANOS") ||
+            key.contains("MEXIC") || key.contains("RODRIGUEZ") || key.contains("HERMANOS") -> CircuitGeometryData(
+            sector1Points = MexicoCircuitGeometry.sector1Points,
+            sector2Points = MexicoCircuitGeometry.sector2Points,
+            sector3Points = MexicoCircuitGeometry.sector3Points,
+            allPoints = MexicoCircuitGeometry.allPoints,
+            corners = MexicoCircuitGeometry.corners,
+            startFinishPos = MexicoCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.70f, 0.81f),
+            speedTrapBadgePos = Offset(0.68f, 0.70f),
+            s1CutoffProgress = 0.34f,
+            s2CutoffProgress = 0.68f
+        )
+        key in setOf("LAS_VEGAS", "LAS VEGAS", "VEGAS") ||
+            key.contains("VEGAS") -> CircuitGeometryData(
+            sector1Points = LasVegasCircuitGeometry.sector1Points,
+            sector2Points = LasVegasCircuitGeometry.sector2Points,
+            sector3Points = LasVegasCircuitGeometry.sector3Points,
+            allPoints = LasVegasCircuitGeometry.allPoints,
+            corners = LasVegasCircuitGeometry.corners,
+            startFinishPos = LasVegasCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.18f, 0.54f),
+            speedTrapBadgePos = Offset(0.32f, 0.54f),
+            s1CutoffProgress = 0.33f,
+            s2CutoffProgress = 0.67f
+        )
+        key in setOf("LOSAIL", "LUSAIL", "QATAR") ||
+            key.contains("LOSAIL") || key.contains("LUSAIL") || key.contains("QATAR") -> CircuitGeometryData(
+            sector1Points = LosailCircuitGeometry.sector1Points,
+            sector2Points = LosailCircuitGeometry.sector2Points,
+            sector3Points = LosailCircuitGeometry.sector3Points,
+            allPoints = LosailCircuitGeometry.allPoints,
+            corners = LosailCircuitGeometry.corners,
+            startFinishPos = LosailCircuitGeometry.sector1Points[0],
+            speedTrapPos = Offset(0.62f, 0.81f),
+            speedTrapBadgePos = Offset(0.60f, 0.70f),
+            s1CutoffProgress = 0.34f,
             s2CutoffProgress = 0.68f
         )
         else -> CircuitGeometryData(
@@ -1326,21 +2151,30 @@ fun LiveTrackMapCanvas(
         drawCircle(color = Color(0xFFE1251B), radius = 4.dp.toPx(), center = sfPos)
         drawSectorDividerBadge(text = "S3", pos = sfPos, paint = sectorTextPaint)
 
-        // Draw Drivers
+        // Draw Drivers (leaders & selected driver drawn last/on top)
         labelPaint.textSize = 9.dp.toPx()
-        val nextTargets = ArrayList<DriverTapTarget>(currentDrivers.size)
-        val pillW = 28.dp.toPx()
+        val orderedDrivers = currentDrivers.sortedWith(
+            compareBy<LiveDriverTiming> { it.code.equals(selectedDriverCode, ignoreCase = true) }
+                .thenByDescending { it.position }
+        )
+        val nextTargets = ArrayList<DriverTapTarget>(orderedDrivers.size)
+        val standardPillW = 28.dp.toPx()
+        val pitPillW = 44.dp.toPx()
         val pillH = 14.dp.toPx()
         val pad = 2.dp.toPx()
-        val maxPillLeft = (w - pillW - pad).coerceAtLeast(pad)
         val maxPillTop = (h - pillH - pad).coerceAtLeast(pad)
+        val pitDashEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()), 0f)
 
-        currentDrivers.forEach { driver ->
+        orderedDrivers.forEach { driver ->
             val progress = driver.trackProgress.coerceIn(0f, 1f)
             val dotPos = pathMeasure.getPosition(pathLength * progress)
 
             val isSelected = driver.code.equals(selectedDriverCode, ignoreCase = true)
+            val isInPit = driver.isInPit
             val teamColor = Color(driver.team.colorHex)
+            val dotAlpha = if (isInPit && !isSelected) 0.55f else 1f
+            val pillW = if (isInPit) pitPillW else standardPillW
+            val maxPillLeft = (w - pillW - pad).coerceAtLeast(pad)
 
             // Target ring if selected
             if (isSelected) {
@@ -1355,16 +2189,24 @@ fun LiveTrackMapCanvas(
                     center = dotPos,
                     style = Stroke(width = 2.dp.toPx())
                 )
+            } else if (isInPit) {
+                // Dashed pit-lane ring around cars currently in pits
+                drawCircle(
+                    color = P1TColors.InPitBlue.copy(alpha = 0.85f),
+                    radius = 8.5.dp.toPx(),
+                    center = dotPos,
+                    style = Stroke(width = 1.4.dp.toPx(), pathEffect = pitDashEffect)
+                )
             }
 
             // Driver Dot
             drawCircle(
-                color = Color(0xFF141418),
+                color = Color(0xFF141418).copy(alpha = dotAlpha),
                 radius = 6.5.dp.toPx(),
                 center = dotPos
             )
             drawCircle(
-                color = if (isSelected) Color(0xFFE1251B) else teamColor,
+                color = (if (isSelected) Color(0xFFE1251B) else teamColor).copy(alpha = dotAlpha),
                 radius = 4.5.dp.toPx(),
                 center = dotPos
             )
@@ -1394,6 +2236,21 @@ fun LiveTrackMapCanvas(
                     cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
                 )
                 labelPaint.color = android.graphics.Color.WHITE
+            } else if (isInPit) {
+                drawRoundRect(
+                    color = Color(0xCC141418),
+                    topLeft = pillTopLeft,
+                    size = Size(pillW, pillH),
+                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                )
+                drawRoundRect(
+                    color = P1TColors.InPitBlue.copy(alpha = 0.9f),
+                    topLeft = pillTopLeft,
+                    size = Size(pillW, pillH),
+                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                    style = Stroke(width = 1.dp.toPx(), pathEffect = pitDashEffect)
+                )
+                labelPaint.color = android.graphics.Color.argb(200, 175, 215, 255)
             } else {
                 drawRoundRect(
                     color = Color(0xEE141418),
@@ -1411,8 +2268,9 @@ fun LiveTrackMapCanvas(
                 labelPaint.color = android.graphics.Color.WHITE
             }
 
+            val pillText = if (isInPit) "${driver.code} PIT" else driver.code
             drawContext.canvas.nativeCanvas.drawText(
-                driver.code,
+                pillText,
                 pillTopLeft.x + pillW / 2f,
                 pillTopLeft.y + 10.5.dp.toPx(),
                 labelPaint
@@ -1460,20 +2318,27 @@ private fun DrawScope.drawSectorDividerBadge(
 
 /**
  * 4. F1CarSideProfileCanvas
- * Renders real high-resolution F1 car cutout PNGs.
+ * Renders real high-resolution F1 car cutout PNGs, or a team-colored vector fallback for unlisted teams.
  */
 @Composable
 fun F1CarSideProfileCanvas(
     team: F1TeamId,
     modifier: Modifier = Modifier
 ) {
-    val carRes = getTeamCarRes(team)
-    Image(
-        painter = painterResource(id = carRes),
-        contentDescription = "${team.displayName} F1 Car",
-        contentScale = ContentScale.Fit,
-        modifier = modifier
-    )
+    val carRes = getTeamCarResOrNull(team)
+    if (carRes != null) {
+        Image(
+            painter = painterResource(id = carRes),
+            contentDescription = "${team.displayName} F1 Car",
+            contentScale = ContentScale.Fit,
+            modifier = modifier
+        )
+    } else {
+        GenericF1CarSideVector(
+            accentColor = Color(team.colorHex),
+            modifier = modifier
+        )
+    }
 }
 
 @Composable
@@ -1481,18 +2346,25 @@ fun F1CarSideProfileCanvas(
     teamColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val carRes = getTeamCarResByColor(teamColor)
-    Image(
-        painter = painterResource(id = carRes),
-        contentDescription = "F1 Car",
-        contentScale = ContentScale.Fit,
-        modifier = modifier
-    )
+    val carRes = getTeamCarResByColorOrNull(teamColor)
+    if (carRes != null) {
+        Image(
+            painter = painterResource(id = carRes),
+            contentDescription = "F1 Car",
+            contentScale = ContentScale.Fit,
+            modifier = modifier
+        )
+    } else {
+        GenericF1CarSideVector(
+            accentColor = teamColor,
+            modifier = modifier
+        )
+    }
 }
 
 /**
  * 5. F1CarTopDownCanvas
- * Renders real high-resolution F1 car cutout PNGs with vertical/horizontal orientation.
+ * Renders a crisp top-down vector F1 car silhouette in the team's color (vertical or horizontal).
  */
 @Composable
 fun F1CarTopDownCanvas(
@@ -1500,12 +2372,10 @@ fun F1CarTopDownCanvas(
     modifier: Modifier = Modifier,
     vertical: Boolean = false
 ) {
-    val carRes = getTeamCarRes(team)
-    Image(
-        painter = painterResource(id = carRes),
-        contentDescription = "${team.displayName} F1 Car",
-        contentScale = ContentScale.Fit,
-        modifier = if (vertical) modifier.graphicsLayer(rotationZ = -90f) else modifier
+    F1CarTopDownCanvas(
+        teamColor = Color(team.colorHex),
+        modifier = modifier,
+        vertical = vertical
     )
 }
 
@@ -1515,13 +2385,123 @@ fun F1CarTopDownCanvas(
     modifier: Modifier = Modifier,
     vertical: Boolean = false
 ) {
-    val carRes = getTeamCarResByColor(teamColor)
-    Image(
-        painter = painterResource(id = carRes),
-        contentDescription = "F1 Car",
-        contentScale = ContentScale.Fit,
-        modifier = if (vertical) modifier.graphicsLayer(rotationZ = -90f) else modifier
-    )
+    val carbon = Color(0xFF1A1A22)
+    val tyreRubber = Color(0xFF111116)
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        // Canonical coordinate space: vertical top-down F1 car (nose at top y=0.04, rear wing at bottom y=0.96),
+        // fitting cleanly into (cw x ch), rotated 90deg clockwise when vertical == false (nose pointing right).
+        withTransform({
+            if (!vertical) {
+                rotate(degrees = 90f, pivot = Offset(w / 2f, h / 2f))
+            }
+        }) {
+            val carLen = if (vertical) h else w
+            val carWidth = (if (vertical) w else h).coerceAtMost(carLen * 0.52f)
+            val left = (w - carWidth) / 2f
+            val top = (h - carLen) / 2f
+
+            fun pt(nx: Float, ny: Float) = Offset(left + nx * carWidth, top + ny * carLen)
+
+            // Front & Rear suspension wishbones
+            listOf(0.24f, 0.28f, 0.77f, 0.81f).forEach { yPos ->
+                drawLine(
+                    color = carbon,
+                    start = pt(0.18f, yPos),
+                    end = pt(0.82f, yPos),
+                    strokeWidth = (carWidth * 0.045f).coerceAtLeast(1.2f)
+                )
+            }
+
+            // 4 Pirelli Tyres (front narrower, rear wider)
+            val tyreRadius = CornerRadius(carWidth * 0.06f, carWidth * 0.06f)
+            // Front Left & Right
+            drawRoundRect(tyreRubber, pt(0.05f, 0.17f), Size(0.19f * carWidth, 0.16f * carLen), tyreRadius)
+            drawRoundRect(tyreRubber, pt(0.76f, 0.17f), Size(0.19f * carWidth, 0.16f * carLen), tyreRadius)
+            // Rear Left & Right
+            drawRoundRect(tyreRubber, pt(0.03f, 0.70f), Size(0.22f * carWidth, 0.18f * carLen), tyreRadius)
+            drawRoundRect(tyreRubber, pt(0.75f, 0.70f), Size(0.22f * carWidth, 0.18f * carLen), tyreRadius)
+
+            // Carbon Venturi floor edges
+            val floorPath = Path().apply {
+                moveTo(pt(0.26f, 0.36f).x, pt(0.26f, 0.36f).y)
+                lineTo(pt(0.74f, 0.36f).x, pt(0.74f, 0.36f).y)
+                lineTo(pt(0.76f, 0.78f).x, pt(0.76f, 0.78f).y)
+                lineTo(pt(0.24f, 0.78f).x, pt(0.24f, 0.78f).y)
+                close()
+            }
+            drawPath(floorPath, color = carbon)
+
+            // Front Wing (wide swept aero plane + endplates)
+            val frontWingPath = Path().apply {
+                moveTo(pt(0.06f, 0.11f).x, pt(0.06f, 0.11f).y)
+                lineTo(pt(0.50f, 0.05f).x, pt(0.50f, 0.05f).y)
+                lineTo(pt(0.94f, 0.11f).x, pt(0.94f, 0.11f).y)
+                lineTo(pt(0.94f, 0.17f).x, pt(0.94f, 0.17f).y)
+                lineTo(pt(0.50f, 0.13f).x, pt(0.50f, 0.13f).y)
+                lineTo(pt(0.06f, 0.17f).x, pt(0.06f, 0.17f).y)
+                close()
+            }
+            drawPath(frontWingPath, color = teamColor)
+            drawPath(frontWingPath, color = Color.White.copy(alpha = 0.25f), style = Stroke(width = 1f))
+
+            // Rear Wing (DRS flap + endplates)
+            drawRoundRect(
+                color = teamColor,
+                topLeft = pt(0.16f, 0.89f),
+                size = Size(0.68f * carWidth, 0.08f * carLen),
+                cornerRadius = CornerRadius(carWidth * 0.03f, carWidth * 0.03f)
+            )
+            drawLine(carbon, pt(0.16f, 0.88f), pt(0.16f, 0.98f), strokeWidth = 2.5f)
+            drawLine(carbon, pt(0.84f, 0.88f), pt(0.84f, 0.98f), strokeWidth = 2.5f)
+
+            // Main sculpted monocoque, sidepods & tapered engine cover
+            val chassisPath = Path().apply {
+                moveTo(pt(0.45f, 0.05f).x, pt(0.45f, 0.05f).y) // Nose tip left
+                lineTo(pt(0.55f, 0.05f).x, pt(0.55f, 0.05f).y) // Nose tip right
+                lineTo(pt(0.60f, 0.32f).x, pt(0.60f, 0.32f).y)
+                cubicTo(
+                    pt(0.75f, 0.38f).x, pt(0.75f, 0.38f).y,
+                    pt(0.75f, 0.56f).x, pt(0.75f, 0.56f).y,
+                    pt(0.62f, 0.72f).x, pt(0.62f, 0.72f).y
+                )
+                lineTo(pt(0.55f, 0.89f).x, pt(0.55f, 0.89f).y) // Coke-bottle rear
+                lineTo(pt(0.45f, 0.89f).x, pt(0.45f, 0.89f).y)
+                lineTo(pt(0.38f, 0.72f).x, pt(0.38f, 0.72f).y)
+                cubicTo(
+                    pt(0.25f, 0.56f).x, pt(0.25f, 0.56f).y,
+                    pt(0.25f, 0.38f).x, pt(0.25f, 0.38f).y,
+                    pt(0.40f, 0.32f).x, pt(0.40f, 0.32f).y
+                )
+                close()
+            }
+            drawPath(chassisPath, color = teamColor)
+            drawPath(chassisPath, color = Color.White.copy(alpha = 0.25f), style = Stroke(width = 1f))
+
+            // Dark cockpit opening + Halo Y-bar
+            drawOval(
+                color = Color(0xFF0E0E12),
+                topLeft = pt(0.42f, 0.39f),
+                size = Size(0.16f * carWidth, 0.16f * carLen)
+            )
+            drawLine(
+                color = Color(0xFFE5E5EC),
+                start = pt(0.50f, 0.37f),
+                end = pt(0.50f, 0.45f),
+                strokeWidth = (carWidth * 0.035f).coerceAtLeast(1.2f),
+                cap = StrokeCap.Round
+            )
+            // Driver helmet dot
+            drawCircle(
+                color = Color.White,
+                radius = (carWidth * 0.045f).coerceAtLeast(2f),
+                center = pt(0.50f, 0.48f)
+            )
+        }
+    }
 }
 
 /**
@@ -1746,6 +2726,7 @@ fun TeamLogoBadge(
 
             F1TeamId.CADILLAC -> {
                 // Cadillac Gold Geometric Crest
+                val crestOutline = if (isDark) Color.White else Color(0xFF4A4A56)
                 val crestPath = Path().apply {
                     moveTo(cx - 0.65f * r, cy - 0.60f * r)
                     lineTo(cx + 0.65f * r, cy - 0.60f * r)
@@ -1755,7 +2736,7 @@ fun TeamLogoBadge(
                     close()
                 }
                 drawPath(crestPath, color = Color(0xFFD4AF37))
-                drawPath(crestPath, color = Color.White, style = Stroke(width = 1.dp.toPx()))
+                drawPath(crestPath, color = crestOutline, style = Stroke(width = 1.dp.toPx()))
 
                 // Geometric quartering lines
                 drawLine(Color(0xFF1E1E24), Offset(cx, cy - 0.60f * r), Offset(cx, cy + 0.80f * r), 1.2.dp.toPx())

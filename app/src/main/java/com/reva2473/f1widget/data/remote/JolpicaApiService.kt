@@ -49,13 +49,29 @@ interface JolpicaApiService {
     suspend fun getRaceResults(
         @Path("season") season: String,
         @Path("round") round: String
-    ): JolpicaResponse<RaceTableWrapper>
+    ): JolpicaResponse<RaceTableWrapper> = getRaceResults(season, round, limit = 100, offset = 0)
+
+    @GET("{season}/{round}/results.json")
+    suspend fun getRaceResults(
+        @Path("season") season: String,
+        @Path("round") round: String,
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int = 0
+    ): JolpicaResponse<RaceTableWrapper> = getRaceResults(season, round)
 
     @GET("{season}/{round}/qualifying.json")
     suspend fun getQualifyingResults(
         @Path("season") season: String,
         @Path("round") round: String
-    ): JolpicaResponse<RaceTableWrapper>
+    ): JolpicaResponse<RaceTableWrapper> = getQualifyingResults(season, round, limit = 100, offset = 0)
+
+    @GET("{season}/{round}/qualifying.json")
+    suspend fun getQualifyingResults(
+        @Path("season") season: String,
+        @Path("round") round: String,
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int = 0
+    ): JolpicaResponse<RaceTableWrapper> = getQualifyingResults(season, round)
 
     @GET("{season}/{round}/pitstops.json")
     suspend fun getPitStops(
@@ -235,9 +251,9 @@ data class QualifyingResultDto(
     val position: String = "",
     @SerialName("Driver") val driver: DriverDto = DriverDto(),
     @SerialName("Constructor") val constructor: ConstructorDto = ConstructorDto(),
-    val q1: String? = null,
-    val q2: String? = null,
-    val q3: String? = null
+    @SerialName("Q1") val q1: String? = null,
+    @SerialName("Q2") val q2: String? = null,
+    @SerialName("Q3") val q3: String? = null
 )
 
 @Serializable

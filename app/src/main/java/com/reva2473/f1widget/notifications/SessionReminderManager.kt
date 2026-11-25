@@ -14,6 +14,11 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
 import com.reva2473.f1widget.MainActivity
 import com.reva2473.f1widget.R
 import com.reva2473.f1widget.data.repository.F1Repository
@@ -22,11 +27,19 @@ import com.reva2473.f1widget.domain.model.SessionScheduleItem
 import com.reva2473.f1widget.worker.WidgetRefreshScheduler
 import java.time.Year
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * Outcome of attempting to schedule a session reminder alarm.
+ */
+enum class ReminderScheduleResult {
+    SCHEDULED,
+    PERMISSION_DENIED,
+    SESSION_IN_PAST,
+    MISSING_TIMESTAMP,
+    CANCELLED
+}
 
 /**
  * Builds the canonical session reminder identifier matching [RaceWeekendScreen].
@@ -45,8 +58,9 @@ object SessionReminderScheduler {
     const val EXTRA_TITLE = "extra_reminder_title"
     const val EXTRA_BODY = "extra_reminder_body"
 
-    private const val ACTION_SESSION_REMINDER = "com.reva2473.f1widget.action.SESSION_REMINDER"
+    internal const val ACTION_SESSION_REMINDER = "com.reva2473.f1widget.action.SESSION_REMINDER"
     private const val REMINDER_LEAD_TIME_MILLIS = 15L * 60_000L
+    private const val REMINDER_RESYNC_WORK_NAME = "apexgrid_session_reminder_resync"
 
     /**
      * Ensures the high-importance notification channel for F1 session reminders exists.
@@ -93,10 +107,32 @@ object SessionReminderScheduler {
         weekend: RaceWeekend,
         session: SessionScheduleItem
     ) {
-        val triggerAtMillis = (session.utcEpochMillis ?: return) - REMINDER_LEAD_TIME_MILLIS
-        if (triggerAtMillis <= System.currentTimeMillis()) return
+        scheduleSessionReminderWithResult(context, weekend, session)
+    }
 
+    /**
+     * Schedules an idle-allowed AlarmManager wakeup 15 minutes prior to [session] start
+     * and returns a [ReminderScheduleResult] describing the outcome.
+     */
+    fun scheduleSessionReminderWithResult(
+        context: Context,
+        weekend: RaceWeekend,
+        session: SessionScheduleItem
+    ): ReminderScheduleResult {
         val appContext = context.applicationContext
+        ensureNotificationChannel(appContext)
+
+        if (!hasNotificationPermission(appContext)) {
+            return ReminderScheduleResult.PERMISSION_DENIED
+        }
+
+        val sessionStartMillis = session.utcEpochMillis
+            ?: return ReminderScheduleResult.MISSING_TIMESTAMP
+        val triggerAtMillis = sessionStartMillis - REMINDER_LEAD_TIME_MILLIS
+        if (triggerAtMillis <= System.currentTimeMillis()) {
+            return ReminderScheduleResult.SESSION_IN_PAST
+        }
+
         val sessionKey = buildSessionReminderKey(weekend.season, weekend.round, session)
         val sessionLabel = session.fullName.ifBlank { session.shortName }
         val title = "${weekend.countryFlagEmoji} ${weekend.grandPrixName}".trim()
@@ -116,15 +152,18 @@ object SessionReminderScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val alarmManager = appContext.getSystemService(AlarmManager::class.java) ?: return
-        try {
+        val alarmManager = appContext.getSystemService(AlarmManager::class.java)
+            ?: return ReminderScheduleResult.CANCELLED
+        return try {
             alarmManager.setAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 triggerAtMillis,
                 pendingIntent
             )
+            ReminderScheduleResult.SCHEDULED
         } catch (_: SecurityException) {
             // Defensively ignore if alarm scheduling is restricted by OEM/system policy
+            ReminderScheduleResult.PERMISSION_DENIED
         }
     }
 
@@ -154,6 +193,7 @@ object SessionReminderScheduler {
      */
     suspend fun syncReminders(context: Context, repository: F1Repository) {
         val appContext = context.applicationContext
+        ensureNotificationChannel(appContext)
         val preferences = repository.userPreferencesFlow.first()
         val explicitKeys = repository.reminderSessionKeysFlow.first()
         val nowMillis = System.currentTimeMillis()
@@ -191,37 +231,73 @@ object SessionReminderScheduler {
             }
         }
     }
+
+    internal fun enqueueReminderResync(context: Context) {
+        val workRequest = OneTimeWorkRequestBuilder<SessionReminderResyncWorker>().build()
+        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+            REMINDER_RESYNC_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
+    }
 }
 
 /**
- * Receives AlarmManager session reminder broadcasts and device boot completions
- * to post local notifications, resync alarms, and refresh Glance widgets.
+ * WorkManager worker that safely resyncs session reminder alarms in the background
+ * after device boot, app updates, or system clock/timezone changes.
+ */
+class SessionReminderResyncWorker(
+    appContext: Context,
+    params: WorkerParameters
+) : CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result {
+        return try {
+            withTimeoutOrNull(RESYNC_TIMEOUT_MS) {
+                SessionReminderScheduler.syncReminders(
+                    applicationContext,
+                    F1Repository(applicationContext)
+                )
+            }
+            Result.success()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            Result.success()
+        }
+    }
+
+    private companion object {
+        const val RESYNC_TIMEOUT_MS = 10_000L
+    }
+}
+
+/**
+ * Receives AlarmManager session reminder broadcasts and system resync broadcasts
+ * to post local notifications, reschedule alarms via WorkManager, and refresh Glance widgets.
  */
 class SessionReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent?) {
         val appContext = context?.applicationContext ?: return
-        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            val pendingResult = goAsync()
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                try {
-                    SessionReminderScheduler.syncReminders(appContext, F1Repository(appContext))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    // Ignore transient errors during boot sync
-                } finally {
-                    pendingResult.finish()
-                }
-            }
-            return
-        }
+        val action = intent?.action ?: return
 
-        SessionReminderScheduler.ensureNotificationChannel(appContext)
-        if (SessionReminderScheduler.hasNotificationPermission(appContext)) {
-            postSessionNotification(appContext, intent)
+        when (action) {
+            in RESYNC_ACTIONS -> {
+                SessionReminderScheduler.ensureNotificationChannel(appContext)
+                WidgetRefreshScheduler.schedulePeriodicRefresh(appContext)
+                WidgetRefreshScheduler.triggerImmediateRefresh(appContext)
+                SessionReminderScheduler.enqueueReminderResync(appContext)
+            }
+
+            SessionReminderScheduler.ACTION_SESSION_REMINDER -> {
+                SessionReminderScheduler.ensureNotificationChannel(appContext)
+                if (SessionReminderScheduler.hasNotificationPermission(appContext)) {
+                    postSessionNotification(appContext, intent)
+                }
+                WidgetRefreshScheduler.triggerImmediateRefresh(appContext)
+            }
         }
-        WidgetRefreshScheduler.triggerImmediateRefresh(appContext)
     }
 
     @SuppressLint("MissingPermission")
@@ -248,7 +324,7 @@ class SessionReminderReceiver : BroadcastReceiver() {
         )
 
         val notification = NotificationCompat.Builder(context, SessionReminderScheduler.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_notification_f1)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -268,5 +344,14 @@ class SessionReminderReceiver : BroadcastReceiver() {
     private companion object {
         const val EXTRA_TARGET_SCREEN = "EXTRA_TARGET_SCREEN"
         const val TARGET_WEEKEND_SCHEDULE = "WEEKEND_SCHEDULE"
+        const val ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON"
+
+        val RESYNC_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            ACTION_QUICKBOOT_POWERON
+        )
     }
 }

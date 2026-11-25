@@ -1,17 +1,21 @@
 package com.reva2473.f1widget
 
+import androidx.compose.ui.graphics.Color
 import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.ui.components.getDriverCutoutRes
 import com.reva2473.f1widget.ui.components.getDriverHeadshotRes
 import com.reva2473.f1widget.ui.components.getTeamCarRes
+import com.reva2473.f1widget.ui.components.getTeamCarResByColor
+import com.reva2473.f1widget.ui.components.getTeamCarResByColorOrNull
 import com.reva2473.f1widget.ui.components.getTeamCarResOrNull
+import com.reva2473.f1widget.ui.components.resolveTeamId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Unit tests verifying [F1AssetMapper] driver code/name resolution without substring collisions
- * and team car drawable resolution including [F1TeamId.OTHER] null safety.
+ * Unit tests verifying [F1AssetMapper] driver code/name resolution without substring collisions,
+ * full 24-driver 2026 asset coverage, color-based team car resolution, and [F1TeamId.OTHER] null safety.
  */
 class F1AssetMapperTest {
 
@@ -19,33 +23,66 @@ class F1AssetMapperTest {
     fun testExactThreeLetterDriverCodesMatchExpectedDrawables() {
         val expectedHeadshots = mapOf(
             "VER" to R.drawable.driver_ver,
-            "PER" to R.drawable.driver_per,
-            "BOT" to R.drawable.driver_bot,
-            "LIN" to R.drawable.driver_lin,
-            "ANT" to R.drawable.driver_ant,
-            "HAD" to R.drawable.driver_had,
             "HAM" to R.drawable.driver_ham,
             "LEC" to R.drawable.driver_lec,
             "NOR" to R.drawable.driver_nor,
             "PIA" to R.drawable.driver_pia,
             "RUS" to R.drawable.driver_rus,
-            "ALO" to R.drawable.driver_alo
+            "ANT" to R.drawable.driver_ant,
+            "ALO" to R.drawable.driver_alo,
+            "STR" to R.drawable.driver_str,
+            "GAS" to R.drawable.driver_gas,
+            "OCO" to R.drawable.driver_oco,
+            "ALB" to R.drawable.driver_alb,
+            "SAI" to R.drawable.driver_sai,
+            "LAW" to R.drawable.driver_law,
+            "HAD" to R.drawable.driver_had,
+            "COL" to R.drawable.driver_col,
+            "BEA" to R.drawable.driver_bea,
+            "HUL" to R.drawable.driver_hul,
+            "BOR" to R.drawable.driver_bor,
+            "TSU" to R.drawable.driver_tsu,
+            "DOO" to R.drawable.driver_doo,
+            "BOT" to R.drawable.driver_bot,
+            "LIN" to R.drawable.driver_lin,
+            "PER" to R.drawable.driver_per
         )
+        assertEquals(24, expectedHeadshots.size)
         expectedHeadshots.forEach { (code, res) ->
-            assertEquals(res, getDriverHeadshotRes(code))
-            assertEquals(res, getDriverHeadshotRes(" ${code.lowercase()} "))
+            assertEquals("Headshot mismatch for $code", res, getDriverHeadshotRes(code))
+            assertEquals("Lowercase/whitespace headshot mismatch for $code", res, getDriverHeadshotRes(" ${code.lowercase()} "))
         }
 
         val expectedCutouts = mapOf(
             "VER" to R.drawable.driver_full_ver,
-            "PER" to R.drawable.driver_full_per,
+            "HAM" to R.drawable.driver_full_ham,
+            "LEC" to R.drawable.driver_full_lec,
+            "NOR" to R.drawable.driver_full_nor,
+            "PIA" to R.drawable.driver_full_pia,
+            "RUS" to R.drawable.driver_full_rus,
+            "ANT" to R.drawable.driver_full_ant,
+            "ALO" to R.drawable.driver_full_alo,
+            "STR" to R.drawable.driver_full_str,
+            "GAS" to R.drawable.driver_full_gas,
+            "OCO" to R.drawable.driver_full_oco,
+            "ALB" to R.drawable.driver_full_alb,
+            "SAI" to R.drawable.driver_full_sai,
+            "LAW" to R.drawable.driver_full_law,
+            "HAD" to R.drawable.driver_full_had,
+            "COL" to R.drawable.driver_full_col,
+            "BEA" to R.drawable.driver_full_bea,
+            "HUL" to R.drawable.driver_full_hul,
+            "BOR" to R.drawable.driver_full_bor,
+            "TSU" to R.drawable.driver_full_tsu,
+            "DOO" to R.drawable.driver_full_doo,
             "BOT" to R.drawable.driver_full_bot,
             "LIN" to R.drawable.driver_full_lin,
-            "ANT" to R.drawable.driver_full_ant,
-            "HAD" to R.drawable.driver_full_had
+            "PER" to R.drawable.driver_full_per
         )
+        assertEquals(24, expectedCutouts.size)
         expectedCutouts.forEach { (code, res) ->
-            assertEquals(res, getDriverCutoutRes(code))
+            assertEquals("Cutout mismatch for $code", res, getDriverCutoutRes(code))
+            assertEquals("Lowercase/whitespace cutout mismatch for $code", res, getDriverCutoutRes(" ${code.lowercase()} "))
         }
     }
 
@@ -81,6 +118,32 @@ class F1AssetMapperTest {
     }
 
     @Test
+    fun testHistoricalDriverPortraitResolutionChecksFullNameBeforeThreeLetterCode() {
+        // Historical drivers whose 3-letter code ("VER", "ALB") collides with 2026 drivers
+        assertEquals(R.drawable.driver_ver, getDriverHeadshotRes("VER"))
+        assertNull(getDriverHeadshotRes("Jos Verstappen"))
+        assertNull(getDriverCutoutRes("Jos Verstappen"))
+        assertNull(getDriverHeadshotRes("jos_verstappen"))
+
+        assertEquals(R.drawable.driver_alb, getDriverHeadshotRes("ALB"))
+        assertNull(getDriverHeadshotRes("Michele Alboreto"))
+        assertNull(getDriverCutoutRes("Michele Alboreto"))
+        assertNull(getDriverHeadshotRes("Alboreto"))
+        assertNull(getDriverHeadshotRes("michele-alboreto"))
+
+        // Current 2026 drivers resolve via both full name and 3-letter code
+        assertEquals(R.drawable.driver_ver, getDriverHeadshotRes("Max Verstappen"))
+        assertEquals(R.drawable.driver_full_ver, getDriverCutoutRes("Max Verstappen"))
+        assertEquals(R.drawable.driver_alb, getDriverHeadshotRes("Alexander Albon"))
+        assertEquals(R.drawable.driver_full_alb, getDriverCutoutRes("Alex Albon"))
+
+        // Other historical legends also do not falsely resolve
+        assertNull(getDriverHeadshotRes("Ayrton Senna"))
+        assertNull(getDriverHeadshotRes("Michael Schumacher"))
+        assertNull(getDriverHeadshotRes("Nino Farina"))
+    }
+
+    @Test
     fun testTeamCarResOrNullReturnsNullForOtherAndMatchesAllTeams() {
         assertNull(getTeamCarResOrNull(F1TeamId.OTHER))
         assertEquals(R.drawable.car_haas, getTeamCarRes(F1TeamId.OTHER))
@@ -101,6 +164,39 @@ class F1AssetMapperTest {
         assertEquals(R.drawable.car_racing_bulls, getTeamCarRes("VRB"))
         assertEquals(R.drawable.car_red_bull, getTeamCarRes("RBR"))
         assertEquals(R.drawable.car_racing_bulls, getTeamCarRes("toro_rosso"))
-        assertEquals(R.drawable.car_haas, getTeamCarRes("lotus"))
+
+        // Unknown / unmapped historical teams resolve to F1TeamId.OTHER and null via getTeamCarResOrNull
+        assertEquals(F1TeamId.OTHER, resolveTeamId("lotus"))
+        assertNull(getTeamCarResOrNull(resolveTeamId("lotus")))
+        assertNull(getTeamCarResOrNull(resolveTeamId("unknown_constructor")))
+    }
+
+    @Test
+    fun testTeamCarResByColorAndOrNullForPrimarySecondaryAndHeuristicColors() {
+        val exactTeamColors = listOf(
+            F1TeamId.WILLIAMS to R.drawable.car_williams,
+            F1TeamId.RACING_BULLS to R.drawable.car_racing_bulls,
+            F1TeamId.CADILLAC to R.drawable.car_cadillac,
+            F1TeamId.FERRARI to R.drawable.car_ferrari,
+            F1TeamId.MCLAREN to R.drawable.car_mclaren,
+            F1TeamId.MERCEDES to R.drawable.car_mercedes,
+            F1TeamId.RED_BULL to R.drawable.car_red_bull
+        )
+
+        exactTeamColors.forEach { (team, expectedDrawable) ->
+            assertEquals("Primary color mismatch for $team", expectedDrawable, getTeamCarResByColorOrNull(Color(team.colorHex)))
+            assertEquals("Secondary color mismatch for $team", expectedDrawable, getTeamCarResByColorOrNull(Color(team.secondaryHex)))
+            assertEquals("getTeamCarResByColor mismatch for $team", expectedDrawable, getTeamCarResByColor(Color(team.colorHex)))
+        }
+
+        // Heuristic color range differentiation (Williams vs Racing Bulls vs Red Bull, and Cadillac gold)
+        assertEquals(R.drawable.car_williams, getTeamCarResByColorOrNull(Color(0.35f, 0.78f, 0.96f)))
+        assertEquals(R.drawable.car_racing_bulls, getTeamCarResByColorOrNull(Color(0.35f, 0.56f, 0.96f)))
+        assertEquals(R.drawable.car_red_bull, getTeamCarResByColorOrNull(Color(0.20f, 0.42f, 0.78f)))
+        assertEquals(R.drawable.car_cadillac, getTeamCarResByColorOrNull(Color(0.82f, 0.68f, 0.22f)))
+
+        // Unmatched color returns null from OrNull variant and falls back to car_haas in non-null variant
+        assertNull(getTeamCarResByColorOrNull(Color.Black))
+        assertEquals(R.drawable.car_haas, getTeamCarResByColor(Color.Black))
     }
 }

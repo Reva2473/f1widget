@@ -1,6 +1,7 @@
 package com.reva2473.f1widget.domain.model
 
 import kotlinx.serialization.Serializable
+import java.util.Locale
 
 @Serializable
 enum class F1TeamId(
@@ -19,13 +20,13 @@ enum class F1TeamId(
     WILLIAMS("Williams", "williams", 0xFF64C4FF, 0xFF102433, "WIL"),
     RACING_BULLS("Racing Bulls", "rb", 0xFF6692FF, 0xFF121C33, "VRB"),
     HAAS("Haas", "haas", 0xFFB6BABD, 0xFF222426, "HAA"),
-    AUDI_SAUBER("Kick Sauber", "sauber", 0xFF52E252, 0xFF102B10, "SAU"),
+    AUDI_SAUBER("Audi", "audi", 0xFFFF2D00, 0xFF330A00, "AUD"),
     CADILLAC("Cadillac", "cadillac", 0xFFD4AF37, 0xFF2B240D, "CAD"),
     OTHER("Other", "other", 0xFF8E8E99, 0xFF24242A, "F1");
 
     companion object {
         fun fromName(name: String): F1TeamId {
-            val lower = name.lowercase().trim()
+            val lower = name.lowercase(Locale.ROOT).trim()
             return when {
                 lower.contains("red bull") || lower.contains("red_bull") || lower == "rbr" -> RED_BULL
                 lower.contains("racing bulls") || lower.contains("vcarb") || lower.contains("alphatauri") ||
@@ -46,7 +47,7 @@ enum class F1TeamId(
                 lower.contains("cadillac") || lower.contains("andretti") -> CADILLAC
                 else -> entries.firstOrNull {
                     it != OTHER && (
-                        lower.contains(it.displayName.lowercase()) ||
+                        lower.contains(it.displayName.lowercase(Locale.ROOT)) ||
                             (it.constructorId != "rb" && lower.contains(it.constructorId))
                         )
                 } ?: OTHER
@@ -74,58 +75,58 @@ enum class SectorStatus(val colorHex: Long) {
 
 @Serializable
 data class SessionScheduleItem(
-    val shortName: String,      // e.g. "FP1", "FP2", "FP3", "Quali", "Race"
-    val fullName: String,       // e.g. "Free Practice 1", "Qualifying", "Race"
-    val dayOfWeek: String,      // e.g. "Fri", "Sat", "Sun"
-    val fullDayName: String,    // e.g. "Friday", "Saturday", "Sunday"
-    val dateDay: String,        // e.g. "06", "07", "08"
-    val dateMonth: String,      // e.g. "Nov"
-    val localTime: String,      // e.g. "05:30", "17:00"
-    val countdownBadge: String, // e.g. "Race in 36 days", "35 days"
+    val shortName: String = "",      // e.g. "FP1", "FP2", "FP3", "Quali", "Race"
+    val fullName: String = "",       // e.g. "Free Practice 1", "Qualifying", "Race"
+    val dayOfWeek: String = "",      // e.g. "Fri", "Sat", "Sun"
+    val fullDayName: String = "",    // e.g. "Friday", "Saturday", "Sunday"
+    val dateDay: String = "",        // e.g. "06", "07", "08"
+    val dateMonth: String = "",      // e.g. "Nov"
+    val localTime: String = "",      // e.g. "05:30", "17:00"
+    val countdownBadge: String = "", // e.g. "Race in 36 days", "35 days"
     val isRace: Boolean = false,
     val utcEpochMillis: Long? = null
 )
 
 @Serializable
 data class RaceRecentResult(
-    val grandPrixName: String,  // e.g. "Azerbaijan Grand Prix"
-    val positionText: String,   // e.g. "P5", "P1"
-    val pointsText: String,     // e.g. "(10pts)", "(25pts)"
-    val position: Int
+    val grandPrixName: String = "",  // e.g. "Azerbaijan Grand Prix"
+    val positionText: String = "",   // e.g. "P5", "P1"
+    val pointsText: String = "",     // e.g. "(10pts)", "(25pts)"
+    val position: Int = 0
 )
 
 @Serializable
 data class DriverStanding(
-    val position: Int,
-    val driverId: String,
-    val code: String,           // e.g. "ANT", "RUS", "HAM", "NOR", "LEC", "VER"
-    val firstName: String,
-    val lastName: String,
-    val fullName: String,
-    val nationality: String,
-    val team: F1TeamId,
-    val points: Double,
-    val wins: Int,
-    val podiums: Int,
-    val poles: Int,
-    val avgPtsPerRace: Double,
-    val racesCount: Int,
-    val gapToLeader: String?,   // e.g. "-66 to leader"
-    val gapToPrev: String?,     // e.g. "-37 to P2"
-    val last3Summary: String,   // e.g. "P5, P1, P1 (60 pts)"
-    val recentRaces: List<RaceRecentResult>
+    val position: Int = 0,
+    val driverId: String = "",
+    val code: String = "",           // e.g. "ANT", "RUS", "HAM", "NOR", "LEC", "VER"
+    val firstName: String = "",
+    val lastName: String = "",
+    val fullName: String = "",
+    val nationality: String = "",
+    val team: F1TeamId = F1TeamId.OTHER,
+    val points: Double = 0.0,
+    val wins: Int = 0,
+    val podiums: Int = 0,
+    val poles: Int = 0,
+    val avgPtsPerRace: Double = 0.0,
+    val racesCount: Int = 0,
+    val gapToLeader: String? = null,   // e.g. "-66 to leader"
+    val gapToPrev: String? = null,     // e.g. "-37 to P2"
+    val last3Summary: String = "",   // e.g. "P5, P1, P1 (60 pts)"
+    val recentRaces: List<RaceRecentResult> = emptyList()
 )
 
 @Serializable
 data class ConstructorWinItem(
-    val grandPrixName: String,
-    val winnerFullName: String
+    val grandPrixName: String = "",
+    val winnerFullName: String = ""
 )
 
 @Serializable
 data class ConstructorDriverPoints(
-    val fullName: String,
-    val points: Double
+    val fullName: String = "",
+    val points: Double = 0.0
 )
 
 @Serializable
@@ -138,14 +139,14 @@ data class TeamRaceFormColumn(
 
 @Serializable
 data class ConstructorStanding(
-    val position: Int,
-    val team: F1TeamId,
-    val points: Double,
-    val wins: Int,
-    val gapToP1: String?,       // e.g. "160 to P1"
-    val gapToPrev: String?,     // e.g. "72 to P2"
-    val drivers: List<ConstructorDriverPoints>,
-    val seasonWins: List<ConstructorWinItem>,
+    val position: Int = 0,
+    val team: F1TeamId = F1TeamId.OTHER,
+    val points: Double = 0.0,
+    val wins: Int = 0,
+    val gapToP1: String? = null,       // e.g. "160 to P1"
+    val gapToPrev: String? = null,     // e.g. "72 to P2"
+    val drivers: List<ConstructorDriverPoints> = emptyList(),
+    val seasonWins: List<ConstructorWinItem> = emptyList(),
     val recentTeamForm: List<TeamRaceFormColumn> = emptyList(),
     val constructorId: String = "",
     val constructorName: String = ""
@@ -159,21 +160,21 @@ data class ConstructorStanding(
 
 @Serializable
 data class TyreStint(
-    val stintNumber: Int,
-    val compound: TyreCompound,
-    val lapsCount: Int,         // e.g. 16 -> "16L"
+    val stintNumber: Int = 1,
+    val compound: TyreCompound = TyreCompound.MEDIUM,
+    val lapsCount: Int = 0,         // e.g. 16 -> "16L"
     val pitStopDuration: String? = null, // e.g. "21.6s"
     val pitStopLap: Int? = null          // e.g. 16 -> "Lap 16"
 )
 
 @Serializable
 data class RaceDriverResult(
-    val position: Int,
-    val driverCode: String,
-    val driverFullName: String,
-    val team: F1TeamId,
-    val finishTimeOrGap: String, // e.g. "2:06:54.430" or "+19.477"
-    val points: Double,
+    val position: Int = 0,
+    val driverCode: String = "",
+    val driverFullName: String = "",
+    val team: F1TeamId = F1TeamId.OTHER,
+    val finishTimeOrGap: String = "", // e.g. "2:06:54.430" or "+19.477"
+    val points: Double = 0.0,
     val qualifyingPosition: String = "",
     val qualifyingTime: String = "",
     val fastestLapPosition: String = "",
@@ -222,22 +223,22 @@ data class CircuitCorner(
 
 @Serializable
 data class RaceWeekend(
-    val season: Int,
-    val round: Int,
-    val grandPrixName: String,      // e.g. "Bahrain Grand Prix in Malaysia" / "Brazilian Grand Prix"
-    val circuitName: String,        // e.g. "Sepang International Circuit" / "Autódromo José Carlos Pace"
-    val location: String,           // e.g. "Kuala Lumpur, Malaysia" / "São Paulo, Brazil"
-    val countryFlagEmoji: String,   // e.g. "🇲🇾", "🇧🇷", "🇦🇪"
-    val dateRangeText: String,      // e.g. "FRI 6 NOV - SUN 8 NOV"
-    val daysToGo: Int,
-    val circuitLengthKm: String,    // e.g. "5.543"
-    val totalLaps: Int,             // e.g. 56, 69, 58
-    val totalCorners: Int,          // e.g. 15, 16
+    val season: Int = 2026,
+    val round: Int = 1,
+    val grandPrixName: String = "",      // e.g. "Brazilian Grand Prix"
+    val circuitName: String = "",        // e.g. "Autódromo José Carlos Pace"
+    val location: String = "",           // e.g. "São Paulo, Brazil"
+    val countryFlagEmoji: String = "🏁",   // e.g. "🇧🇷", "🇦🇪"
+    val dateRangeText: String = "",      // e.g. "FRI 6 NOV - SUN 8 NOV"
+    val daysToGo: Int = 0,
+    val circuitLengthKm: String = "5.000",    // e.g. "4.309"
+    val totalLaps: Int = 58,             // e.g. 56, 69, 58
+    val totalCorners: Int = 15,          // e.g. 15, 16
     val speedTrapNormalizedX: Float = 0.24f,
     val speedTrapNormalizedY: Float = 0.27f,
-    val circuitType: String = "SEPANG", // "SEPANG", "INTERLAGOS", "YAS_MARINA", "BAHRAIN"
+    val circuitType: String = "SEPANG", // "INTERLAGOS", "YAS_MARINA", "BAHRAIN", "MADRID"
     val circuitId: String = "",
-    val sessions: List<SessionScheduleItem>,
+    val sessions: List<SessionScheduleItem> = emptyList(),
     val results: List<RaceDriverResult> = emptyList(),
     val isSprintWeekend: Boolean = false
 )
@@ -265,14 +266,14 @@ data class DriverCareerComparison(
 
 @Serializable
 data class LiveDriverTiming(
-    val position: Int,
-    val code: String,
-    val fullName: String,
-    val team: F1TeamId,
-    val bestLapTime: String,        // e.g. "1:36.477"
-    val lastLapTime: String,        // e.g. "1:36.595"
-    val gapToLeader: String,        // e.g. "Leader" or "+0.118"
-    val intervalToAhead: String,    // e.g. "Leader" or "+0.118"
+    val position: Int = 0,
+    val code: String = "",
+    val fullName: String = "",
+    val team: F1TeamId = F1TeamId.OTHER,
+    val bestLapTime: String = "—",        // e.g. "1:36.477"
+    val lastLapTime: String = "—",        // e.g. "1:36.595"
+    val gapToLeader: String = "—",        // e.g. "Leader" or "+0.118"
+    val intervalToAhead: String = "—",    // e.g. "Leader" or "+0.118"
     val isOverallBest: Boolean = false,
     val isInPit: Boolean = false,
     val isOutLap: Boolean = false,
@@ -289,65 +290,67 @@ data class LiveDriverTiming(
 
 @Serializable
 data class TeamRadioClip(
-    val id: String,
-    val driverName: String,
-    val driverCode: String,
-    val team: F1TeamId,
-    val timestamp: String,          // e.g. "08:55:53"
-    val transcript: String,
-    val durationSeconds: Int = 8
+    val id: String = "",
+    val driverName: String = "",
+    val driverCode: String = "",
+    val team: F1TeamId = F1TeamId.OTHER,
+    val timestamp: String = "",          // e.g. "08:55:53"
+    val transcript: String = "",
+    val durationSeconds: Int = 8,
+    val recordingUrl: String? = null
 )
 
 @Serializable
 data class RaceControlMessage(
-    val id: String,
-    val title: String,              // e.g. "SESSION STARTED"
-    val timestamp: String,          // e.g. "09:00:00"
+    val id: String = "",
+    val title: String = "",              // e.g. "SESSION STARTED"
+    val timestamp: String = "",          // e.g. "09:00:00"
     val category: String = "INFO"   // "FLAG", "INFO", "SAFETY_CAR"
 )
 
 @Serializable
 data class OvertakeEvent(
-    val lap: Int,
-    val overtakingDriver: String,
-    val overtakingTeam: F1TeamId,
-    val overtakenDriver: String,
-    val overtakenTeam: F1TeamId,
-    val positionGained: Int,
-    val cornerText: String
+    val lap: Int = 0,
+    val overtakingDriver: String = "",
+    val overtakingTeam: F1TeamId = F1TeamId.OTHER,
+    val overtakenDriver: String = "",
+    val overtakenTeam: F1TeamId = F1TeamId.OTHER,
+    val positionGained: Int = 1,
+    val cornerText: String = ""
 )
 
 @Serializable
 data class WeatherSnapshot(
-    val trackTempC: Double,
-    val airTempC: Double,
-    val humidityPercent: Int,
-    val windSpeedKmh: Double,
-    val windDirection: String,
-    val rainfallPercent: Int,
-    val pressureMbar: Double
+    val trackTempC: Double = 0.0,
+    val airTempC: Double = 0.0,
+    val humidityPercent: Int = 0,
+    val windSpeedKmh: Double = 0.0,
+    val windDirection: String = "N",
+    val rainfallPercent: Int = 0,
+    val pressureMbar: Double = 1013.2
 )
 
 @Serializable
 data class LiveSessionState(
-    val grandPrixName: String,
-    val sessionName: String,        // e.g. "Qualifying · Q1"
-    val shortSessionCode: String,   // e.g. "Q1"
-    val timeRemaining: String,      // e.g. "8:21" / "9:56 left"
-    val bestLapDriverCode: String,  // e.g. "VER"
-    val bestLapTime: String,        // e.g. "1:36.477"
-    val carsOnTrack: Int,           // e.g. 21
-    val trackStatusText: String,    // e.g. "Track Clear"
+    val grandPrixName: String = "",
+    val sessionName: String = "",        // e.g. "Qualifying · Q1"
+    val shortSessionCode: String = "",   // e.g. "Q1"
+    val timeRemaining: String = "",      // e.g. "8:21" / "9:56 left"
+    val bestLapDriverCode: String = "",  // e.g. "VER"
+    val bestLapTime: String = "",        // e.g. "1:36.477"
+    val carsOnTrack: Int = 0,           // e.g. 21
+    val trackStatusText: String = "Track Clear",    // e.g. "Track Clear"
     val sector1LengthKm: String = "1.4 km",
     val sector2LengthKm: String = "1.8 km",
     val sector3LengthKm: String = "2.3 km",
     val circuitId: String = "SEPANG",
-    val drivers: List<LiveDriverTiming>,
-    val latestRadio: TeamRadioClip,
-    val radioClips: List<TeamRadioClip>,
-    val raceControlMessages: List<RaceControlMessage>,
-    val overtakes: List<OvertakeEvent>,
-    val weather: WeatherSnapshot
+    val drivers: List<LiveDriverTiming> = emptyList(),
+    val latestRadio: TeamRadioClip = TeamRadioClip(),
+    val radioClips: List<TeamRadioClip> = emptyList(),
+    val raceControlMessages: List<RaceControlMessage> = emptyList(),
+    val overtakes: List<OvertakeEvent> = emptyList(),
+    val weather: WeatherSnapshot = WeatherSnapshot(),
+    val isLive: Boolean = false
 )
 
 @Serializable

@@ -19,6 +19,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="@string/widget_loading"
-        android:textColor="@color/apex_text_secondary"
+        android:textColor="?android:attr/textColorSecondary"
         android:textSize="12sp" />
 </LinearLayout>

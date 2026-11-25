@@ -254,11 +254,13 @@ private suspend fun resolveUpcomingRace(repo: F1Repository, season: Int): RaceWe
     val upcoming = schedule.firstOrNull { weekend ->
         val raceSession = weekend.sessions.firstOrNull { it.isRace } ?: weekend.sessions.lastOrNull()
         val utcMillis = raceSession?.utcEpochMillis
+        val badge = raceSession?.countdownBadge.orEmpty()
+        val isMarkedFinished = badge.contains("Completed", ignoreCase = true) ||
+            badge.contains("Final", ignoreCase = true)
         when {
-            utcMillis != null -> utcMillis + completionBufferMillis > nowMillis
-            weekend.daysToGo > 0 -> true
-            raceSession != null -> !raceSession.countdownBadge.contains("Completed", ignoreCase = true)
-            else -> false
+            utcMillis != null -> utcMillis + completionBufferMillis > nowMillis && !isMarkedFinished
+            raceSession != null -> !isMarkedFinished && (weekend.daysToGo > 0 || badge.isNotBlank())
+            else -> weekend.daysToGo > 0
         }
     }
     return upcoming
@@ -502,7 +504,7 @@ class NextRaceCountdownWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val activeYear = Year.now().value
+        val activeYear = Year.now().value.coerceAtLeast(2026)
         val race = resolveUpcomingRace(repo, activeYear)
         val raceSession = race.sessions.find {
             it.isRace || it.fullName.equals("Race", ignoreCase = true) || it.shortName.equals("Race", ignoreCase = true)
@@ -691,7 +693,7 @@ class WeekendScheduleWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val activeYear = Year.now().value
+        val activeYear = Year.now().value.coerceAtLeast(2026)
         val race = resolveUpcomingRace(repo, activeYear)
         val allSessions: List<SessionScheduleItem> = race.sessions
 
@@ -766,74 +768,79 @@ class WeekendScheduleWidget : GlanceAppWidget() {
                                 )
                             }
                         } else {
-                            sessions.forEachIndexed { index, session ->
-                                val isRace = session.isRace
-                                val rowBg = if (isRace) palette.surfaceElevated else palette.background
-                                val labelColor = if (isRace) palette.accentText else palette.textPrimary
-                                val badgeBg = if (isRace) palette.accentFill else palette.badgeSurface
-                                val badgeTextColor = if (isRace) palette.onAccent else palette.textPrimary
+                            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                                sessions.forEachIndexed { index, session ->
+                                    val isRace = session.isRace
+                                    val rowBg = if (isRace) palette.surfaceElevated else palette.background
+                                    val labelColor = if (isRace) palette.accentText else palette.textPrimary
+                                    val badgeBg = if (isRace) palette.accentFill else palette.badgeSurface
+                                    val badgeTextColor = if (isRace) palette.onAccent else palette.textPrimary
 
-                                Row(
-                                    modifier = GlanceModifier
-                                        .fillMaxWidth()
-                                        .background(ColorProvider(rowBg))
-                                        .cornerRadius(6.dp)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
                                     Box(
                                         modifier = GlanceModifier
-                                            .width(36.dp)
-                                            .background(ColorProvider(badgeBg))
-                                            .cornerRadius(4.dp)
-                                            .padding(vertical = 1.dp),
-                                        contentAlignment = Alignment.Center
+                                            .fillMaxWidth()
+                                            .padding(bottom = if (index < sessions.lastIndex) 3.dp else 0.dp)
                                     ) {
-                                        Text(
-                                            text = session.shortName,
-                                            style = TextStyle(
-                                                color = ColorProvider(badgeTextColor),
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold
+                                        Row(
+                                            modifier = GlanceModifier
+                                                .fillMaxWidth()
+                                                .background(ColorProvider(rowBg))
+                                                .cornerRadius(6.dp)
+                                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = GlanceModifier
+                                                    .width(36.dp)
+                                                    .background(ColorProvider(badgeBg))
+                                                    .cornerRadius(4.dp)
+                                                    .padding(vertical = 1.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = session.shortName,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(badgeTextColor),
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                )
+                                            }
+
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+
+                                            Text(
+                                                text = session.fullName,
+                                                maxLines = 1,
+                                                modifier = GlanceModifier.defaultWeight(),
+                                                style = TextStyle(
+                                                    color = ColorProvider(labelColor),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = if (isRace) FontWeight.Bold else FontWeight.Normal
+                                                )
                                             )
-                                        )
-                                    }
 
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
+                                            if (!isCompactWidth) {
+                                                Text(
+                                                    text = "${session.dayOfWeek} ${session.dateDay} ${session.dateMonth}",
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textSecondary),
+                                                        fontSize = 9.sp
+                                                    )
+                                                )
+                                                Spacer(modifier = GlanceModifier.width(6.dp))
+                                            }
 
-                                    Text(
-                                        text = session.fullName,
-                                        maxLines = 1,
-                                        modifier = GlanceModifier.defaultWeight(),
-                                        style = TextStyle(
-                                            color = ColorProvider(labelColor),
-                                            fontSize = 10.sp,
-                                            fontWeight = if (isRace) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    )
-
-                                    if (!isCompactWidth) {
-                                        Text(
-                                            text = "${session.dayOfWeek} ${session.dateDay} ${session.dateMonth}",
-                                            style = TextStyle(
-                                                color = ColorProvider(palette.textSecondary),
-                                                fontSize = 9.sp
+                                            Text(
+                                                text = session.localTime,
+                                                style = TextStyle(
+                                                    color = ColorProvider(if (isRace) palette.gold else palette.textPrimary),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             )
-                                        )
-                                        Spacer(modifier = GlanceModifier.width(6.dp))
+                                        }
                                     }
-
-                                    Text(
-                                        text = session.localTime,
-                                        style = TextStyle(
-                                            color = ColorProvider(if (isRace) palette.gold else palette.textPrimary),
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                }
-                                if (index < sessions.size - 1) {
-                                    Spacer(modifier = GlanceModifier.height(2.dp))
                                 }
                             }
                         }
@@ -858,7 +865,7 @@ class DriverStandingsWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val currentYear = Year.now().value
+        val currentYear = Year.now().value.coerceAtLeast(2026)
         val standingsList = withWidgetTimeout { repo.getDriverStandings(currentYear) }.orEmpty()
         val displayYear = if (standingsList.isNotEmpty()) {
             currentYear
@@ -917,91 +924,96 @@ class DriverStandingsWidget : GlanceAppWidget() {
 
                         Spacer(modifier = GlanceModifier.height(4.dp))
 
-                        visibleStandings.forEachIndexed { index, driver ->
-                            val teamColor = Color(driver.team.colorHex)
-                            Row(
-                                modifier = GlanceModifier
-                                    .fillMaxWidth()
-                                    .background(ColorProvider(palette.surfaceElevated))
-                                    .cornerRadius(6.dp)
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "P${driver.position}",
-                                    style = TextStyle(
-                                        color = ColorProvider(if (driver.position == 1) palette.gold else palette.textPrimary),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-
-                                Spacer(modifier = GlanceModifier.width(6.dp))
-
+                        Column(modifier = GlanceModifier.fillMaxWidth()) {
+                            visibleStandings.forEachIndexed { index, driver ->
+                                val teamColor = Color(driver.team.colorHex)
                                 Box(
                                     modifier = GlanceModifier
-                                        .width(3.dp)
-                                        .height(14.dp)
-                                        .background(ColorProvider(teamColor))
-                                        .cornerRadius(1.dp)
-                                ) {}
-
-                                Spacer(modifier = GlanceModifier.width(6.dp))
-
-                                if (!isCompactWidth) {
-                                    DriverAvatar(
-                                        driverCode = driver.code,
-                                        size = 20.dp,
-                                        palette = palette
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                }
-
-                                Column(modifier = GlanceModifier.defaultWeight()) {
-                                    Text(
-                                        text = if (isCompactWidth) driver.code else driver.fullName,
-                                        maxLines = 1,
-                                        style = TextStyle(
-                                            color = ColorProvider(palette.textPrimary),
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                    if (!isCompactHeight) {
+                                        .fillMaxWidth()
+                                        .padding(bottom = if (index < visibleStandings.lastIndex) 3.dp else 0.dp)
+                                ) {
+                                    Row(
+                                        modifier = GlanceModifier
+                                            .fillMaxWidth()
+                                            .background(ColorProvider(palette.surfaceElevated))
+                                            .cornerRadius(6.dp)
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                            text = driver.team.displayName,
-                                            maxLines = 1,
+                                            text = "P${driver.position}",
                                             style = TextStyle(
-                                                color = ColorProvider(palette.textSecondary),
-                                                fontSize = 8.sp
+                                                color = ColorProvider(if (driver.position == 1) palette.gold else palette.textPrimary),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+
+                                        Spacer(modifier = GlanceModifier.width(6.dp))
+
+                                        Box(
+                                            modifier = GlanceModifier
+                                                .width(3.dp)
+                                                .height(14.dp)
+                                                .background(ColorProvider(teamColor))
+                                                .cornerRadius(1.dp)
+                                        ) {}
+
+                                        Spacer(modifier = GlanceModifier.width(6.dp))
+
+                                        if (!isCompactWidth) {
+                                            DriverAvatar(
+                                                driverCode = driver.code,
+                                                size = 20.dp,
+                                                palette = palette
+                                            )
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+                                        }
+
+                                        Column(modifier = GlanceModifier.defaultWeight()) {
+                                            Text(
+                                                text = if (isCompactWidth) driver.code else driver.fullName,
+                                                maxLines = 1,
+                                                style = TextStyle(
+                                                    color = ColorProvider(palette.textPrimary),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            )
+                                            if (!isCompactHeight) {
+                                                Text(
+                                                    text = driver.team.displayName,
+                                                    maxLines = 1,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textSecondary),
+                                                        fontSize = 8.sp
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        if (!isCompactWidth && driver.wins > 0) {
+                                            Text(
+                                                text = "${driver.wins}W",
+                                                style = TextStyle(
+                                                    color = ColorProvider(palette.gold),
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            )
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+                                        }
+
+                                        Text(
+                                            text = "${formatWidgetPoints(driver.points)} PTS",
+                                            style = TextStyle(
+                                                color = ColorProvider(palette.textPrimary),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
                                             )
                                         )
                                     }
                                 }
-
-                                if (!isCompactWidth && driver.wins > 0) {
-                                    Text(
-                                        text = "${driver.wins}W",
-                                        style = TextStyle(
-                                            color = ColorProvider(palette.gold),
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                }
-
-                                Text(
-                                    text = "${formatWidgetPoints(driver.points)} PTS",
-                                    style = TextStyle(
-                                        color = ColorProvider(palette.textPrimary),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                            }
-                            if (index < visibleStandings.size - 1) {
-                                Spacer(modifier = GlanceModifier.height(2.dp))
                             }
                         }
                     }
@@ -1025,7 +1037,7 @@ class ConstructorStandingsWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val currentYear = Year.now().value
+        val currentYear = Year.now().value.coerceAtLeast(2026)
         val standingsList = withWidgetTimeout { repo.getConstructorStandings(currentYear) }.orEmpty()
         val displayYear = if (standingsList.isNotEmpty()) {
             currentYear
@@ -1084,82 +1096,87 @@ class ConstructorStandingsWidget : GlanceAppWidget() {
 
                         Spacer(modifier = GlanceModifier.height(4.dp))
 
-                        visibleStandings.forEachIndexed { index, constructor ->
-                            val teamColor = Color(constructor.team.colorHex)
-                            Row(
-                                modifier = GlanceModifier
-                                    .fillMaxWidth()
-                                    .background(ColorProvider(palette.surfaceElevated))
-                                    .cornerRadius(6.dp)
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "P${constructor.position}",
-                                    style = TextStyle(
-                                        color = ColorProvider(if (constructor.position == 1) palette.gold else palette.textPrimary),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-
-                                Spacer(modifier = GlanceModifier.width(6.dp))
-
+                        Column(modifier = GlanceModifier.fillMaxWidth()) {
+                            visibleStandings.forEachIndexed { index, constructor ->
+                                val teamColor = Color(constructor.team.colorHex)
                                 Box(
                                     modifier = GlanceModifier
-                                        .width(3.dp)
-                                        .height(14.dp)
-                                        .background(ColorProvider(teamColor))
-                                        .cornerRadius(1.dp)
-                                ) {}
-
-                                Spacer(modifier = GlanceModifier.width(6.dp))
-
-                                if (!isCompactWidth) {
-                                    TeamCarThumbnail(
-                                        team = constructor.team,
-                                        displayName = constructor.resolvedConstructorName,
-                                        width = 32.dp,
-                                        height = 16.dp,
-                                        palette = palette
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                }
-
-                                Text(
-                                    text = constructor.resolvedConstructorName,
-                                    maxLines = 1,
-                                    modifier = GlanceModifier.defaultWeight(),
-                                    style = TextStyle(
-                                        color = ColorProvider(palette.textPrimary),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-
-                                val gap = constructor.gapToP1
-                                if (showGap && gap != null) {
-                                    Text(
-                                        text = gap,
-                                        style = TextStyle(
-                                            color = ColorProvider(palette.textSecondary),
-                                            fontSize = 8.sp
+                                        .fillMaxWidth()
+                                        .padding(bottom = if (index < visibleStandings.lastIndex) 3.dp else 0.dp)
+                                ) {
+                                    Row(
+                                        modifier = GlanceModifier
+                                            .fillMaxWidth()
+                                            .background(ColorProvider(palette.surfaceElevated))
+                                            .cornerRadius(6.dp)
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "P${constructor.position}",
+                                            style = TextStyle(
+                                                color = ColorProvider(if (constructor.position == 1) palette.gold else palette.textPrimary),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         )
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(4.dp))
-                                }
 
-                                Text(
-                                    text = "${formatWidgetPoints(constructor.points)} PTS",
-                                    style = TextStyle(
-                                        color = ColorProvider(palette.textPrimary),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                            }
-                            if (index < visibleStandings.size - 1) {
-                                Spacer(modifier = GlanceModifier.height(2.dp))
+                                        Spacer(modifier = GlanceModifier.width(6.dp))
+
+                                        Box(
+                                            modifier = GlanceModifier
+                                                .width(3.dp)
+                                                .height(14.dp)
+                                                .background(ColorProvider(teamColor))
+                                                .cornerRadius(1.dp)
+                                        ) {}
+
+                                        Spacer(modifier = GlanceModifier.width(6.dp))
+
+                                        if (!isCompactWidth) {
+                                            TeamCarThumbnail(
+                                                team = constructor.team,
+                                                displayName = constructor.resolvedConstructorName,
+                                                width = 32.dp,
+                                                height = 16.dp,
+                                                palette = palette
+                                            )
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+                                        }
+
+                                        Text(
+                                            text = constructor.resolvedConstructorName,
+                                            maxLines = 1,
+                                            modifier = GlanceModifier.defaultWeight(),
+                                            style = TextStyle(
+                                                color = ColorProvider(palette.textPrimary),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+
+                                        val gap = constructor.gapToP1
+                                        if (showGap && gap != null) {
+                                            Text(
+                                                text = gap,
+                                                style = TextStyle(
+                                                    color = ColorProvider(palette.textSecondary),
+                                                    fontSize = 8.sp
+                                                )
+                                            )
+                                            Spacer(modifier = GlanceModifier.width(4.dp))
+                                        }
+
+                                        Text(
+                                            text = "${formatWidgetPoints(constructor.points)} PTS",
+                                            style = TextStyle(
+                                                color = ColorProvider(palette.textPrimary),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1183,7 +1200,7 @@ class FavoriteDriverWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val currentYear = Year.now().value
+        val currentYear = Year.now().value.coerceAtLeast(2026)
         val standingsList = withWidgetTimeout { repo.getDriverStandings(currentYear) }.orEmpty()
         val standings = standingsList.ifEmpty { SeedDataProvider.getDriverStandings2026() }
         val targetCode = prefs.favoriteDriverCode
@@ -1359,7 +1376,7 @@ class FavoriteTeamWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val currentYear = Year.now().value
+        val currentYear = Year.now().value.coerceAtLeast(2026)
 
         val (standingsList, networkDrivers) = withWidgetTimeout {
             val constructors = repo.getConstructorStandings(currentYear)
@@ -1476,8 +1493,7 @@ class FavoriteTeamWidget : GlanceAppWidget() {
                             displayName = constructor.resolvedConstructorName,
                             width = carWidth,
                             height = carHeight,
-                            palette = palette,
-                            modifier = GlanceModifier.fillMaxWidth()
+                            palette = palette
                         )
 
                         Spacer(modifier = GlanceModifier.defaultWeight())
@@ -1548,7 +1564,7 @@ class LastRacePodiumWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val activeYear = Year.now().value
+        val activeYear = Year.now().value.coerceAtLeast(2026)
         val latestRace: RaceWeekend? = withWidgetTimeout { repo.getLatestCompletedRace(activeYear) }
         val results: List<RaceDriverResult> = latestRace?.results.orEmpty().take(5)
 
@@ -1633,96 +1649,101 @@ class LastRacePodiumWidget : GlanceAppWidget() {
                                 }
                             }
                         } else {
-                            visibleResults.forEachIndexed { index, driver ->
-                                val posColor = when (driver.position) {
-                                    1 -> palette.gold
-                                    2 -> palette.silver
-                                    3 -> palette.bronze
-                                    else -> palette.textPrimary
-                                }
-                                val teamColor = Color(driver.team.colorHex)
-
-                                Row(
-                                    modifier = GlanceModifier
-                                        .fillMaxWidth()
-                                        .background(ColorProvider(palette.surfaceElevated))
-                                        .cornerRadius(6.dp)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "P${driver.position}",
-                                        style = TextStyle(
-                                            color = ColorProvider(posColor),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
+                            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                                visibleResults.forEachIndexed { index, driver ->
+                                    val posColor = when (driver.position) {
+                                        1 -> palette.gold
+                                        2 -> palette.silver
+                                        3 -> palette.bronze
+                                        else -> palette.textPrimary
+                                    }
+                                    val teamColor = Color(driver.team.colorHex)
 
                                     Box(
                                         modifier = GlanceModifier
-                                            .width(3.dp)
-                                            .height(14.dp)
-                                            .background(ColorProvider(teamColor))
-                                            .cornerRadius(1.dp)
-                                    ) {}
-
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-
-                                    if (!isCompactWidth) {
-                                        DriverAvatar(
-                                            driverCode = driver.driverCode,
-                                            size = 20.dp,
-                                            palette = palette
-                                        )
-                                        Spacer(modifier = GlanceModifier.width(6.dp))
-                                    }
-
-                                    Column(modifier = GlanceModifier.defaultWeight()) {
-                                        Text(
-                                            text = if (isCompactWidth) driver.driverCode else "${driver.driverCode} · ${driver.driverFullName}",
-                                            maxLines = 1,
-                                            style = TextStyle(
-                                                color = ColorProvider(palette.textPrimary),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
+                                            .fillMaxWidth()
+                                            .padding(bottom = if (index < visibleResults.lastIndex) 3.dp else 0.dp)
+                                    ) {
+                                        Row(
+                                            modifier = GlanceModifier
+                                                .fillMaxWidth()
+                                                .background(ColorProvider(palette.surfaceElevated))
+                                                .cornerRadius(6.dp)
+                                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "P${driver.position}",
+                                                style = TextStyle(
+                                                    color = ColorProvider(posColor),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             )
-                                        )
-                                        Text(
-                                            text = "${driver.team.displayName} · ${driver.formattedPoints} PTS",
-                                            maxLines = 1,
-                                            style = TextStyle(
-                                                color = ColorProvider(palette.textSecondary),
-                                                fontSize = 8.sp
-                                            )
-                                        )
-                                    }
 
-                                    if (showStints && driver.stints.isNotEmpty()) {
-                                        val stintSummary = driver.stints.joinToString(" ➔ ") { "${it.compound.code}(${it.lapsCount})" }
-                                        Text(
-                                            text = stintSummary,
-                                            style = TextStyle(
-                                                color = ColorProvider(palette.textMuted),
-                                                fontSize = 8.sp
-                                            )
-                                        )
-                                        Spacer(modifier = GlanceModifier.width(6.dp))
-                                    }
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
 
-                                    Text(
-                                        text = driver.finishTimeOrGap,
-                                        style = TextStyle(
-                                            color = ColorProvider(if (driver.position == 1) palette.sectorGreen else palette.textPrimary),
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                }
-                                if (index < visibleResults.size - 1) {
-                                    Spacer(modifier = GlanceModifier.height(2.dp))
+                                            Box(
+                                                modifier = GlanceModifier
+                                                    .width(3.dp)
+                                                    .height(14.dp)
+                                                    .background(ColorProvider(teamColor))
+                                                    .cornerRadius(1.dp)
+                                            ) {}
+
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+
+                                            if (!isCompactWidth) {
+                                                DriverAvatar(
+                                                    driverCode = driver.driverCode,
+                                                    size = 20.dp,
+                                                    palette = palette
+                                                )
+                                                Spacer(modifier = GlanceModifier.width(6.dp))
+                                            }
+
+                                            Column(modifier = GlanceModifier.defaultWeight()) {
+                                                Text(
+                                                    text = if (isCompactWidth) driver.driverCode else "${driver.driverCode} · ${driver.driverFullName}",
+                                                    maxLines = 1,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textPrimary),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                )
+                                                Text(
+                                                    text = "${driver.team.displayName} · ${driver.formattedPoints} PTS",
+                                                    maxLines = 1,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textSecondary),
+                                                        fontSize = 8.sp
+                                                    )
+                                                )
+                                            }
+
+                                            if (showStints && driver.stints.isNotEmpty()) {
+                                                val stintSummary = driver.stints.joinToString(" ➔ ") { "${it.compound.code}(${it.lapsCount})" }
+                                                Text(
+                                                    text = stintSummary,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textMuted),
+                                                        fontSize = 8.sp
+                                                    )
+                                                )
+                                                Spacer(modifier = GlanceModifier.width(6.dp))
+                                            }
+
+                                            Text(
+                                                text = driver.finishTimeOrGap,
+                                                style = TextStyle(
+                                                    color = ColorProvider(if (driver.position == 1) palette.sectorGreen else palette.textPrimary),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1747,7 +1768,7 @@ class LiveTimingBannerWidget : GlanceAppWidget() {
         val prefs = loadUserPreferences(context)
         val palette = buildWidgetPalette(context, prefs)
         val repo = F1Repository(context.applicationContext)
-        val liveSession: LiveSessionState = withWidgetTimeout { repo.getLiveSessionState() }
+        val liveSession: LiveSessionState = withWidgetTimeout { repo.getLiveSessionState("latest") }
             ?: SeedDataProvider.getLiveSessionState()
 
         provideContent {
@@ -1844,63 +1865,68 @@ class LiveTimingBannerWidget : GlanceAppWidget() {
                                 )
                             }
                         } else {
-                            topDrivers.forEachIndexed { index, driver ->
-                                Row(
-                                    modifier = GlanceModifier
-                                        .fillMaxWidth()
-                                        .background(ColorProvider(palette.surfaceElevated))
-                                        .cornerRadius(6.dp)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "P${driver.position}",
-                                        style = TextStyle(
-                                            color = ColorProvider(if (driver.position == 1) palette.gold else palette.textPrimary),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                    DriverAvatar(
-                                        driverCode = driver.code,
-                                        size = 20.dp,
-                                        palette = palette
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                    Column(modifier = GlanceModifier.defaultWeight()) {
-                                        Text(
-                                            text = if (isCompactWidth) driver.code else "${driver.code} · ${driver.fullName}",
-                                            maxLines = 1,
-                                            style = TextStyle(
-                                                color = ColorProvider(palette.textPrimary),
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold
+                            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                                topDrivers.forEachIndexed { index, driver ->
+                                    Box(
+                                        modifier = GlanceModifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = if (index < topDrivers.lastIndex) 3.dp else 0.dp)
+                                    ) {
+                                        Row(
+                                            modifier = GlanceModifier
+                                                .fillMaxWidth()
+                                                .background(ColorProvider(palette.surfaceElevated))
+                                                .cornerRadius(6.dp)
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "P${driver.position}",
+                                                style = TextStyle(
+                                                    color = ColorProvider(if (driver.position == 1) palette.gold else palette.textPrimary),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             )
-                                        )
-                                        Text(
-                                            text = "BEST: ${driver.bestLapTime} · LAST: ${driver.lastLapTime}",
-                                            maxLines = 1,
-                                            style = TextStyle(
-                                                color = ColorProvider(palette.textSecondary),
-                                                fontSize = 9.sp
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+                                            DriverAvatar(
+                                                driverCode = driver.code,
+                                                size = 20.dp,
+                                                palette = palette
                                             )
-                                        )
+                                            Spacer(modifier = GlanceModifier.width(6.dp))
+                                            Column(modifier = GlanceModifier.defaultWeight()) {
+                                                Text(
+                                                    text = if (isCompactWidth) driver.code else "${driver.code} · ${driver.fullName}",
+                                                    maxLines = 1,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textPrimary),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                )
+                                                Text(
+                                                    text = "BEST: ${driver.bestLapTime} · LAST: ${driver.lastLapTime}",
+                                                    maxLines = 1,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(palette.textSecondary),
+                                                        fontSize = 9.sp
+                                                    )
+                                                )
+                                            }
+                                            if (!isCompactWidth) {
+                                                Spacer(modifier = GlanceModifier.width(4.dp))
+                                                Text(
+                                                    text = if (driver.position == 1) "LEADER" else driver.gapToLeader,
+                                                    style = TextStyle(
+                                                        color = ColorProvider(if (driver.position == 1) palette.sectorGreen else palette.textMuted),
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                )
+                                            }
+                                        }
                                     }
-                                    if (!isCompactWidth) {
-                                        Spacer(modifier = GlanceModifier.width(4.dp))
-                                        Text(
-                                            text = if (driver.position == 1) "LEADER" else driver.gapToLeader,
-                                            style = TextStyle(
-                                                color = ColorProvider(if (driver.position == 1) palette.sectorGreen else palette.textMuted),
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        )
-                                    }
-                                }
-                                if (index < topDrivers.size - 1) {
-                                    Spacer(modifier = GlanceModifier.height(3.dp))
                                 }
                             }
                         }

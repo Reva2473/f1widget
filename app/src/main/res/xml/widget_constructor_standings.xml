@@ -7,6 +7,8 @@
     android:previewLayout="@layout/preview_widget_constructor_standings"
     android:minWidth="250dp"
     android:minHeight="180dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
     android:targetCellWidth="4"
     android:targetCellHeight="3"
     android:resizeMode="horizontal|vertical"

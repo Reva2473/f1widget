@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.reva2473.f1widget.domain.model.F1TeamId
+import java.util.Locale
 
 object P1TColors {
     val BackgroundPrimary = Color(0xFF0B0B0E)
@@ -112,7 +113,7 @@ fun F1WidgetTheme(
     themeMode: String = "DARK",
     content: @Composable () -> Unit
 ) {
-    val isDark = when (themeMode) {
+    val isDark = when (themeMode.trim().uppercase(Locale.ROOT)) {
         "LIGHT" -> false
         "SYSTEM" -> isSystemInDarkTheme()
         else -> true
@@ -130,11 +131,18 @@ fun F1WidgetTheme(
             background = P1TColors.BackgroundPrimary,
             surface = P1TColors.SurfaceCard,
             surfaceVariant = P1TColors.SurfaceElevated,
+            surfaceContainerLow = P1TColors.SurfaceInnerCard,
+            surfaceContainer = P1TColors.SurfaceCard,
+            surfaceContainerHigh = P1TColors.SurfaceElevated,
+            surfaceContainerHighest = Color(0xFF26262E),
             onPrimary = onPrimaryColor,
             onBackground = P1TColors.TextPrimary,
             onSurface = P1TColors.TextPrimary,
             onSurfaceVariant = P1TColors.TextSecondary,
-            outline = P1TColors.BorderSubtle
+            error = P1TColors.AccentRed,
+            onError = Color.White,
+            outline = P1TColors.BorderSubtle,
+            outlineVariant = Color(0xFF22222A)
         )
     } else {
         lightColorScheme(
@@ -144,11 +152,18 @@ fun F1WidgetTheme(
             background = P1TColors.BackgroundLight,
             surface = P1TColors.SurfaceCardLight,
             surfaceVariant = Color(0xFFEEEEF4),
+            surfaceContainerLow = Color(0xFFF9F9FC),
+            surfaceContainer = Color(0xFFF2F2F7),
+            surfaceContainerHigh = Color(0xFFEBEBF2),
+            surfaceContainerHighest = Color(0xFFE2E2EC),
             onPrimary = onPrimaryColor,
             onBackground = Color(0xFF111116),
             onSurface = Color(0xFF111116),
             onSurfaceVariant = Color(0xFF5A5A66),
-            outline = P1TColors.BorderLight
+            error = Color(0xFFC61D15),
+            onError = Color.White,
+            outline = P1TColors.BorderLight,
+            outlineVariant = Color(0xFFEBEBF2)
         )
     }
 
@@ -190,6 +205,9 @@ object P1TTheme {
     val dividerSubtle: Color
         @Composable get() = if (isDark) Color(0xFF2E2E38) else Color(0xFFDCDCE6)
 
+    val borderSubtle: Color
+        @Composable get() = if (isDark) P1TColors.BorderSubtle else P1TColors.BorderLight
+
     val textMuted: Color
         @Composable get() = if (isDark) P1TColors.TextMuted else Color(0xFF6B6B78)
 
@@ -212,7 +230,7 @@ object P1TTheme {
         @Composable get() = if (isDark) P1TColors.SectorGreen else Color(0xFF0A8A47)
 
     val sectorYellow: Color
-        @Composable get() = if (isDark) P1TColors.SectorYellow else Color(0xFFA67800)
+        @Composable get() = if (isDark) P1TColors.SectorYellow else Color(0xFF8C6200)
 
     val sectorYellowBg: Color
         @Composable get() = if (isDark) Color(0xFF2E2A14) else Color(0xFFFFF6D6)
