@@ -15,6 +15,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -134,9 +144,56 @@ class MainActivity : ComponentActivity() {
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     val stateHolder = rememberSaveableStateHolder()
-                    // Screen Content Router with animated transitions and preserved tab state
+                    // Screen Content Router with fluid directional transitions and preserved tab state
                     AnimatedContent(
                         targetState = state.currentScreen,
+                        transitionSpec = {
+                            val tabOrder = listOf(
+                                AppScreen.HOME,
+                                AppScreen.STANDINGS,
+                                AppScreen.RACE_WEEKEND,
+                                AppScreen.SETTINGS_WIDGETS
+                            )
+                            val fromIdx = tabOrder.indexOf(initialState)
+                            val toIdx = tabOrder.indexOf(targetState)
+                            val motionSpec = tween<androidx.compose.ui.unit.IntOffset>(
+                                durationMillis = 240,
+                                easing = FastOutSlowInEasing
+                            )
+                            val fadeInSpec = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
+                            val fadeOutSpec = tween<Float>(durationMillis = 150, easing = FastOutSlowInEasing)
+
+                            when {
+                                fromIdx >= 0 && toIdx >= 0 -> {
+                                    val direction = if (toIdx >= fromIdx) 1 else -1
+                                    ContentTransform(
+                                        targetContentEnter = slideInHorizontally(motionSpec) { fullWidth ->
+                                            (fullWidth * 0.08f * direction).toInt()
+                                        } + fadeIn(fadeInSpec),
+                                        initialContentExit = slideOutHorizontally(motionSpec) { fullWidth ->
+                                            (-fullWidth * 0.06f * direction).toInt()
+                                        } + fadeOut(fadeOutSpec),
+                                        sizeTransform = null
+                                    )
+                                }
+                                toIdx < 0 -> {
+                                    // Pushing into detail/overlay screen (Live Timing, Driver Profiles, Compare)
+                                    ContentTransform(
+                                        targetContentEnter = slideInVertically(motionSpec) { it / 16 } + fadeIn(fadeInSpec),
+                                        initialContentExit = fadeOut(fadeOutSpec),
+                                        sizeTransform = null
+                                    )
+                                }
+                                else -> {
+                                    // Returning from detail screen back to top-level tab
+                                    ContentTransform(
+                                        targetContentEnter = fadeIn(fadeInSpec),
+                                        initialContentExit = slideOutVertically(motionSpec) { it / 18 } + fadeOut(fadeOutSpec),
+                                        sizeTransform = null
+                                    )
+                                }
+                            }
+                        },
                         label = "ScreenTransition"
                     ) { targetScreen ->
                         stateHolder.SaveableStateProvider(targetScreen) {

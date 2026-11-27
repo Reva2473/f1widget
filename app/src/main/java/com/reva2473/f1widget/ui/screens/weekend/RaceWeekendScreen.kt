@@ -1,10 +1,11 @@
 package com.reva2473.f1widget.ui.screens.weekend
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -67,6 +67,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,6 +78,7 @@ import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.RaceDriverResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
 import com.reva2473.f1widget.domain.model.SessionScheduleItem
+import com.reva2473.f1widget.ui.components.ApexMotion
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
@@ -503,6 +505,11 @@ private fun WeekendTopBar(
     val primaryAccent = LocalF1Accent.current.primaryAccent
     val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
     var moreMenuExpanded by remember { mutableStateOf(false) }
+    val dropdownChevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium),
+        label = "gp_dropdown_chevron_rotation"
+    )
 
     Row(
         modifier = Modifier
@@ -556,7 +563,9 @@ private fun WeekendTopBar(
                         imageVector = Icons.Default.KeyboardArrowDown,
                         contentDescription = "Select GP",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer { rotationZ = dropdownChevronRotation }
                     )
                 }
             }
@@ -928,6 +937,21 @@ private fun WeekendFilterChips(
     ) {
         WeekendFilterTab.entries.forEach { tab ->
             val isSelected = tab == selected
+            val chipBg by animateColorAsState(
+                targetValue = if (isSelected) primaryAccent else MaterialTheme.colorScheme.surface,
+                animationSpec = tween(durationMillis = 180, easing = ApexMotion.FastEase),
+                label = "weekend_filter_chip_bg"
+            )
+            val chipBorder by animateColorAsState(
+                targetValue = if (isSelected) primaryAccent else MaterialTheme.colorScheme.outline,
+                animationSpec = tween(durationMillis = 180, easing = ApexMotion.FastEase),
+                label = "weekend_filter_chip_border"
+            )
+            val chipTextColor by animateColorAsState(
+                targetValue = if (isSelected) onAccentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                animationSpec = tween(durationMillis = 180, easing = ApexMotion.FastEase),
+                label = "weekend_filter_chip_text"
+            )
             Box(
                 modifier = Modifier
                     .defaultMinSize(minHeight = 48.dp)
@@ -938,17 +962,17 @@ private fun WeekendFilterChips(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (isSelected) primaryAccent else MaterialTheme.colorScheme.surface)
+                        .background(chipBg)
                         .border(
                             1.dp,
-                            if (isSelected) primaryAccent else MaterialTheme.colorScheme.outline,
+                            chipBorder,
                             RoundedCornerShape(16.dp)
                         )
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Text(
                         text = tab.label,
-                        color = if (isSelected) onAccentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = chipTextColor,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
@@ -1275,6 +1299,11 @@ private fun RaceResultExpandedCard(
     var isExpanded by rememberSaveable(season, round, result.driverCode) { mutableStateOf(result.position == 1) }
     val teamColor = Color(result.team.colorHex)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium),
+        label = "race_result_chevron_rotation"
+    )
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -1367,10 +1396,12 @@ private fun RaceResultExpandedCard(
                         }
 
                         Icon(
-                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Expand",
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "Collapse" else "Expand",
                             tint = P1TTheme.textMuted,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier
+                                .size(18.dp)
+                                .graphicsLayer { rotationZ = chevronRotation }
                         )
                     }
                 }
@@ -1378,8 +1409,8 @@ private fun RaceResultExpandedCard(
                 // Expanded Section matching race-stints-720.webp
                 AnimatedVisibility(
                     visible = isExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    enter = ApexMotion.cardExpandEnter(),
+                    exit = ApexMotion.cardExpandExit()
                 ) {
                     Column(
                         modifier = Modifier

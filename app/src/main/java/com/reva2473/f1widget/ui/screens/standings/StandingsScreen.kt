@@ -1,10 +1,10 @@
 package com.reva2473.f1widget.ui.screens.standings
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,7 +46,6 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
@@ -71,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -82,6 +82,7 @@ import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.ConstructorStanding
 import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
+import com.reva2473.f1widget.ui.components.ApexMotion
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
@@ -246,63 +247,70 @@ fun StandingsScreen(
                         .padding(bottom = listBottomPadding)
                 )
             } else {
-                when (selectedTab) {
-                    StandingsTab.DRIVERS -> {
-                        if (errorMessage != null || activeDrivers.isEmpty()) {
-                            StandingsEmptyOrErrorCard(
-                                selectedYear = selectedYear,
-                                selectedTab = selectedTab,
-                                errorMessage = errorMessage,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp)
-                                    .padding(bottom = listBottomPadding)
-                            )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                contentPadding = PaddingValues(
-                                    start = 20.dp,
-                                    end = 20.dp,
-                                    bottom = listBottomPadding
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(activeDrivers, key = { "${selectedYear}_${it.driverId}_${it.position}" }) { driver ->
-                                    DriverStandingCard(driver = driver, selectedYear = selectedYear)
+                AnimatedContent(
+                    targetState = selectedTab,
+                    transitionSpec = {
+                        ApexMotion.tabContentTransform(
+                            if (targetState == StandingsTab.CONSTRUCTORS) 1 else -1
+                        )
+                    },
+                    label = "StandingsTabTransition",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) { tab ->
+                    when (tab) {
+                        StandingsTab.DRIVERS -> {
+                            if (errorMessage != null || activeDrivers.isEmpty()) {
+                                StandingsEmptyOrErrorCard(
+                                    selectedYear = selectedYear,
+                                    selectedTab = tab,
+                                    errorMessage = errorMessage,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 20.dp)
+                                        .padding(bottom = listBottomPadding)
+                                )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(
+                                        start = 20.dp,
+                                        end = 20.dp,
+                                        bottom = listBottomPadding
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(activeDrivers, key = { "${selectedYear}_${it.driverId}_${it.position}" }) { driver ->
+                                        DriverStandingCard(driver = driver, selectedYear = selectedYear)
+                                    }
                                 }
                             }
                         }
-                    }
-                    StandingsTab.CONSTRUCTORS -> {
-                        if (errorMessage != null || activeConstructors.isEmpty()) {
-                            StandingsEmptyOrErrorCard(
-                                selectedYear = selectedYear,
-                                selectedTab = selectedTab,
-                                errorMessage = errorMessage,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp)
-                                    .padding(bottom = listBottomPadding)
-                            )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                contentPadding = PaddingValues(
-                                    start = 20.dp,
-                                    end = 20.dp,
-                                    bottom = listBottomPadding
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(activeConstructors, key = { "${selectedYear}_${it.stableKey}" }) { constructor ->
-                                    ConstructorStandingCard(constructor = constructor, selectedYear = selectedYear)
+                        StandingsTab.CONSTRUCTORS -> {
+                            if (errorMessage != null || activeConstructors.isEmpty()) {
+                                StandingsEmptyOrErrorCard(
+                                    selectedYear = selectedYear,
+                                    selectedTab = tab,
+                                    errorMessage = errorMessage,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 20.dp)
+                                        .padding(bottom = listBottomPadding)
+                                )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(
+                                        start = 20.dp,
+                                        end = 20.dp,
+                                        bottom = listBottomPadding
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(activeConstructors, key = { "${selectedYear}_${it.stableKey}" }) { constructor ->
+                                        ConstructorStandingCard(constructor = constructor, selectedYear = selectedYear)
+                                    }
                                 }
                             }
                         }
@@ -690,6 +698,14 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
     var isExpanded by rememberSaveable(selectedYear, driver.driverId, driver.position) {
         mutableStateOf(false)
     }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.80f,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "DriverChevronRotation"
+    )
     val isDark = P1TTheme.isDark
     val teamColor = resolveTeamColor(driver.team)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
@@ -877,16 +893,13 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                                     softWrap = false
                                 )
                                 Icon(
-                                    imageVector = if (isExpanded) {
-                                        Icons.Default.KeyboardArrowUp
-                                    } else {
-                                        Icons.Default.KeyboardArrowDown
-                                    },
+                                    imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                                     tint = P1TTheme.textMuted,
                                     modifier = Modifier
                                         .padding(top = 2.dp)
                                         .size(18.dp)
+                                        .graphicsLayer { rotationZ = chevronRotation }
                                 )
                             }
                         }
@@ -895,8 +908,8 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                     // Expandable Car Showcase + Average Points + Last 3 Races Stage
                     AnimatedVisibility(
                         visible = isExpanded,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+                        enter = ApexMotion.cardExpandEnter(),
+                        exit = ApexMotion.cardExpandExit()
                     ) {
                         Column(
                             modifier = Modifier
@@ -1115,6 +1128,14 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
     var isExpanded by rememberSaveable(selectedYear, constructor.stableKey) {
         mutableStateOf(false)
     }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.80f,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "ConstructorChevronRotation"
+    )
     val isDark = P1TTheme.isDark
     val teamColor = resolveTeamColor(constructor.team)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
@@ -1244,14 +1265,12 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                         }
 
                         Icon(
-                            imageVector = if (isExpanded) {
-                                Icons.Default.KeyboardArrowUp
-                            } else {
-                                Icons.Default.KeyboardArrowDown
-                            },
+                            imageVector = Icons.Default.KeyboardArrowDown,
                             contentDescription = if (isExpanded) "Collapse" else "Expand",
                             tint = P1TTheme.textMuted,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier
+                                .size(18.dp)
+                                .graphicsLayer { rotationZ = chevronRotation }
                         )
                     }
                 }
@@ -1371,8 +1390,8 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                 // Expandable Season Race Wins Container
                 AnimatedVisibility(
                     visible = isExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    enter = ApexMotion.cardExpandEnter(),
+                    exit = ApexMotion.cardExpandExit()
                 ) {
                     Column(
                         modifier = Modifier

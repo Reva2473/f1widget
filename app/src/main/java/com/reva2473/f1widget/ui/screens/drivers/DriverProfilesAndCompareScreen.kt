@@ -1,5 +1,10 @@
 package com.reva2473.f1widget.ui.screens.drivers
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -81,6 +86,7 @@ import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.DriverCareerComparison
 import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
+import com.reva2473.f1widget.ui.components.ApexMotion
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.P1TRadialBackground
@@ -1435,28 +1441,37 @@ private fun DriverCompareHeroCard(
     modifier: Modifier = Modifier
 ) {
     val isDark = P1TTheme.isDark
-    val teamColor = Color(driver.team.colorHex)
+    val targetTeamColor = Color(driver.team.colorHex)
+    val teamColor by animateColorAsState(
+        targetValue = targetTeamColor,
+        animationSpec = tween(durationMillis = 260, easing = ApexMotion.FastEase),
+        label = "split_hero_team_color"
+    )
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
 
-    val cardBrush = remember(teamColor, isDark) {
-        if (isDark) {
-            Brush.verticalGradient(
-                colors = listOf(
-                    teamColor.copy(alpha = 0.62f).compositeOver(Color(0xFF15151D)),
-                    teamColor.copy(alpha = 0.22f).compositeOver(Color(0xFF0E0E14)),
-                    Color(0xFF09090D)
-                )
-            )
+    val topGradientColor by animateColorAsState(
+        targetValue = if (isDark) {
+            targetTeamColor.copy(alpha = 0.62f).compositeOver(Color(0xFF15151D))
         } else {
-            Brush.verticalGradient(
-                colors = listOf(
-                    teamColor.copy(alpha = 0.26f).compositeOver(Color.White),
-                    teamColor.copy(alpha = 0.08f).compositeOver(Color.White),
-                    Color(0xFFF6F6FA)
-                )
-            )
-        }
-    }
+            targetTeamColor.copy(alpha = 0.26f).compositeOver(Color.White)
+        },
+        animationSpec = tween(durationMillis = 260, easing = ApexMotion.FastEase),
+        label = "split_hero_top_gradient"
+    )
+    val midGradientColor by animateColorAsState(
+        targetValue = if (isDark) {
+            targetTeamColor.copy(alpha = 0.22f).compositeOver(Color(0xFF0E0E14))
+        } else {
+            targetTeamColor.copy(alpha = 0.08f).compositeOver(Color.White)
+        },
+        animationSpec = tween(durationMillis = 260, easing = ApexMotion.FastEase),
+        label = "split_hero_mid_gradient"
+    )
+    val bottomGradientColor = if (isDark) Color(0xFF09090D) else Color(0xFFF6F6FA)
+
+    val cardBrush = Brush.verticalGradient(
+        colors = listOf(topGradientColor, midGradientColor, bottomGradientColor)
+    )
 
     val borderColor = if (isDark) {
         teamColor.copy(alpha = 0.48f)
@@ -1804,6 +1819,26 @@ private fun ComparisonStatRow(
     val is2Better = !hasMissing && if (lowerIsBetter) clean2 < clean1 else clean2 > clean1
     val adaptiveColor1 = P1TTheme.adaptiveTeamText(color1)
     val adaptiveColor2 = P1TTheme.adaptiveTeamText(color2)
+    val animatedRatio1 by animateFloatAsState(
+        targetValue = ratio1.coerceIn(0f, 1f),
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+        label = "comparison_left_bar_ratio"
+    )
+    val animatedRatio2 by animateFloatAsState(
+        targetValue = ratio2.coerceIn(0f, 1f),
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+        label = "comparison_right_bar_ratio"
+    )
+    val leftBarColor by animateColorAsState(
+        targetValue = if (is1Better) color1 else color1.copy(alpha = 0.4f),
+        animationSpec = tween(durationMillis = 220, easing = ApexMotion.FastEase),
+        label = "comparison_left_bar_color"
+    )
+    val rightBarColor by animateColorAsState(
+        targetValue = if (is2Better) color2 else color2.copy(alpha = 0.4f),
+        animationSpec = tween(durationMillis = 220, easing = ApexMotion.FastEase),
+        label = "comparison_right_bar_color"
+    )
 
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
         // Values and Label Row
@@ -1877,13 +1912,13 @@ private fun ComparisonStatRow(
                     .background(P1TTheme.dividerSubtle.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                if (ratio1 > 0f) {
+                if (animatedRatio1 > 0.001f) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .fillMaxWidth(ratio1)
+                            .fillMaxWidth(animatedRatio1)
                             .clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp))
-                            .background(if (is1Better) color1 else color1.copy(alpha = 0.4f))
+                            .background(leftBarColor)
                     )
                 }
             }
@@ -1899,13 +1934,13 @@ private fun ComparisonStatRow(
                     .background(P1TTheme.dividerSubtle.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.CenterStart
             ) {
-                if (ratio2 > 0f) {
+                if (animatedRatio2 > 0.001f) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .fillMaxWidth(ratio2)
+                            .fillMaxWidth(animatedRatio2)
                             .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
-                            .background(if (is2Better) color2 else color2.copy(alpha = 0.4f))
+                            .background(rightBarColor)
                     )
                 }
             }

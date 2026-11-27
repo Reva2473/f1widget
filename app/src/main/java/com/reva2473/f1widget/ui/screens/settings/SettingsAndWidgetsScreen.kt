@@ -6,6 +6,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,6 +45,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -59,10 +64,9 @@ import com.reva2473.f1widget.domain.model.RaceRecentResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
 import com.reva2473.f1widget.domain.model.UserPreferencesState
 import com.reva2473.f1widget.domain.model.WidgetStyleType
+import com.reva2473.f1widget.ui.components.ApexMotion
 import com.reva2473.f1widget.ui.components.BroadcastFlagBannerType
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
-import com.reva2473.f1widget.ui.components.F1CarSideProfileCanvas
-import com.reva2473.f1widget.ui.components.F1CarTopDownCanvas
 import com.reva2473.f1widget.ui.components.P1TRadialBackground
 import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
 import com.reva2473.f1widget.ui.components.TeamLogoBadge
@@ -292,94 +296,108 @@ fun SettingsAndWidgetsScreen(
                         else -> null
                     }
 
-                    when (selectedGalleryTab) {
-                        0 -> WccSquareCardsShowcase(constructorStandings = resolvedConstructorStandings)
-                        1 -> LiveSessionBannerWidgetShowcase(
-                            liveSession = liveSession,
-                            userPreferences = userPreferences
-                        )
-                        2 -> ConstructorsBarChartWidgetShowcase(
-                            constructorStandings = resolvedConstructorStandings,
-                            driverStandings = resolvedDriverStandings,
-                            schedule = schedule
-                        )
-                        3 -> TeamFormAndTeammatesWidgetShowcase(
-                            userPreferences = userPreferences,
-                            constructorStandings = resolvedConstructorStandings,
-                            driverStandings = resolvedDriverStandings,
-                            lastCompletedRace = lastCompletedRace,
-                            schedule = schedule
-                        )
-                        else -> {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                // Sub-selector of the 8 standard customizable widget styles
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    widgetTypes.forEachIndexed { idx, type ->
-                                        val isSelected = idx == selectedWidgetIndex
-                                        Box(
-                                            modifier = Modifier
-                                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { selectedWidgetIndex = idx },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Surface(
-                                                shape = RoundedCornerShape(12.dp),
-                                                color = if (isSelected) P1TTheme.pillSelectedBg else P1TTheme.pillBg,
-                                                border = if (isSelected) BorderStroke(1.dp, P1TTheme.adaptiveTeamText(primaryAccent)) else null
+                    AnimatedContent(
+                        targetState = selectedGalleryTab,
+                        transitionSpec = {
+                            ApexMotion.tabContentTransform(if (targetState >= initialState) 1 else -1)
+                        },
+                        label = "WidgetCategoryTransition"
+                    ) { activeGalleryTab ->
+                        when (activeGalleryTab) {
+                            0 -> WccSquareCardsShowcase(constructorStandings = resolvedConstructorStandings)
+                            1 -> LiveSessionBannerWidgetShowcase(
+                                liveSession = liveSession,
+                                userPreferences = userPreferences
+                            )
+                            2 -> ConstructorsBarChartWidgetShowcase(
+                                constructorStandings = resolvedConstructorStandings,
+                                driverStandings = resolvedDriverStandings,
+                                schedule = schedule
+                            )
+                            3 -> TeamFormAndTeammatesWidgetShowcase(
+                                userPreferences = userPreferences,
+                                constructorStandings = resolvedConstructorStandings,
+                                driverStandings = resolvedDriverStandings,
+                                lastCompletedRace = lastCompletedRace,
+                                schedule = schedule
+                            )
+                            else -> {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    // Sub-selector of the 8 standard customizable widget styles
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        widgetTypes.forEachIndexed { idx, type ->
+                                            val isSelected = idx == selectedWidgetIndex
+                                            Box(
+                                                modifier = Modifier
+                                                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable { selectedWidgetIndex = idx },
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Text(
-                                                    text = type.title,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                                )
+                                                Surface(
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    color = if (isSelected) P1TTheme.pillSelectedBg else P1TTheme.pillBg,
+                                                    border = if (isSelected) BorderStroke(1.dp, P1TTheme.adaptiveTeamText(primaryAccent)) else null
+                                                ) {
+                                                    Text(
+                                                        text = type.title,
+                                                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                val currentType = widgetTypes[selectedWidgetIndex]
-                                WidgetLivePreviewCard(
-                                    widgetType = currentType,
-                                    preferences = userPreferences,
-                                    driverStandings = resolvedDriverStandings,
-                                    constructorStandings = resolvedConstructorStandings,
-                                    liveSession = liveSession,
-                                    nextWeekend = nextWeekend,
-                                    lastCompletedRace = lastCompletedRace,
-                                    schedule = schedule
-                                )
+                                    val currentType = widgetTypes[selectedWidgetIndex]
+                                    AnimatedContent(
+                                        targetState = currentType,
+                                        transitionSpec = { ApexMotion.crossfadeTransform() },
+                                        label = "WidgetPreviewTransition"
+                                    ) { animatedType ->
+                                        WidgetLivePreviewCard(
+                                            widgetType = animatedType,
+                                            preferences = userPreferences,
+                                            driverStandings = resolvedDriverStandings,
+                                            constructorStandings = resolvedConstructorStandings,
+                                            liveSession = liveSession,
+                                            nextWeekend = nextWeekend,
+                                            lastCompletedRace = lastCompletedRace,
+                                            schedule = schedule
+                                        )
+                                    }
 
-                                // Pin Widget to Home Screen action button
-                                Button(
-                                    onClick = { requestPinWidget(context, currentType) },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = primaryAccent,
-                                        contentColor = onAccentColor
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Pin ${currentType.title} to Home Screen",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
+                                    // Pin Widget to Home Screen action button
+                                    Button(
+                                        onClick = { requestPinWidget(context, currentType) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = primaryAccent,
+                                            contentColor = onAccentColor
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Pin ${currentType.title} to Home Screen",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1217,11 +1235,12 @@ private fun WccSquareCardItem(
                             }
                         }
 
-                        F1CarSideProfileCanvas(
+                        TeamCarShowcaseImage(
                             team = team,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(42.dp)
+                                .height(42.dp),
+                            contentScale = ContentScale.Fit
                         )
 
                         Surface(
@@ -1319,12 +1338,12 @@ private fun WccSquareCardItem(
                             fontWeight = FontWeight.Black
                         )
 
-                        F1CarTopDownCanvas(
+                        TeamCarShowcaseImage(
                             team = team,
-                            vertical = false,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .height(44.dp),
+                            contentScale = ContentScale.Fit
                         )
 
                         Text(
@@ -1340,7 +1359,7 @@ private fun WccSquareCardItem(
             }
         }
         2 -> {
-            // Variant 2: Split column with vertical top-down car on right
+            // Variant 2: Split header with full-width side-profile car stage
             val bgTop = lerp(teamSecondary, teamColor, 0.22f)
             val bgBottom = lerp(teamSecondary, Color.Black, 0.7f)
             Surface(
@@ -1355,67 +1374,71 @@ private fun WccSquareCardItem(
                         .background(Brush.verticalGradient(listOf(bgTop, bgBottom)))
                         .padding(10.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1.1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.SpaceBetween
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Text(
-                                text = teamNameUpper,
-                                color = Color.White,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "P$pos",
-                                color = Color.White,
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            Text(
-                                text = "$pts PTS",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "$wins WINS",
-                                color = P1TColors.TextSecondary,
-                                fontSize = 10.5.sp
-                            )
-                            Text(
-                                text = gapText,
-                                color = readableAccent,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = teamNameUpper,
+                                    color = Color.White,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "P$pos",
+                                    color = Color.White,
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Black,
+                                    lineHeight = 28.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "$pts PTS",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Text(
+                                    text = "$wins WINS",
+                                    color = P1TColors.TextSecondary,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
 
-                        Box(
+                        TeamCarShowcaseImage(
+                            team = team,
                             modifier = Modifier
-                                .weight(0.9f)
-                                .fillMaxHeight()
-                                .padding(vertical = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            F1CarTopDownCanvas(
-                                team = team,
-                                vertical = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(110.dp)
-                            )
-                        }
+                                .fillMaxWidth()
+                                .height(44.dp),
+                            contentScale = ContentScale.Fit
+                        )
+
+                        Text(
+                            text = gapText,
+                            color = readableAccent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -1491,11 +1514,12 @@ private fun WccSquareCardItem(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.SpaceBetween
                         ) {
-                            F1CarSideProfileCanvas(
+                            TeamCarShowcaseImage(
                                 team = team,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(34.dp)
+                                    .height(34.dp),
+                                contentScale = ContentScale.Fit
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Row(
@@ -1537,7 +1561,7 @@ private fun WccSquareCardItem(
             }
         }
         4 -> {
-            // Variant 4: Pit-box bracket card
+            // Variant 4: Pit-box carbon garage card
             val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -1580,43 +1604,21 @@ private fun WccSquareCardItem(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Bottom
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .width(42.dp)
-                                    .height(88.dp)
-                                    .border(
-                                        1.5.dp,
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                        RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                F1CarTopDownCanvas(
-                                    team = team,
-                                    vertical = true,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(6.dp))
-
+                            Text(
+                                text = "$pos",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Black,
+                                lineHeight = 28.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
                             Column(
-                                modifier = Modifier.weight(1f),
                                 horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                Text(
-                                    text = "$pos",
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Black,
-                                    lineHeight = 28.sp,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
                                 Text(
                                     text = "$pts PTS",
                                     color = adaptiveTeamColor,
@@ -1634,6 +1636,27 @@ private fun WccSquareCardItem(
                                     softWrap = false
                                 )
                             }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF121218))
+                                .border(
+                                    1.dp,
+                                    teamColor.copy(alpha = 0.45f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            TeamCarShowcaseImage(
+                                team = team,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
                         }
 
                         Text(
@@ -1702,11 +1725,12 @@ private fun WccSquareCardItem(
                             )
                         }
 
-                        F1CarSideProfileCanvas(
+                        TeamCarShowcaseImage(
                             team = team,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(40.dp)
+                                .height(40.dp),
+                            contentScale = ContentScale.Fit
                         )
 
                         Text(
@@ -1811,6 +1835,16 @@ private fun LiveSessionBannerWidgetShowcase(
         else -> "${timeRaw.uppercase()} LEFT"
     }
     val sessionProgress = computeLiveSessionProgress(liveSession)
+    var animateProgress by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateProgress = true }
+    val animatedSessionProgress by animateFloatAsState(
+        targetValue = if (animateProgress) sessionProgress else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.82f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "LiveSessionProgress"
+    )
     val topTimings = liveSession.drivers.take(5)
 
     Column(
@@ -2010,7 +2044,7 @@ private fun LiveSessionBannerWidgetShowcase(
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .fillMaxWidth(sessionProgress)
+                            .fillMaxWidth(animatedSessionProgress.coerceIn(0f, 1f))
                             .clip(RoundedCornerShape(1.5.dp))
                             .background(P1TTheme.accentRed)
                     )
@@ -2107,9 +2141,20 @@ private fun ConstructorsBarChartWidgetShowcase(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                var animateBars by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { animateBars = true }
+
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     teamsList.forEach { (pos, team, pts) ->
                         val ratio = (pts / maxPts).coerceIn(0.04f, 1f)
+                        val animatedRatio by animateFloatAsState(
+                            targetValue = if (animateBars) ratio else 0f,
+                            animationSpec = spring(
+                                dampingRatio = 0.82f,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "ConstructorBarWidth_${team.name}"
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -2129,19 +2174,24 @@ private fun ConstructorsBarChartWidgetShowcase(
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
-                                    .weight(0.38f)
+                                    .weight(0.36f)
                                     .padding(end = 6.dp),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
 
                             // Horizontal track line with car offset
-                            Box(
+                            BoxWithConstraints(
                                 modifier = Modifier
-                                    .weight(0.62f)
-                                    .height(14.dp),
+                                    .weight(0.64f)
+                                    .height(22.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
+                                val carWidth = 56.dp
+                                val carHeight = 20.dp
+                                val availableTravel = (maxWidth - carWidth).coerceAtLeast(0.dp)
+                                val carOffsetX = availableTravel * animatedRatio.coerceIn(0f, 1f)
+
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -2150,20 +2200,19 @@ private fun ConstructorsBarChartWidgetShowcase(
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth(ratio)
-                                        .height(2.dp)
-                                        .background(Color(team.colorHex).copy(alpha = 0.55f))
+                                        .width((carOffsetX + carWidth * 0.5f).coerceAtMost(maxWidth))
+                                        .height(2.5.dp)
+                                        .clip(RoundedCornerShape(1.5.dp))
+                                        .background(Color(team.colorHex).copy(alpha = 0.6f))
                                 )
-                                Box(
-                                    modifier = Modifier.fillMaxWidth(ratio),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    F1CarTopDownCanvas(
-                                        team = team,
-                                        vertical = false,
-                                        modifier = Modifier.size(20.dp, 8.dp)
-                                    )
-                                }
+                                TeamCarShowcaseImage(
+                                    team = team,
+                                    modifier = Modifier
+                                        .offset(x = carOffsetX)
+                                        .width(carWidth)
+                                        .height(carHeight),
+                                    contentScale = ContentScale.Fit
+                                )
                             }
 
                             Spacer(modifier = Modifier.width(8.dp))
@@ -2257,9 +2306,12 @@ private fun ConstructorsBarChartWidgetShowcase(
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(4.dp))
-                                F1CarSideProfileCanvas(
+                                TeamCarShowcaseImage(
                                     team = t,
-                                    modifier = Modifier.size(24.dp, 10.dp)
+                                    modifier = Modifier
+                                        .width(38.dp)
+                                        .height(14.dp),
+                                    contentScale = ContentScale.Fit
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
@@ -2658,11 +2710,12 @@ private fun TeamFormAndTeammatesWidgetShowcase(
                         .background(P1TTheme.surfaceInnerCard)
                         .padding(12.dp)
                 ) {
-                    F1CarSideProfileCanvas(
+                    TeamCarShowcaseImage(
                         team = favTeam,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(44.dp),
+                        contentScale = ContentScale.Fit
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -2844,11 +2897,12 @@ private fun TeamFormAndTeammatesWidgetShowcase(
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         TeamLogoBadge(team = favTeam, sizeDp = 22)
-                        F1CarSideProfileCanvas(
+                        TeamCarShowcaseImage(
                             team = favTeam,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(38.dp)
+                                .height(40.dp),
+                            contentScale = ContentScale.Fit
                         )
                         Text(
                             text = "${favTeam.shortCode} SPLIT",

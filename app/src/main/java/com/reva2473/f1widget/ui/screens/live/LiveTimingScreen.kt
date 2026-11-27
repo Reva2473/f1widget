@@ -4,10 +4,15 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -32,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reva2473.f1widget.domain.model.*
+import com.reva2473.f1widget.ui.components.ApexMotion
 import com.reva2473.f1widget.ui.components.BroadcastFlagBannerType
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
@@ -782,6 +789,21 @@ private fun LiveTimingSubTabBar(
     ) {
         tabs.forEach { tab ->
             val isSelected = tab == selectedTab
+            val textColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.onBackground else P1TTheme.textMuted,
+                animationSpec = tween(durationMillis = 180, easing = ApexMotion.FastEase),
+                label = "live_subtab_text_color"
+            )
+            val indicatorColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
+                animationSpec = tween(durationMillis = 180, easing = ApexMotion.FastEase),
+                label = "live_subtab_indicator_color"
+            )
+            val indicatorWidth by animateDpAsState(
+                targetValue = if (isSelected) 26.dp else 0.dp,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMedium),
+                label = "live_subtab_indicator_width"
+            )
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -793,7 +815,7 @@ private fun LiveTimingSubTabBar(
             ) {
                 Text(
                     text = tab,
-                    color = if (isSelected) MaterialTheme.colorScheme.onBackground else P1TTheme.textMuted,
+                    color = textColor,
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 1,
@@ -802,10 +824,10 @@ private fun LiveTimingSubTabBar(
                 Spacer(modifier = Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
-                        .width(if (isSelected) 26.dp else 0.dp)
+                        .width(indicatorWidth)
                         .height(2.5.dp)
                         .clip(RoundedCornerShape(1.dp))
-                        .background(if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent)
+                        .background(indicatorColor)
                 )
             }
         }
@@ -1294,6 +1316,11 @@ private fun TimingTowerDriverCard(
     val effectiveBarColor = if (driver.team == F1TeamId.OTHER) P1TTheme.textMuted else teamColor
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
     val borderColor = if (isSelected) adaptiveTeamColor else P1TTheme.borderSubtle
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isSelected) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium),
+        label = "timing_tower_chevron_rotation"
+    )
     val surname = remember(driver.fullName, driver.code) {
         extractDriverSurname(driver.fullName, driver.code)
     }
@@ -1464,10 +1491,25 @@ private fun TimingTowerDriverCard(
                         softWrap = false
                     )
                 }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isSelected) "Collapse telemetry" else "Expand telemetry",
+                    tint = P1TTheme.textMuted,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .graphicsLayer { rotationZ = chevronRotation }
+                )
             }
 
             // Expanded Telemetry Grid (2×3)
-            AnimatedVisibility(visible = isSelected) {
+            AnimatedVisibility(
+                visible = isSelected,
+                enter = ApexMotion.cardExpandEnter(),
+                exit = ApexMotion.cardExpandExit()
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

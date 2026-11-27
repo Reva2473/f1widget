@@ -3,10 +3,12 @@ package com.reva2473.f1widget.ui.screens.home
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,8 +62,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.util.lerp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -91,6 +95,7 @@ import com.reva2473.f1widget.ui.components.resolveBroadcastFlagType
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
 import com.reva2473.f1widget.ui.theme.P1TTheme
+import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 private val HERO_MIN_HEIGHT = 248.dp
@@ -352,16 +357,27 @@ private fun HomeHeroPager(
             verticalAlignment = Alignment.Top,
             modifier = Modifier.fillMaxWidth()
         ) { page ->
-            when (page) {
-                0 -> HeroSlideNextRace(weekend = weekend, sessions = sessions, onClick = onSlideTap)
-                1 -> HeroSlideApexGridWelcome(onClick = onArchiveTap)
-                2 -> HeroSlideWdcLeader(leader = driverLeader, onClick = onStandingsTap)
-                3 -> HeroSlideWccLeader(leader = constructorLeader, onClick = onStandingsTap)
-                4 -> HeroSlideLastRaceWinner(
-                    lastCompletedRace = lastCompletedRace,
-                    lastRaceResults = lastRaceResults,
-                    onClick = onLastRaceTap
-                )
+            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+            val fraction = 1f - pageOffset.coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    val scale = lerp(0.95f, 1f, fraction)
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = lerp(0.78f, 1f, fraction)
+                }
+            ) {
+                when (page) {
+                    0 -> HeroSlideNextRace(weekend = weekend, sessions = sessions, onClick = onSlideTap)
+                    1 -> HeroSlideApexGridWelcome(onClick = onArchiveTap)
+                    2 -> HeroSlideWdcLeader(leader = driverLeader, onClick = onStandingsTap)
+                    3 -> HeroSlideWccLeader(leader = constructorLeader, onClick = onStandingsTap)
+                    4 -> HeroSlideLastRaceWinner(
+                        lastCompletedRace = lastCompletedRace,
+                        lastRaceResults = lastRaceResults,
+                        onClick = onLastRaceTap
+                    )
+                }
             }
         }
 
@@ -378,7 +394,10 @@ private fun HomeHeroPager(
                 val isSelected = pagerState.currentPage == index
                 val pillWidth by animateDpAsState(
                     targetValue = if (isSelected) 22.dp else 6.dp,
-                    animationSpec = tween(durationMillis = 220),
+                    animationSpec = spring(
+                        dampingRatio = 0.78f,
+                        stiffness = Spring.StiffnessMedium
+                    ),
                     label = "HeroIndicatorWidth"
                 )
                 Box(

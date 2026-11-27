@@ -1,14 +1,25 @@
 package com.reva2473.f1widget.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,17 +28,23 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -80,6 +97,52 @@ import com.reva2473.f1widget.domain.model.TyreCompound
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
 import com.reva2473.f1widget.ui.theme.P1TTheme
+
+/**
+ * Shared fluid spring & easing motion tokens for ApexGrid.
+ */
+object ApexMotion {
+    val FastEase = FastOutSlowInEasing
+
+    fun cardExpandEnter(): EnterTransition =
+        expandVertically(
+            animationSpec = spring(
+                dampingRatio = 0.84f,
+                stiffness = Spring.StiffnessMedium
+            )
+        ) + fadeIn(
+            animationSpec = tween(durationMillis = 200, easing = FastEase)
+        )
+
+    fun cardExpandExit(): ExitTransition =
+        shrinkVertically(
+            animationSpec = spring(
+                dampingRatio = 0.88f,
+                stiffness = Spring.StiffnessMedium
+            )
+        ) + fadeOut(
+            animationSpec = tween(durationMillis = 140, easing = FastEase)
+        )
+
+    fun tabContentTransform(direction: Int = 1): ContentTransform {
+        val slideSpec = tween<IntOffset>(durationMillis = 220, easing = FastEase)
+        val fadeInSpec = tween<Float>(durationMillis = 200, easing = FastEase)
+        val fadeOutSpec = tween<Float>(durationMillis = 130, easing = FastEase)
+        return ContentTransform(
+            targetContentEnter = slideInHorizontally(slideSpec) { (it * 0.06f * direction).toInt() } +
+                fadeIn(fadeInSpec),
+            initialContentExit = slideOutHorizontally(slideSpec) { (-it * 0.04f * direction).toInt() } +
+                fadeOut(fadeOutSpec),
+            sizeTransform = null
+        )
+    }
+
+    fun crossfadeTransform(): ContentTransform = ContentTransform(
+        targetContentEnter = fadeIn(tween(durationMillis = 200, easing = FastEase)),
+        initialContentExit = fadeOut(tween(durationMillis = 130, easing = FastEase)),
+        sizeTransform = null
+    )
+}
 
 /**
  * Full-screen obsidian dark background (#070709) with atmospheric top ambient glow
@@ -236,8 +299,8 @@ fun FloatingPillBottomBar(
                     .selectableGroup()
                     .animateContentSize(
                         animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
+                            dampingRatio = 0.82f,
+                            stiffness = Spring.StiffnessMedium
                         )
                     )
                     .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -340,6 +403,7 @@ private fun BottomBarPillItem(
     val inactiveBg = if (isDark) Color(0xFF17171E) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
     val bgColor by animateColorAsState(
         targetValue = if (isSelected) activeBg else inactiveBg,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "NavPillBg"
     )
     val contentTint by animateColorAsState(
@@ -348,13 +412,23 @@ private fun BottomBarPillItem(
         } else {
             inactiveTint
         },
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "NavPillTint"
     )
-    val borderColor = if (isSelected) {
-        primaryAccent.copy(alpha = if (isDark) 0.55f else 0.35f)
-    } else {
-        Color.Transparent
-    }
+    val iconScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.06f else 1f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+        label = "NavPillIconScale"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            primaryAccent.copy(alpha = if (isDark) 0.55f else 0.35f)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "NavPillBorder"
+    )
 
     Row(
         modifier = Modifier
@@ -376,11 +450,22 @@ private fun BottomBarPillItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        icon(isSelected, contentTint)
+        Box(
+            modifier = Modifier.graphicsLayer {
+                scaleX = iconScale
+                scaleY = iconScale
+            }
+        ) {
+            icon(isSelected, contentTint)
+        }
         AnimatedVisibility(
             visible = isSelected,
-            enter = fadeIn() + expandHorizontally(),
-            exit = fadeOut() + shrinkHorizontally()
+            enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) + expandHorizontally(
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMedium)
+            ),
+            exit = fadeOut(tween(110, easing = FastOutSlowInEasing)) + shrinkHorizontally(
+                animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMedium)
+            )
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Spacer(modifier = Modifier.width(7.dp))
@@ -408,61 +493,85 @@ fun SegmentedPillToggle(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (options.isEmpty()) return
     val isDark = LocalF1Accent.current.isDark
     val containerBg = if (isDark) Color(0xFF15151C) else MaterialTheme.colorScheme.surfaceVariant
     val containerBorder = if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.outline
+    val activePillBg = if (isDark) Color.White else MaterialTheme.colorScheme.onBackground
+    val safeIndex = selectedIndex.coerceIn(0, options.lastIndex)
 
-    Row(
+    BoxWithConstraints(
         modifier = modifier
+            .height(50.dp)
             .clip(RoundedCornerShape(26.dp))
             .background(containerBg)
             .border(1.dp, containerBorder, RoundedCornerShape(26.dp))
             .padding(4.dp)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        options.forEachIndexed { index, title ->
-            val selected = index == selectedIndex
-            val pillBg by animateColorAsState(
-                targetValue = if (selected) {
-                    if (isDark) Color.White else MaterialTheme.colorScheme.onBackground
-                } else {
-                    Color.Transparent
-                },
-                label = "SegmentBg"
-            )
-            val textColor by animateColorAsState(
-                targetValue = if (selected) {
-                    if (isDark) Color(0xFF0A0A0E) else Color.White
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                label = "SegmentText"
-            )
+        val segmentWidth = maxWidth / options.size
+        val indicatorOffset by animateDpAsState(
+            targetValue = segmentWidth * safeIndex,
+            animationSpec = spring(
+                dampingRatio = 0.80f,
+                stiffness = Spring.StiffnessMedium
+            ),
+            label = "SegmentIndicatorOffset"
+        )
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 42.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(pillBg)
-                    .semantics {
-                        role = Role.Tab
-                        this.selected = selected
-                    }
-                    .clickable { onSelect(index) }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = title,
-                    color = textColor,
-                    fontSize = 13.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+        // Gliding active pill indicator
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .width(segmentWidth)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(22.dp))
+                .background(activePillBg)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .selectableGroup(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            options.forEachIndexed { index, title ->
+                val selected = index == safeIndex
+                val textColor by animateColorAsState(
+                    targetValue = if (selected) {
+                        if (isDark) Color(0xFF0A0A0E) else Color.White
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                    label = "SegmentText"
                 )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(22.dp))
+                        .semantics {
+                            role = Role.Tab
+                            this.selected = selected
+                        }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onSelect(index) }
+                        )
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = title,
+                        color = textColor,
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
