@@ -11,7 +11,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -71,7 +69,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +86,7 @@ import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
 import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
 import com.reva2473.f1widget.ui.components.P1TRadialBackground
+import com.reva2473.f1widget.ui.components.SegmentedPillToggle
 import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
 import com.reva2473.f1widget.ui.components.getTeamCarResOrNull
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
@@ -99,6 +100,7 @@ enum class StandingsTab {
 }
 
 private val NEUTRAL_OTHER_TEAM_COLOR = Color(0xFF8E8E99)
+private val STANDINGS_INDIGO_GLOW = Color(0xFF1E2952)
 
 private fun formatStandingsPoints(points: Double): String {
     val rounded = (points * 100.0).roundToLong() / 100.0
@@ -111,6 +113,41 @@ private fun formatStandingsPoints(points: Double): String {
         } else {
             String.format(java.util.Locale.US, "%.2f", rounded)
         }
+    }
+}
+
+private fun formatOrdinalRank(position: Int): String {
+    if (position <= 0) return "-"
+    val mod100 = position % 100
+    val suffix = if (mod100 in 11..13) {
+        "th"
+    } else {
+        when (position % 10) {
+            1 -> "st"
+            2 -> "nd"
+            3 -> "rd"
+            else -> "th"
+        }
+    }
+    return "$position$suffix"
+}
+
+private fun extractDriverSurname(fullName: String): String {
+    val trimmed = fullName.trim()
+    if (trimmed.isEmpty()) return ""
+    return trimmed.substringAfterLast(' ').ifBlank { trimmed }
+}
+
+private fun resolveTeamColor(team: F1TeamId): Color =
+    if (team != F1TeamId.OTHER) Color(team.colorHex) else NEUTRAL_OTHER_TEAM_COLOR
+
+private fun formatConstructorGap(gapToP1: String): String {
+    val trimmedGap = gapToP1.trim()
+    return when {
+        trimmedGap.equals("Leader", ignoreCase = true) ||
+            trimmedGap.startsWith("-") ||
+            trimmedGap.startsWith("+") -> trimmedGap
+        else -> "-$trimmedGap"
     }
 }
 
@@ -150,32 +187,53 @@ fun StandingsScreen(
     val activeDrivers = driverStandings ?: if (selectedYear == 2026) sampleDrivers else emptyList()
     val activeConstructors = constructorStandings ?: if (selectedYear == 2026) sampleConstructors else emptyList()
     val listBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 96.dp
+    val isDark = P1TTheme.isDark
 
-    P1TRadialBackground(modifier = modifier) {
+    P1TRadialBackground(
+        modifier = modifier,
+        overrideGlowColor = if (isDark) STANDINGS_INDIGO_GLOW else null
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // HEADER BAR: <, Title & Year Picker, •••
+            // EDITORIAL HEADER BAR: < Standings | Year Pill ▾ •••
             StandingsTopBar(
                 selectedTab = selectedTab,
                 selectedYear = selectedYear,
                 onOpenYearPicker = { yearPickerOpen = true },
                 onBackClick = onBackClick,
                 onToggleTab = {
-                    selectedTab = if (selectedTab == StandingsTab.DRIVERS) StandingsTab.CONSTRUCTORS else StandingsTab.DRIVERS
+                    selectedTab = if (selectedTab == StandingsTab.DRIVERS) {
+                        StandingsTab.CONSTRUCTORS
+                    } else {
+                        StandingsTab.DRIVERS
+                    }
                 },
                 onRefresh = onRefresh
             )
 
-            // TOGGLE PILL: "Driver Standings" / "Constructor Standings"
-            StandingsToggleBar(
-                selectedTab = selectedTab,
-                onTabSelect = { selectedTab = it }
-            )
+            // SEGMENTED PILL TOGGLE: "Drivers" / "Constructors"
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                SegmentedPillToggle(
+                    options = listOf("Drivers", "Constructors"),
+                    selectedIndex = if (selectedTab == StandingsTab.DRIVERS) 0 else 1,
+                    onSelect = { index ->
+                        selectedTab = if (index == 0) StandingsTab.DRIVERS else StandingsTab.CONSTRUCTORS
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 420.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // LOADING, EMPTY/ERROR, OR LIST OF CARDS
             if (isLoading) {
@@ -483,7 +541,8 @@ private fun StandingsYearPickerDialog(
 }
 
 /**
- * Header with <, "2026 ▾" year picker (1950–2026), and ••• button.
+ * Editorial top bar with Back button, bold "Standings" title, right-aligned "$selectedYear ▾" pill,
+ * and MoreVert menu.
  */
 @Composable
 private fun StandingsTopBar(
@@ -495,15 +554,17 @@ private fun StandingsTopBar(
     onRefresh: (() -> Unit)? = null
 ) {
     var moreMenuExpanded by remember { mutableStateOf(false) }
+    val isDark = P1TTheme.isDark
+    val yearPillBg = if (isDark) Color(0x4D1E1E26) else P1TTheme.pillBg
+    val yearPillBorder = if (isDark) Color.White.copy(alpha = 0.14f) else P1TTheme.pillBorder
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Back Button
         CircularHeaderButton(onClick = onBackClick) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -513,192 +574,130 @@ private fun StandingsTopBar(
             )
         }
 
-        // Year Selector Pill (>= 48.dp touch target)
-        Box(
-            modifier = Modifier
-                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .clickable(onClick = onOpenYearPicker),
-            contentAlignment = Alignment.Center
+        Text(
+            text = "Standings",
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.4).sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
+            // Right-aligned Year Selector Pill (>= 48.dp touch target)
+            Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(P1TTheme.pillBg)
-                    .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(18.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable(onClick = onOpenYearPicker),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "$selectedYear",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Select Year",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-
-        // More Options •••
-        Box {
-            CircularHeaderButton(onClick = { moreMenuExpanded = true }) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Options",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(20.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(yearPillBg)
+                        .border(1.dp, yearPillBorder, RoundedCornerShape(18.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "$selectedYear ▾",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
             }
 
-            DropdownMenu(
-                expanded = moreMenuExpanded,
-                onDismissRequest = { moreMenuExpanded = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                if (onRefresh != null) {
+            Box {
+                CircularHeaderButton(onClick = { moreMenuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = moreMenuExpanded,
+                    onDismissRequest = { moreMenuExpanded = false },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    if (onRefresh != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "Refresh Standings",
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            onClick = {
+                                moreMenuExpanded = false
+                                onRefresh()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = {
                             Text(
-                                text = "Refresh Standings",
+                                text = if (selectedTab == StandingsTab.DRIVERS) {
+                                    "Switch to Constructors"
+                                } else {
+                                    "Switch to Drivers"
+                                },
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         },
                         onClick = {
                             moreMenuExpanded = false
-                            onRefresh()
+                            onToggleTab?.invoke()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Select Season Year",
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        onClick = {
+                            moreMenuExpanded = false
+                            onOpenYearPicker()
                         }
                     )
                 }
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = if (selectedTab == StandingsTab.DRIVERS) "Switch to Constructors" else "Switch to Drivers",
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    },
-                    onClick = {
-                        moreMenuExpanded = false
-                        onToggleTab?.invoke()
-                    }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = "Select Season Year",
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    },
-                    onClick = {
-                        moreMenuExpanded = false
-                        onOpenYearPicker()
-                    }
-                )
             }
         }
     }
 }
 
 /**
- * Segmented Pill Tab Toggle for DRIVERS vs CONSTRUCTORS
- */
-@Composable
-private fun StandingsToggleBar(
-    selectedTab: StandingsTab,
-    onTabSelect: (StandingsTab) -> Unit
-) {
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        val isNarrow = maxWidth < 340.dp
-        val tabHorizontalPadding = if (isNarrow) 8.dp else 14.dp
-        val tabFontSize = if (isNarrow) 12.sp else 13.sp
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 420.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(24.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Driver Standings
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 48.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(if (selectedTab == StandingsTab.DRIVERS) P1TTheme.pillSelectedBg else Color.Transparent)
-                    .clickable { onTabSelect(StandingsTab.DRIVERS) }
-                    .padding(horizontal = tabHorizontalPadding, vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Driver Standings",
-                    color = if (selectedTab == StandingsTab.DRIVERS) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = tabFontSize,
-                    fontWeight = if (selectedTab == StandingsTab.DRIVERS) FontWeight.Bold else FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Constructor Standings
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 48.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(if (selectedTab == StandingsTab.CONSTRUCTORS) P1TTheme.pillSelectedBg else Color.Transparent)
-                    .clickable { onTabSelect(StandingsTab.CONSTRUCTORS) }
-                    .padding(horizontal = tabHorizontalPadding, vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Constructor Standings",
-                    color = if (selectedTab == StandingsTab.CONSTRUCTORS) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = tabFontSize,
-                    fontWeight = if (selectedTab == StandingsTab.CONSTRUCTORS) FontWeight.Bold else FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-/**
- * Unslopped Driver Standing card:
- * Graphite surface ramp: #19191B outer card, 1.dp hairline border Color.White.copy(alpha = 0.07f),
- * 4.dp left team accent bar, real DriverPortraitAvatar with headshot and position badge,
- * TeamCarShowcaseImage, crisp Material Icons in #85858B tint, and #141415 inner stats container.
+ * Editorial Driver Standing card with obsidian surface, team accent bar, subtle #position watermark,
+ * ordinal rank indicator, 54.dp portrait avatar, tabular points, and expandable car + last-3 races stage.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
     var isExpanded by rememberSaveable(selectedYear, driver.driverId, driver.position) {
-        mutableStateOf(driver.position <= 2)
+        mutableStateOf(false)
     }
-    val teamColor = if (driver.team != F1TeamId.OTHER) {
-        Color(driver.team.colorHex)
-    } else {
-        NEUTRAL_OTHER_TEAM_COLOR
-    }
+    val isDark = P1TTheme.isDark
+    val teamColor = resolveTeamColor(driver.team)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
     val carRes = getTeamCarResOrNull(driver.team)
+    val rankColor = when (driver.position) {
+        1 -> P1TTheme.poleGold
+        else -> P1TTheme.textMuted
+    }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -721,51 +720,78 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                     .background(teamColor)
             )
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(14.dp)
-            ) {
-                // Top Row: Driver Portrait Avatar + Details, Points & Expand Icon
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Box(modifier = Modifier.weight(1f)) {
+                // Giant subtle faded #position watermark on the right background
+                Text(
+                    text = "#${driver.position}",
+                    color = MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = if (isDark) 0.06f else 0.045f
+                    ),
+                    fontSize = 60.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-2).sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 2.dp, end = 12.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 13.dp)
                 ) {
                     Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Real Driver Portrait Avatar with position badge
-                        DriverPortraitAvatar(
-                            driverCodeOrName = driver.fullName.ifBlank { driver.code },
-                            teamColor = teamColor,
-                            size = 52.dp,
-                            positionBadge = "P${driver.position}",
-                            driverCode = driver.code.takeIf { it.isNotBlank() }
-                        )
+                        // Left: Rank + Team, Full Name, Gap, Stats
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = formatOrdinalRank(driver.position),
+                                    color = rankColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Text(
+                                    text = "·",
+                                    color = P1TTheme.textMuted,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = driver.team.displayName,
+                                    color = adaptiveTeamColor,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
 
-                        // Driver Details
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = driver.team.displayName,
-                                color = adaptiveTeamColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+
                             Text(
                                 text = driver.fullName,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+
                             if (!driver.gapToLeader.isNullOrBlank()) {
                                 val gapText = buildString {
                                     append(driver.gapToLeader)
@@ -781,237 +807,269 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                        }
-                    }
 
-                    // Points in team color
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "${formatStandingsPoints(driver.points)} PTS",
-                            color = adaptiveTeamColor,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isExpanded) "Collapse" else "Expand",
-                            tint = P1TTheme.textMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+                            Spacer(modifier = Modifier.height(7.dp))
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Stats Bar: Crisp Material Icons in muted tint (NO emoji strings)
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.EmojiEvents,
-                            contentDescription = "Wins",
-                            tint = P1TTheme.textMuted,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "${driver.wins} Wins",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    if (driver.podiums > 0 || driver.poles > 0) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Leaderboard,
-                                contentDescription = "Podiums",
-                                tint = P1TTheme.textMuted,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "${driver.podiums} Podiums",
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Poles",
-                                tint = P1TTheme.textMuted,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "${driver.poles} Poles",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    } else if (driver.racesCount > 0) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Flag,
-                                contentDescription = "Races",
-                                tint = P1TTheme.textMuted,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "${driver.racesCount} Races",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-
-                // Inner Expandable Stats Container
-                AnimatedVisibility(
-                    visible = isExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(P1TTheme.surfaceInnerCard)
-                            .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
-                            .padding(12.dp)
-                    ) {
-                        // Team Car Cutout Showcase (only when mapped to a known team asset)
-                        if (carRes != null) {
-                            TeamCarShowcaseImage(
-                                team = driver.team,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(46.dp)
-                                    .padding(vertical = 2.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-
-                        // Avg Points Per Race (when race count or avg is available)
-                        if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Text(
-                                    text = "Avg points per race",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp
+                                StatIconLabel(
+                                    icon = Icons.Default.EmojiEvents,
+                                    contentDescription = "Wins",
+                                    label = "${driver.wins} Wins",
+                                    emphasized = true
                                 )
-                                Text(
-                                    text = String.format(java.util.Locale.US, "%.2f", driver.avgPtsPerRace),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        if (driver.recentRaces.isNotEmpty()) {
-                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-
-                            // Last 3 Races Summary Header
-                            Text(
-                                text = "Last 3 races (${driver.last3Summary})",
-                                color = adaptiveTeamColor,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Individual Races
-                            driver.recentRaces.forEach { r ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 2.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .padding(end = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Flag,
-                                            contentDescription = null,
-                                            tint = P1TTheme.textMuted,
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Text(
-                                            text = r.grandPrixName,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontSize = 11.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    Text(
-                                        text = "${r.positionText} ${r.pointsText}",
-                                        color = if (r.position == 1) {
-                                            P1TTheme.poleGold
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        softWrap = false
+                                if (driver.podiums > 0 || driver.poles > 0) {
+                                    StatIconLabel(
+                                        icon = Icons.Default.Leaderboard,
+                                        contentDescription = "Podiums",
+                                        label = "${driver.podiums} Podiums",
+                                        emphasized = true
+                                    )
+                                    StatIconLabel(
+                                        icon = Icons.Default.History,
+                                        contentDescription = "Poles",
+                                        label = "${driver.poles} Poles",
+                                        emphasized = false
+                                    )
+                                } else if (driver.racesCount > 0) {
+                                    StatIconLabel(
+                                        icon = Icons.Default.Flag,
+                                        contentDescription = "Races",
+                                        label = "${driver.racesCount} Races",
+                                        emphasized = false
                                     )
                                 }
                             }
-                        } else if (driver.last3Summary.isNotBlank()) {
-                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-                            Text(
-                                text = "Season form (${driver.last3Summary})",
-                                color = adaptiveTeamColor,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold
+                        }
+
+                        // Right: 54.dp Driver Portrait + Tabular Points + Expand Chevron
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            DriverPortraitAvatar(
+                                driverCodeOrName = driver.fullName.ifBlank { driver.code },
+                                teamColor = teamColor,
+                                size = 54.dp,
+                                driverCode = driver.code.takeIf { it.isNotBlank() }
                             )
-                        } else {
-                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
-                                Spacer(modifier = Modifier.height(8.dp))
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = formatStandingsPoints(driver.points),
+                                    style = TextStyle(fontFeatureSettings = "tnum"),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Text(
+                                    text = "PTS",
+                                    color = P1TTheme.textMuted,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Icon(
+                                    imageVector = if (isExpanded) {
+                                        Icons.Default.KeyboardArrowUp
+                                    } else {
+                                        Icons.Default.KeyboardArrowDown
+                                    },
+                                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                    tint = P1TTheme.textMuted,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .size(18.dp)
+                                )
                             }
-                            Text(
-                                text = "Detailed race-by-race breakdown unavailable",
-                                color = P1TTheme.textMuted,
-                                fontSize = 11.5.sp
-                            )
+                        }
+                    }
+
+                    // Expandable Car Showcase + Average Points + Last 3 Races Stage
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(P1TTheme.surfaceInnerCard)
+                                .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
+                                .padding(12.dp)
+                        ) {
+                            if (carRes != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    teamColor.copy(alpha = if (isDark) 0.20f else 0.12f),
+                                                    teamColor.copy(alpha = if (isDark) 0.06f else 0.03f),
+                                                    Color.Transparent
+                                                )
+                                            )
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    TeamCarShowcaseImage(
+                                        team = driver.team,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
+
+                            if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Avg points per race",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%.2f", driver.avgPtsPerRace),
+                                        style = TextStyle(fontFeatureSettings = "tnum"),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            if (driver.recentRaces.isNotEmpty()) {
+                                if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                }
+
+                                Text(
+                                    text = "Last 3 races (${driver.last3Summary})",
+                                    color = adaptiveTeamColor,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    driver.recentRaces.forEach { race ->
+                                        val isWinner = race.position == 1
+                                        val posBadgeBg = when (race.position) {
+                                            1 -> P1TColors.GoldTrophy
+                                            2 -> P1TColors.SilverTrophy
+                                            3 -> P1TColors.BronzeTrophy
+                                            else -> P1TTheme.pillBg
+                                        }
+                                        val posBadgeText = if (race.position in 1..3) {
+                                            P1TTheme.onColor(posBadgeBg)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isDark) Color.White.copy(alpha = 0.03f)
+                                                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+                                                )
+                                                .border(
+                                                    1.dp,
+                                                    if (isWinner) P1TTheme.poleGold.copy(alpha = 0.35f)
+                                                    else P1TTheme.borderInnerCard,
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(end = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(posBadgeBg)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = race.positionText,
+                                                        color = posBadgeText,
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.Black,
+                                                        maxLines = 1,
+                                                        softWrap = false
+                                                    )
+                                                }
+                                                Text(
+                                                    text = race.grandPrixName,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Text(
+                                                text = race.pointsText,
+                                                style = TextStyle(fontFeatureSettings = "tnum"),
+                                                color = if (isWinner) {
+                                                    P1TTheme.poleGold
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (driver.last3Summary.isNotBlank()) {
+                                if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                                Text(
+                                    text = "Season form (${driver.last3Summary})",
+                                    color = adaptiveTeamColor,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                if (driver.racesCount > 0 || driver.avgPtsPerRace > 0.0) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                                Text(
+                                    text = "Detailed race-by-race breakdown unavailable",
+                                    color = P1TTheme.textMuted,
+                                    fontSize = 11.5.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -1020,25 +1078,59 @@ private fun DriverStandingCard(driver: DriverStanding, selectedYear: Int) {
     }
 }
 
+@Composable
+private fun StatIconLabel(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    label: String,
+    emphasized: Boolean
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = P1TTheme.textMuted,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = label,
+            color = if (emphasized) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.5.sp,
+            fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
 /**
- * Unslopped Constructor Standing card:
- * Graphite surface ramp: #19191B outer card, 1.dp hairline border Color.White.copy(alpha = 0.07f),
- * 4.dp left team accent bar, real TeamCarShowcaseImage cutout, DriverPortraitAvatar for teammates,
- * crisp Material Icons in #85858B tint, and #141415 inner stats container.
+ * Editorial Constructor Standing card with dedicated header row, dramatic full-width car stage
+ * with team watermark, compact teammate pill chips, and expandable season wins list.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYear: Int) {
     var isExpanded by rememberSaveable(selectedYear, constructor.stableKey) {
-        mutableStateOf(constructor.position <= 2)
+        mutableStateOf(false)
     }
-    val teamColor = if (constructor.team != F1TeamId.OTHER) {
-        Color(constructor.team.colorHex)
-    } else {
-        NEUTRAL_OTHER_TEAM_COLOR
-    }
+    val isDark = P1TTheme.isDark
+    val teamColor = resolveTeamColor(constructor.team)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
     val carRes = getTeamCarResOrNull(constructor.team)
+
+    val badgeColor = when (constructor.position) {
+        1 -> P1TColors.GoldTrophy
+        2 -> P1TColors.SilverTrophy
+        3 -> P1TColors.BronzeTrophy
+        else -> P1TTheme.pillBg
+    }
+    val badgeTextColor = if (constructor.position <= 3) {
+        P1TTheme.onColor(badgeColor)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -1066,7 +1158,7 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                     .weight(1f)
                     .padding(14.dp)
             ) {
-                // Top Row: P# Badge, Constructor Name, Real Car Cutout, Points
+                // Clean Top Header Row: Rank Badge + Name + Gap + Points + Chevron
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1075,7 +1167,7 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(end = 8.dp),
+                            .padding(end = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -1083,21 +1175,16 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    when (constructor.position) {
-                                        1 -> P1TColors.GoldTrophy
-                                        2 -> P1TColors.SilverTrophy
-                                        3 -> P1TColors.BronzeTrophy
-                                        else -> P1TTheme.pillBg
-                                    }
-                                ),
+                                .background(badgeColor),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "P${constructor.position}",
-                                color = if (constructor.position <= 3) Color.Black else MaterialTheme.colorScheme.onSurface,
+                                color = badgeTextColor,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Black
+                                fontWeight = FontWeight.Black,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
 
@@ -1107,19 +1194,21 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (!constructor.gapToP1.isNullOrBlank()) {
-                                val trimmedGap = constructor.gapToP1.trim()
-                                val formattedGap = when {
-                                    trimmedGap.equals("Leader", ignoreCase = true) ||
-                                        trimmedGap.startsWith("-") ||
-                                        trimmedGap.startsWith("+") -> trimmedGap
-                                    else -> "-$trimmedGap"
+
+                            val subtitleParts = buildList {
+                                if (!constructor.gapToP1.isNullOrBlank()) {
+                                    add(formatConstructorGap(constructor.gapToP1))
                                 }
+                                if (constructor.wins > 0) {
+                                    add("${constructor.wins} Win${if (constructor.wins == 1) "" else "s"}")
+                                }
+                            }
+                            if (subtitleParts.isNotEmpty()) {
                                 Text(
-                                    text = formattedGap,
+                                    text = subtitleParts.joinToString(" · "),
                                     color = P1TTheme.textMuted,
                                     fontSize = 11.sp,
                                     maxLines = 1,
@@ -1129,70 +1218,157 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                         }
                     }
 
-                    // Car Cutout and Points
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        if (carRes != null) {
-                            TeamCarShowcaseImage(
-                                team = constructor.team,
-                                modifier = Modifier
-                                    .width(80.dp)
-                                    .height(34.dp)
-                            )
-                        }
-
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "${formatStandingsPoints(constructor.points)} PTS",
-                                color = adaptiveTeamColor,
-                                fontSize = 17.sp,
+                                text = formatStandingsPoints(constructor.points),
+                                style = TextStyle(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Black,
                                 maxLines = 1,
                                 softWrap = false
                             )
-                            Icon(
-                                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (isExpanded) "Collapse" else "Expand",
-                                tint = P1TTheme.textMuted,
-                                modifier = Modifier.size(18.dp)
+                            Text(
+                                text = "PTS",
+                                color = P1TTheme.textMuted,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
+
+                        Icon(
+                            imageVector = if (isExpanded) {
+                                Icons.Default.KeyboardArrowUp
+                            } else {
+                                Icons.Default.KeyboardArrowDown
+                            },
+                            contentDescription = if (isExpanded) "Collapse" else "Expand",
+                            tint = P1TTheme.textMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
 
+                // Full-width Car Showcase Stage with giant faded team watermark
+                if (carRes != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(74.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        teamColor.copy(alpha = if (isDark) 0.22f else 0.14f),
+                                        teamColor.copy(alpha = if (isDark) 0.06f else 0.03f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        teamColor.copy(alpha = if (isDark) 0.12f else 0.07f),
+                                        Color.Transparent,
+                                        teamColor.copy(alpha = if (isDark) 0.10f else 0.06f)
+                                    )
+                                )
+                            )
+                            .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = constructor.resolvedConstructorName.uppercase(),
+                            color = MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = if (isDark) 0.06f else 0.05f
+                            ),
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip,
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        TeamCarShowcaseImage(
+                            team = constructor.team,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .padding(horizontal = 14.dp)
+                        )
+                    }
+                }
+
+                // Teammate Pill Chips (24.dp avatar + surname + points)
                 if (constructor.drivers.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Team Drivers Strip with real DriverPortraitAvatar
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        constructor.drivers.forEach { driver ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        constructor.drivers.chunked(2).forEach { pair ->
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                DriverPortraitAvatar(
-                                    driverCodeOrName = driver.fullName,
-                                    teamColor = teamColor,
-                                    size = 26.dp
-                                )
-                                Text(
-                                    text = "${driver.fullName} (${formatStandingsPoints(driver.points)} pts)",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                pair.forEach { driver ->
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = P1TTheme.surfaceInnerCard,
+                                        border = BorderStroke(1.dp, P1TTheme.borderInnerCard),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            DriverPortraitAvatar(
+                                                driverCodeOrName = driver.fullName,
+                                                teamColor = teamColor,
+                                                size = 24.dp
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = extractDriverSurname(driver.fullName),
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = formatStandingsPoints(driver.points),
+                                                style = TextStyle(fontFeatureSettings = "tnum"),
+                                                color = adaptiveTeamColor,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
+                                }
+                                if (pair.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
                         }
                     }
                 }
 
-                // Inner Expandable Race Wins Container
+                // Expandable Season Race Wins Container
                 AnimatedVisibility(
                     visible = isExpanded,
                     enter = fadeIn() + expandVertically(),
@@ -1252,7 +1428,7 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                                         Text(
                                             text = win.grandPrixName,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontSize = 11.sp,
+                                            fontSize = 11.5.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1260,7 +1436,7 @@ private fun ConstructorStandingCard(constructor: ConstructorStanding, selectedYe
                                     Text(
                                         text = win.winnerFullName,
                                         color = adaptiveTeamColor,
-                                        fontSize = 11.sp,
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.End,
                                         maxLines = 1,

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,22 +33,29 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,12 +63,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.RaceDriverResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
@@ -98,6 +110,8 @@ fun InterlagosSectorMapCanvas(modifier: Modifier = Modifier) {
 fun YasMarinaSectorMapCanvas(modifier: Modifier = Modifier) {
     MultiSectorCircuitMap(circuitType = "YAS_MARINA", modifier = modifier)
 }
+
+private val LocalWeekendCircuitSpecs = compositionLocalOf<RaceWeekend?> { null }
 
 @Composable
 fun RaceWeekendScreen(
@@ -278,8 +292,12 @@ fun RaceWeekendScreen(
 
     val activeSessions = effectiveWeekend.sessions
     val activeResults = effectiveWeekend.results
+    val isDark = P1TTheme.isDark
 
-    P1TRadialBackground(modifier = modifier) {
+    P1TRadialBackground(
+        modifier = modifier,
+        overrideGlowColor = if (isDark) Color(0xFF6B3E16) else null
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -314,16 +332,18 @@ fun RaceWeekendScreen(
             ) {
                 // CIRCUIT HERO CARD
                 item {
-                    WeekendCircuitHeaderCard(
-                        grandPrixName = effectiveWeekend.grandPrixName,
-                        circuitName = effectiveWeekend.circuitName,
-                        location = effectiveWeekend.location,
-                        roundText = "ROUND ${effectiveWeekend.round}",
-                        lapsText = "RACE - ${effectiveWeekend.totalLaps} LAPS",
-                        circuitType = effectiveWeekend.circuitType,
-                        dateRangeText = effectiveWeekend.dateRangeText,
-                        circuitId = effectiveWeekend.circuitId.ifBlank { effectiveWeekend.circuitType }
-                    )
+                    CompositionLocalProvider(LocalWeekendCircuitSpecs provides effectiveWeekend) {
+                        WeekendCircuitHeaderCard(
+                            grandPrixName = effectiveWeekend.grandPrixName,
+                            circuitName = effectiveWeekend.circuitName,
+                            location = effectiveWeekend.location,
+                            roundText = "ROUND ${effectiveWeekend.round}",
+                            lapsText = "RACE - ${effectiveWeekend.totalLaps} LAPS",
+                            circuitType = effectiveWeekend.circuitType,
+                            dateRangeText = effectiveWeekend.dateRangeText,
+                            circuitId = effectiveWeekend.circuitId.ifBlank { effectiveWeekend.circuitType }
+                        )
+                    }
                 }
 
                 // FILTER CHIPS ROW
@@ -544,7 +564,9 @@ private fun WeekendTopBar(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { onExpandedChange(false) },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                modifier = Modifier
+                    .heightIn(max = 360.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 options.forEachIndexed { index, option ->
                     DropdownMenuItem(
@@ -606,8 +628,8 @@ private fun WeekendTopBar(
 }
 
 /**
- * Header card with circuit name, location, date, "ROUND 20 🚩" / "RACE - 69 LAPS 🚩" pill,
- * and MultiSectorCircuitMap.
+ * Header card with circuit name, location, date, round & laps pills,
+ * glowing MultiSectorCircuitMap, and bottom 3-column motorsport spec bar.
  */
 @Composable
 fun WeekendCircuitHeaderCard(
@@ -621,97 +643,267 @@ fun WeekendCircuitHeaderCard(
     dateRangeText: String = "",
     circuitId: String = circuitType
 ) {
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+    val isDark = P1TTheme.isDark
+    val localWeekend = LocalWeekendCircuitSpecs.current
+
+    val resolvedWeekend = remember(localWeekend, circuitId, circuitType, circuitName, grandPrixName) {
+        if (localWeekend != null) {
+            localWeekend
+        } else {
+            val candidates = SeedDataProvider.getSeasonSchedule(2026) +
+                listOf(
+                    SeedDataProvider.getNextRaceWeekend(),
+                    SeedDataProvider.getSaoPaulo2024Results(),
+                    SeedDataProvider.getAbuDhabi2023Results()
+                )
+            val key = circuitId.ifBlank { circuitType }.trim()
+            candidates.firstOrNull { rw ->
+                (key.isNotBlank() && (rw.circuitId.equals(key, ignoreCase = true) || rw.circuitType.equals(key, ignoreCase = true))) ||
+                    (circuitName.isNotBlank() && rw.circuitName.equals(circuitName, ignoreCase = true)) ||
+                    (grandPrixName.isNotBlank() && rw.grandPrixName.equals(grandPrixName, ignoreCase = true))
+            }
+        }
+    }
+
+    val parsedLaps = remember(lapsText, resolvedWeekend) {
+        resolvedWeekend?.totalLaps?.takeIf { it > 0 }
+            ?: Regex("\\d+").find(lapsText)?.value?.toIntOrNull()
+    }
+    val lengthKmStr = resolvedWeekend?.circuitLengthKm?.trim()?.takeIf { it.isNotBlank() }
+    val lengthDouble = lengthKmStr?.toDoubleOrNull()
+    val corners = resolvedWeekend?.totalCorners?.takeIf { it > 0 }
+
+    val lengthValue = if (lengthKmStr != null) "$lengthKmStr km" else "—"
+    val lapsValue = if (parsedLaps != null && parsedLaps > 0) "$parsedLaps" else "—"
+    val thirdSpecLabel: String
+    val thirdSpecValue: String
+    when {
+        corners != null -> {
+            thirdSpecLabel = "TURNS"
+            thirdSpecValue = "$corners"
+        }
+        parsedLaps != null && lengthDouble != null && lengthDouble > 0.0 -> {
+            thirdSpecLabel = "DISTANCE"
+            thirdSpecValue = String.format(java.util.Locale.US, "%.1f km", parsedLaps * lengthDouble)
+        }
+        else -> {
+            thirdSpecLabel = "TURNS"
+            thirdSpecValue = "—"
+        }
+    }
+
+    val cardContainerColor = if (isDark) P1TColors.SurfaceCard else MaterialTheme.colorScheme.surface
+    val cardBorderColor = if (isDark) P1TTheme.glassBorder else MaterialTheme.colorScheme.outline
+
     Card(
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
+            .border(1.dp, cardBorderColor, RoundedCornerShape(22.dp))
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp)
+                .drawWithCache {
+                    val topWash = Brush.verticalGradient(
+                        colors = listOf(
+                            primaryAccent.copy(alpha = if (isDark) 0.12f else 0.05f),
+                            Color.Transparent
+                        ),
+                        startY = 0f,
+                        endY = size.height * 0.45f
+                    )
+                    onDrawBehind {
+                        drawRect(brush = topWash)
+                    }
+                }
         ) {
-            val primaryAccent = LocalF1Accent.current.primaryAccent
-            val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
-
-            // Badges row: ROUND 20 🚩 | RACE - 69 LAPS 🚩
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(P1TTheme.accentPillBg(primaryAccent))
-                        .border(1.dp, primaryAccent.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = roundText,
-                        color = adaptiveAccent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(P1TTheme.pillBg)
-                        .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = lapsText,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Grand Prix Name & Subtitle
-            Text(
-                text = grandPrixName,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Black
-            )
-            val subtitle = if (dateRangeText.isNotBlank()) {
-                "$circuitName · $location · $dateRangeText"
-            } else {
-                "$circuitName · $location"
-            }
-            Text(
-                text = subtitle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Multi-sector colored circuit map switched dynamically on circuitId (falling back to circuitType)
-            val resolvedCircuitKey = circuitId.ifBlank { circuitType }.uppercase()
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp),
-                contentAlignment = Alignment.Center
+                    .padding(18.dp)
             ) {
-                when (resolvedCircuitKey) {
-                    "YAS_MARINA", "YAS MARINA", "ABU_DHABI", "ABU DHABI" -> YasMarinaSectorMapCanvas(modifier = Modifier.fillMaxSize())
-                    "INTERLAGOS", "BRAZIL", "SAO_PAULO", "SAO PAULO" -> InterlagosSectorMapCanvas(modifier = Modifier.fillMaxSize())
-                    "SEPANG", "MALAYSIA" -> SepangSectorMapCanvas(modifier = Modifier.fillMaxSize())
-                    else -> MultiSectorCircuitMap(circuitType = resolvedCircuitKey, modifier = Modifier.fillMaxSize())
+                // Badges row: ROUND 20 | RACE - 69 LAPS
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(P1TTheme.accentPillBg(primaryAccent))
+                            .border(1.dp, primaryAccent.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = roundText,
+                            color = adaptiveAccent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.8.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(P1TTheme.pillBg)
+                            .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = lapsText,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.6.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Grand Prix Name & Subtitle
+                Text(
+                    text = grandPrixName,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                val subtitle = if (dateRangeText.isNotBlank()) {
+                    "$circuitName · $location · $dateRangeText"
+                } else {
+                    "$circuitName · $location"
+                }
+                Text(
+                    text = subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Glowing Multi-sector circuit map container
+                val resolvedCircuitKey = circuitId.ifBlank { circuitType }.uppercase()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(204.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(P1TTheme.surfaceInnerCard.copy(alpha = if (isDark) 0.72f else 0.55f))
+                        .drawWithCache {
+                            val glowBrush = Brush.radialGradient(
+                                colors = listOf(
+                                    primaryAccent.copy(alpha = if (isDark) 0.16f else 0.08f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(size.width * 0.5f, size.height * 0.5f),
+                                radius = size.minDimension * 0.7f
+                            )
+                            onDrawBehind {
+                                drawRect(brush = glowBrush)
+                            }
+                        }
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (resolvedCircuitKey) {
+                        "YAS_MARINA", "YAS MARINA", "ABU_DHABI", "ABU DHABI" -> YasMarinaSectorMapCanvas(modifier = Modifier.fillMaxSize())
+                        "INTERLAGOS", "BRAZIL", "SAO_PAULO", "SAO PAULO" -> InterlagosSectorMapCanvas(modifier = Modifier.fillMaxSize())
+                        "SEPANG", "MALAYSIA" -> SepangSectorMapCanvas(modifier = Modifier.fillMaxSize())
+                        else -> MultiSectorCircuitMap(circuitType = resolvedCircuitKey, modifier = Modifier.fillMaxSize())
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = P1TTheme.dividerSubtle
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Bottom 3-column motorsport spec bar separated by hairline dividers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircuitSpecColumn(
+                        label = "LENGTH",
+                        value = lengthValue,
+                        modifier = Modifier.weight(1f)
+                    )
+                    VerticalDivider(
+                        modifier = Modifier.height(28.dp),
+                        thickness = 1.dp,
+                        color = P1TTheme.dividerSubtle
+                    )
+                    CircuitSpecColumn(
+                        label = "LAPS",
+                        value = lapsValue,
+                        modifier = Modifier.weight(1f)
+                    )
+                    VerticalDivider(
+                        modifier = Modifier.height(28.dp),
+                        thickness = 1.dp,
+                        color = P1TTheme.dividerSubtle
+                    )
+                    CircuitSpecColumn(
+                        label = thirdSpecLabel,
+                        value = thirdSpecValue,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CircuitSpecColumn(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            color = P1TTheme.textMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(
+            text = value,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
@@ -804,7 +996,8 @@ private fun EmptyWeekendTabCard(
 }
 
 /**
- * Schedule list: 08 Nov Race Sunday · 17:00 with red 🚩 Race in 36 days pill + bell icon, etc. + Race History
+ * Schedule timeline: left-hand date column (FRI / SAT / SUN + day) beside dark rounded session cards
+ * with glowing accent indicators for Race/Qualifying, local time, non-wrapping countdown badge, and aligned reminder slot.
  */
 @Composable
 private fun WeekendScheduleSection(
@@ -816,7 +1009,14 @@ private fun WeekendScheduleSection(
 ) {
     val primaryAccent = LocalF1Accent.current.primaryAccent
     val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
-    val nowMillis = remember { System.currentTimeMillis() }
+    val isDark = P1TTheme.isDark
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -832,118 +1032,225 @@ private fun WeekendScheduleSection(
             val isCompleted = badge.equals("Completed", ignoreCase = true) ||
                 badge.equals("Final", ignoreCase = true) ||
                 (session.utcEpochMillis != null && session.utcEpochMillis < nowMillis)
+            val isQualifying = session.shortName.contains("Quali", ignoreCase = true) ||
+                session.fullName.contains("Qualifying", ignoreCase = true)
+            val isSprint = session.shortName.contains("Sprint", ignoreCase = true) ||
+                session.fullName.contains("Sprint", ignoreCase = true)
+            val dayLabel = session.dayOfWeek.ifBlank { session.fullDayName.take(3) }.uppercase()
 
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            val cardBorderColor = when {
+                session.isRace -> primaryAccent.copy(alpha = 0.50f)
+                isQualifying || isSprint -> primaryAccent.copy(alpha = 0.28f)
+                else -> MaterialTheme.colorScheme.outline
+            }
+            val indicatorColor = when {
+                session.isRace -> primaryAccent
+                isQualifying || isSprint -> primaryAccent.copy(alpha = 0.70f)
+                else -> P1TTheme.dividerSubtle
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Left-hand Timeline Date Column (FRI / SAT / SUN + day number)
+                Column(
+                    modifier = Modifier.width(42.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Date Block
-                        Column(
-                            modifier = Modifier
-                                .width(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(P1TTheme.pillBg)
-                                .padding(vertical = 6.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = session.dateDay,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            Text(
-                                text = session.dateMonth.uppercase(),
-                                color = P1TTheme.textMuted,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Session Title
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = session.fullName,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${session.fullDayName} · ${session.localTime}",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    Text(
+                        text = dayLabel,
+                        color = if (session.isRace) adaptiveAccent else P1TTheme.textMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Text(
+                        text = session.dateDay,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    if (session.dateMonth.isNotBlank()) {
+                        Text(
+                            text = session.dateMonth.uppercase(),
+                            color = P1TTheme.textMuted,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
+                }
 
-                    // Countdown Pill & Bell Icon (bell hidden for completed sessions)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (badge.isNotBlank()) {
-                            if (session.isRace) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(P1TTheme.accentPillBg(primaryAccent))
-                                        .border(1.dp, primaryAccent, RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = badge,
-                                        color = adaptiveAccent,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
+                // Session Card
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDark) P1TColors.SurfaceCard else MaterialTheme.colorScheme.surface
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, cardBorderColor, RoundedCornerShape(16.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (session.isRace || isQualifying) {
+                                    Modifier.drawWithCache {
+                                        val glowAlpha = if (session.isRace) {
+                                            if (isDark) 0.14f else 0.06f
+                                        } else {
+                                            if (isDark) 0.07f else 0.03f
+                                        }
+                                        val glowBrush = Brush.horizontalGradient(
+                                            colors = listOf(
+                                                primaryAccent.copy(alpha = glowAlpha),
+                                                Color.Transparent
+                                            ),
+                                            startX = 0f,
+                                            endX = size.width * 0.45f
+                                        )
+                                        onDrawBehind { drawRect(brush = glowBrush) }
+                                    }
+                                } else {
+                                    Modifier
                                 }
-                            } else {
+                            )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Glowing accent indicator bar for Race / Qualifying
+                            Box(
+                                modifier = Modifier
+                                    .width(3.5.dp)
+                                    .height(30.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(indicatorColor)
+                            )
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            // Session Title & Local Time
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp)
+                            ) {
                                 Text(
-                                    text = badge,
-                                    color = P1TTheme.textMuted,
-                                    fontSize = 11.sp
+                                    text = session.fullName,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${session.fullDayName} · ${session.localTime}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
-                        }
 
-                        if (!isCompleted) {
-                            IconButton(
-                                onClick = {
-                                    onToggleSessionReminder(sessionKey, !isReminderSet)
-                                },
-                                modifier = Modifier.size(48.dp)
+                            // Countdown Pill & Aligned 48.dp Trailing Action Slot
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (isReminderSet) Icons.Default.NotificationsActive else Icons.Default.Notifications,
-                                    contentDescription = if (isReminderSet) {
-                                        "Remove reminder for ${session.fullName}"
-                                    } else {
-                                        "Set reminder for ${session.fullName}"
-                                    },
-                                    tint = if (isReminderSet || session.isRace) adaptiveAccent else P1TTheme.textMuted,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                if (badge.isNotBlank()) {
+                                    when {
+                                        session.isRace -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(P1TTheme.accentPillBg(primaryAccent))
+                                                    .border(1.dp, primaryAccent.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = badge,
+                                                    color = adaptiveAccent,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+                                        }
+                                        isQualifying || isSprint -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(P1TTheme.pillBg)
+                                                    .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(12.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = badge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+                                        }
+                                        else -> {
+                                            Text(
+                                                text = badge,
+                                                color = P1TTheme.textMuted,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (!isCompleted) {
+                                    IconButton(
+                                        onClick = {
+                                            onToggleSessionReminder(sessionKey, !isReminderSet)
+                                        },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isReminderSet) Icons.Default.NotificationsActive else Icons.Default.Notifications,
+                                            contentDescription = if (isReminderSet) {
+                                                "Remove reminder for ${session.fullName}"
+                                            } else {
+                                                "Set reminder for ${session.fullName}"
+                                            },
+                                            tint = if (isReminderSet || session.isRace) adaptiveAccent else P1TTheme.textMuted,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier.size(48.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Session completed",
+                                            tint = P1TTheme.sectorGreen.copy(alpha = 0.65f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1045,13 +1352,17 @@ private fun RaceResultExpandedCard(
                                 text = result.finishTimeOrGap,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
                             )
                             Text(
                                 text = "${result.formattedPoints} PTS",
                                 color = adaptiveTeamColor,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Black
+                                fontWeight = FontWeight.Black,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
 
@@ -1118,17 +1429,32 @@ private fun RaceResultExpandedCard(
                                     // Pit Stop connector badge if present
                                     if (stint.pitStopDuration != null) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(
-                                                text = "⏱️ ${stint.pitStopDuration}",
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Timer,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                                Text(
+                                                    text = stint.pitStopDuration,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
                                             if (stint.pitStopLap != null) {
                                                 Text(
                                                     text = "Lap ${stint.pitStopLap}",
                                                     color = P1TTheme.textMuted,
-                                                    fontSize = 9.sp
+                                                    fontSize = 9.sp,
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                             }
                                         }
@@ -1333,6 +1659,8 @@ private fun PitStopsSummaryCard(result: RaceDriverResult) {
 private fun QualifyingResultRow(result: RaceDriverResult) {
     val teamColor = Color(result.team.colorHex)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+    val qualiRank = result.qualifyingPosition.ifBlank { "—" }
+    val isPole = qualiRank.equals("P1", ignoreCase = true)
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -1354,30 +1682,185 @@ private fun QualifyingResultRow(result: RaceDriverResult) {
                     .weight(1f)
                     .padding(end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                Box(
+                    modifier = Modifier.width(30.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = qualiRank,
+                        color = if (isPole) P1TTheme.poleGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        fontWeight = if (isPole) FontWeight.Black else FontWeight.ExtraBold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
                 DriverPortraitAvatar(
                     driverCodeOrName = result.driverCode,
                     teamColor = teamColor,
-                    size = 28.dp,
-                    positionBadge = result.qualifyingPosition.ifBlank { "—" }
+                    size = 34.dp,
+                    positionBadge = null
                 )
-                Text(
-                    text = result.driverFullName,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = result.driverFullName,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = result.team.displayName,
+                        color = adaptiveTeamColor,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Text(
                 text = result.qualifyingTime.ifBlank { "—" },
                 color = adaptiveTeamColor,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                softWrap = false
             )
         }
+    }
+}
+
+private data class TelemetryStatItem(
+    val label: String,
+    val value: String,
+    val valueColor: Color? = null,
+    val spanFullWidth: Boolean = false
+)
+
+@Composable
+private fun TelemetryStatGridCard(
+    title: String,
+    accentColor: Color,
+    stats: List<TelemetryStatItem>
+) {
+    val isDark = P1TTheme.isDark
+    val containerColor = if (isDark) P1TColors.SurfaceCard else MaterialTheme.colorScheme.surface
+    val borderColor = if (isDark) P1TTheme.glassBorder else MaterialTheme.colorScheme.outline
+
+    val rows = remember(stats) {
+        buildList<List<TelemetryStatItem>> {
+            val pairBuffer = mutableListOf<TelemetryStatItem>()
+            stats.forEach { item ->
+                if (item.spanFullWidth) {
+                    if (pairBuffer.isNotEmpty()) {
+                        add(pairBuffer.toList())
+                        pairBuffer.clear()
+                    }
+                    add(listOf(item))
+                } else {
+                    pairBuffer.add(item)
+                    if (pairBuffer.size == 2) {
+                        add(pairBuffer.toList())
+                        pairBuffer.clear()
+                    }
+                }
+            }
+            if (pairBuffer.isNotEmpty()) {
+                add(pairBuffer.toList())
+            }
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(14.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accentColor)
+                )
+                Text(
+                    text = title,
+                    color = accentColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.1.sp,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+
+            rows.forEach { rowItems ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    rowItems.forEach { stat ->
+                        TelemetryStatTile(
+                            item = stat,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TelemetryStatTile(
+    item: TelemetryStatItem,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(P1TTheme.surfaceInnerCard)
+            .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = item.label.uppercase(),
+            color = P1TTheme.textMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = item.value,
+            color = item.valueColor ?: MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1389,12 +1872,13 @@ private fun RaceInfoSection(
     weekend: RaceWeekend,
     results: List<RaceDriverResult> = emptyList()
 ) {
+    val accentColor = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent)
     val laps = weekend.totalLaps.takeIf { it > 0 } ?: 0
     val lengthKm = weekend.circuitLengthKm.toDoubleOrNull() ?: 0.0
     val raceDistanceKm = if (laps > 0 && lengthKm > 0.0) {
         String.format(java.util.Locale.US, "%.3f km", laps * lengthKm)
     } else {
-        "-"
+        "—"
     }
 
     val fastestResult = results.firstOrNull {
@@ -1411,56 +1895,37 @@ private fun RaceInfoSection(
     }
     val raceSession = weekend.sessions.firstOrNull { it.isRace }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "RACE INFORMATION",
-                    color = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Season & Round: ${weekend.season} · Round ${weekend.round}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                Text(
-                    text = "Weekend Format: ${if (weekend.isSprintWeekend) "Sprint Weekend" else "Traditional Grand Prix"}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                if (qualiSession != null) {
-                    Text(
-                        text = "Qualifying: ${qualiSession.fullDayName} · ${qualiSession.localTime}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
-                if (raceSession != null) {
-                    Text(
-                        text = "Grand Prix Start: ${raceSession.fullDayName} · ${raceSession.localTime}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
-                Text(text = "Number of Laps: $laps", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Text(text = "Circuit Length: ${weekend.circuitLengthKm} km", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Text(text = "Race Distance: $raceDistanceKm", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Text(text = "Fastest Lap: $fastestLapText", color = P1TTheme.sectorPurple, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
+    val stats = buildList {
+        add(TelemetryStatItem("SEASON & ROUND", "${weekend.season} · Round ${weekend.round}"))
+        add(
+            TelemetryStatItem(
+                "WEEKEND FORMAT",
+                if (weekend.isSprintWeekend) "Sprint Weekend" else "Traditional Grand Prix"
+            )
+        )
+        if (qualiSession != null) {
+            add(TelemetryStatItem("QUALIFYING", "${qualiSession.fullDayName} · ${qualiSession.localTime}"))
         }
+        if (raceSession != null) {
+            add(TelemetryStatItem("GRAND PRIX START", "${raceSession.fullDayName} · ${raceSession.localTime}"))
+        }
+        add(TelemetryStatItem("NUMBER OF LAPS", if (laps > 0) "$laps Laps" else "—"))
+        add(TelemetryStatItem("CIRCUIT LENGTH", "${weekend.circuitLengthKm} km"))
+        add(TelemetryStatItem("RACE DISTANCE", raceDistanceKm))
+        add(
+            TelemetryStatItem(
+                label = "FASTEST LAP",
+                value = fastestLapText,
+                valueColor = P1TTheme.sectorPurple
+            )
+        )
     }
+
+    TelemetryStatGridCard(
+        title = "RACE INFORMATION",
+        accentColor = accentColor,
+        stats = stats
+    )
 }
 
 /**
@@ -1471,47 +1936,25 @@ private fun CircuitInfoSection(
     weekend: RaceWeekend
 ) {
     val circuitCode = weekend.circuitId.ifBlank { weekend.circuitType }
-    val accentCyan = if (P1TTheme.isDark) Color(0xFF00B4D8) else Color(0xFF0077A8)
+    val accentColor = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent)
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(text = "CIRCUIT SPECIFICATIONS", color = accentCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Circuit: ${weekend.circuitName}",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Location: ${weekend.countryFlagEmoji} ${weekend.location}".trim(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                if (weekend.dateRangeText.isNotBlank()) {
-                    Text(
-                        text = "Weekend Dates: ${weekend.dateRangeText}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
-                Text(text = "Circuit Length: ${weekend.circuitLengthKm} km", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Text(text = "Race Laps: ${weekend.totalLaps} laps", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Text(text = "Number of Corners: ${weekend.totalCorners} corners", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                if (circuitCode.isNotBlank()) {
-                    Text(text = "Track Code: ${circuitCode.uppercase()}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                }
-            }
+    val stats = buildList {
+        add(TelemetryStatItem("CIRCUIT", weekend.circuitName, spanFullWidth = true))
+        add(TelemetryStatItem("LOCATION", "${weekend.countryFlagEmoji} ${weekend.location}".trim()))
+        if (weekend.dateRangeText.isNotBlank()) {
+            add(TelemetryStatItem("WEEKEND DATES", weekend.dateRangeText))
+        }
+        add(TelemetryStatItem("CIRCUIT LENGTH", "${weekend.circuitLengthKm} km"))
+        add(TelemetryStatItem("RACE LAPS", "${weekend.totalLaps} Laps"))
+        add(TelemetryStatItem("CORNERS", "${weekend.totalCorners} Turns"))
+        if (circuitCode.isNotBlank()) {
+            add(TelemetryStatItem("TRACK CODE", circuitCode.uppercase()))
         }
     }
+
+    TelemetryStatGridCard(
+        title = "CIRCUIT SPECIFICATIONS",
+        accentColor = accentColor,
+        stats = stats
+    )
 }

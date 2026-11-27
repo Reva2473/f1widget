@@ -19,31 +19,38 @@ import com.reva2473.f1widget.domain.model.F1TeamId
 import java.util.Locale
 
 object P1TColors {
-    val BackgroundPrimary = Color(0xFF0B0B0E)
+    val BackgroundPrimary = Color(0xFF070709)
     val BackgroundLight = Color(0xFFF6F6F9)
-    val HeaderCrimsonGlow = Color(0xFF581313)
-    val SurfaceCard = Color(0xFF16161A)
+    val HeaderCrimsonGlow = Color(0xFF6A1414)
+    val SurfaceCard = Color(0xFF131318)
     val SurfaceCardLight = Color(0xFFFFFFFF)
-    val SurfaceElevated = Color(0xFF1E1E24)
-    val SurfaceInnerCard = Color(0xFF121216)
-    val BorderSubtle = Color(0xFF2A2A32)
+    val SurfaceElevated = Color(0xFF1B1B22)
+    val SurfaceInnerCard = Color(0xFF0E0E13)
+    val BorderSubtle = Color(0xFF262630)
     val BorderLight = Color(0xFFE2E2EA)
-    val AccentRed = Color(0xFFE1251B)
-    val TextPrimary = Color(0xFFF5F5F7)
-    val TextSecondary = Color(0xFF9A9AA6)
-    val TextMuted = Color(0xFF8E8E9B)
+    val AccentRed = Color(0xFFE10600)
+    val TextPrimary = Color(0xFFF7F7FA)
+    val TextSecondary = Color(0xFFA0A0AE)
+    val TextMuted = Color(0xFF8E8E9E)
+
+    // Broadcast Race Control & Timing Colors (Image 3 inspired)
+    val GreenFlagBg = Color(0xFF16C47F)
+    val SafetyCarBg = Color(0xFFFFD43B)
+    val RedFlagSolidBg = Color(0xFFE10600)
+    val FastestLapPurple = Color(0xFF9333EA)
+    val FastestLapPurpleDark = Color(0xFF581C87)
 
     // Timing & Sector Colors
     val SectorPurple = Color(0xFFB855FF)
-    val SectorGreen = Color(0xFF2CE580)
-    val TrackClearBg = Color(0xFF103321)
+    val SectorGreen = Color(0xFF22D37A)
+    val TrackClearBg = Color(0xFF0E2E1E)
     val SectorYellow = Color(0xFFF5C518)
-    val SectorInactive = Color(0xFF3A3A44)
+    val SectorInactive = Color(0xFF34343F)
     val SpeedTrapMagenta = Color(0xFFE01A9F)
     val InPitBlue = Color(0xFF2A75D3)
     val GoldTrophy = Color(0xFFF5C518)
-    val SilverTrophy = Color(0xFFC0C0C8)
-    val BronzeTrophy = Color(0xFFD97B29)
+    val SilverTrophy = Color(0xFFC8C8D2)
+    val BronzeTrophy = Color(0xFFE08838)
 }
 
 data class F1AccentPalette(
@@ -197,10 +204,16 @@ object P1TTheme {
         @Composable get() = if (isDark) Color(0xFF24242C) else Color(0xFFE0E0EA)
 
     val surfaceStandingCard: Color
-        @Composable get() = if (isDark) Color(0xFF19191B) else Color(0xFFFFFFFF)
+        @Composable get() = if (isDark) Color(0xFF141419) else Color(0xFFFFFFFF)
 
     val borderStandingCard: Color
-        @Composable get() = if (isDark) Color.White.copy(alpha = 0.07f) else P1TColors.BorderLight
+        @Composable get() = if (isDark) Color.White.copy(alpha = 0.08f) else P1TColors.BorderLight
+
+    val glassSurface: Color
+        @Composable get() = if (isDark) Color(0xE614141A) else Color(0xF5FFFFFF)
+
+    val glassBorder: Color
+        @Composable get() = if (isDark) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D8E4)
 
     val dividerSubtle: Color
         @Composable get() = if (isDark) Color(0xFF2E2E38) else Color(0xFFDCDCE6)

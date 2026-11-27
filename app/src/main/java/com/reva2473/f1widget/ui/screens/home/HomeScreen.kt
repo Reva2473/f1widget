@@ -3,12 +3,11 @@ package com.reva2473.f1widget.ui.screens.home
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,10 +37,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Leaderboard
+import androidx.compose.material.icons.filled.NotInterested
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -54,11 +58,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,7 +71,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.ConstructorStanding
-import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.domain.model.DriverStanding
 import com.reva2473.f1widget.domain.model.F1TeamId
 import com.reva2473.f1widget.domain.model.LiveDriverTiming
@@ -74,6 +78,7 @@ import com.reva2473.f1widget.domain.model.LiveSessionState
 import com.reva2473.f1widget.domain.model.RaceDriverResult
 import com.reva2473.f1widget.domain.model.RaceWeekend
 import com.reva2473.f1widget.domain.model.SessionScheduleItem
+import com.reva2473.f1widget.ui.components.BroadcastFlagBannerType
 import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.CircuitOutlineCanvas
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
@@ -81,8 +86,14 @@ import com.reva2473.f1widget.ui.components.FloatingPillBottomBar
 import com.reva2473.f1widget.ui.components.LiveTrackMapCanvas
 import com.reva2473.f1widget.ui.components.P1TRadialBackground
 import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
+import com.reva2473.f1widget.ui.components.TyreCompoundBadge
+import com.reva2473.f1widget.ui.components.resolveBroadcastFlagType
+import com.reva2473.f1widget.ui.theme.LocalF1Accent
+import com.reva2473.f1widget.ui.theme.P1TColors
 import com.reva2473.f1widget.ui.theme.P1TTheme
 import kotlin.math.roundToInt
+
+private val HERO_MIN_HEIGHT = 248.dp
 
 private val RaceWeekend.countdownBadge: String
     get() = sessions.firstOrNull { it.isRace }?.countdownBadge ?: ""
@@ -98,7 +109,27 @@ private fun formatPointsValue(value: Double): String {
     return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+private fun parseLapTimeSeconds(time: String): Double? {
+    val trimmed = time.trim()
+    if (trimmed.isBlank()) return null
+    val parts = trimmed.split(":")
+    return when (parts.size) {
+        1 -> parts[0].toDoubleOrNull()
+        2 -> {
+            val mins = parts[0].toDoubleOrNull() ?: return null
+            val secs = parts[1].toDoubleOrNull() ?: return null
+            mins * 60.0 + secs
+        }
+        3 -> {
+            val hrs = parts[0].toDoubleOrNull() ?: return null
+            val mins = parts[1].toDoubleOrNull() ?: return null
+            val secs = parts[2].toDoubleOrNull() ?: return null
+            hrs * 3600.0 + mins * 60.0 + secs
+        }
+        else -> null
+    }
+}
+
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
@@ -146,7 +177,7 @@ fun HomeScreen(
                     .weight(1f)
                     .verticalScroll(scrollState)
             ) {
-                // 2. HERO HORIZONTAL PAGER (5 slides)
+                // 2. HERO HORIZONTAL PAGER (5 equalized slides)
                 HomeHeroPager(
                     weekend = activeWeekend,
                     sessions = activeWeekend.sessions,
@@ -160,12 +191,15 @@ fun HomeScreen(
                     onArchiveTap = onArchiveTap
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // 3. EXPLORE F1 STATS CARD
-                ExploreF1StatsCard(onClick = onNavigateToExplore)
+                ExploreF1StatsCard(
+                    driverStandings = driverStandings,
+                    onClick = onNavigateToExplore
+                )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // 4. LIVE SESSION TRACK MAP CARD
                 LiveTrackSummaryCard(
@@ -175,7 +209,7 @@ fun HomeScreen(
                     onOpenLiveTiming = onNavigateToLiveTiming
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // 5. BENTO RACE WEEKEND SUMMARY CARD
                 HomeBentoCard(
@@ -212,7 +246,8 @@ fun HomeScreen(
 }
 
 /**
- * Top bar: Left non-redundant ApexGrid brand mark, centered "Home" title, right circular settings gear button.
+ * Editorial top bar: subtle ApexGrid emblem pill ("AG"), bold "ApexGrid" / "Home" title,
+ * and right CircularHeaderButton for Settings.
  */
 @Composable
 private fun HomeTopBar(
@@ -224,42 +259,58 @@ private fun HomeTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Non-clickable ApexGrid emblem balancing the right Settings button
+        // Subtle ApexGrid emblem pill balancing the right 48.dp Settings button
         Box(
-            modifier = Modifier.size(48.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(P1TTheme.accentPillBg(primaryAccent))
-                    .border(1.dp, primaryAccent.copy(alpha = 0.45f), CircleShape),
-                contentAlignment = Alignment.Center
+                    .border(1.dp, primaryAccent.copy(alpha = 0.40f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(primaryAccent)
+                )
                 Text(
                     text = "AG",
                     color = adaptiveAccent,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.8.sp
                 )
             }
         }
 
-        // Centered Title
-        Text(
-            text = "Home",
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 19.sp,
-                color = MaterialTheme.colorScheme.onBackground
+        // Centered Editorial Title
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "APEXGRID",
+                color = P1TTheme.textMuted,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.8.sp
             )
-        )
+            Text(
+                text = "Home",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            )
+        }
 
         // Settings Gear Icon
         CircularHeaderButton(onClick = onNavigateToSettings) {
@@ -274,9 +325,8 @@ private fun HomeTopBar(
 }
 
 /**
- * 5-slide HorizontalPager Hero with 5-dot pager indicator (active dot elongated into pill)
+ * 5-slide HorizontalPager Hero with equalized slide heights and animated pill indicators.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeHeroPager(
     weekend: RaceWeekend,
@@ -299,6 +349,7 @@ private fun HomeHeroPager(
             state = pagerState,
             contentPadding = PaddingValues(horizontal = 20.dp),
             pageSpacing = 12.dp,
+            verticalAlignment = Alignment.Top,
             modifier = Modifier.fillMaxWidth()
         ) { page ->
             when (page) {
@@ -316,7 +367,7 @@ private fun HomeHeroPager(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Pager Indicator Dots (active dot elongated into pill)
+        // Pager Indicator Dots (active dot animated into elongated pill)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -325,11 +376,16 @@ private fun HomeHeroPager(
             val primaryAccent = LocalF1Accent.current.primaryAccent
             repeat(5) { index ->
                 val isSelected = pagerState.currentPage == index
+                val pillWidth by animateDpAsState(
+                    targetValue = if (isSelected) 22.dp else 6.dp,
+                    animationSpec = tween(durationMillis = 220),
+                    label = "HeroIndicatorWidth"
+                )
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 3.dp)
                         .height(5.dp)
-                        .width(if (isSelected) 22.dp else 5.dp)
+                        .width(pillWidth)
                         .clip(RoundedCornerShape(3.dp))
                         .background(if (isSelected) primaryAccent else MaterialTheme.colorScheme.outline)
                 )
@@ -339,9 +395,10 @@ private fun HomeHeroPager(
 }
 
 /**
- * Slide 0 (home-1080.webp):
- * "ROUND 16 · IN 1 DAY" in red, "Bahrain Grand Prix in Malaysia", "Sepang International Circuit",
- * left session schedule table beside SepangOutlineCanvas, and bottom 4-column stat strip.
+ * Slide 0:
+ * Atmospheric top pill ("NEXT GRAND PRIX · ROUND X"), countdown pill, bold GP title,
+ * two-column layout (session schedule preview + glowing CircuitOutlineCanvas),
+ * and crisp bottom 3-column motorsport spec bar (LENGTH | LAPS | TURNS).
  */
 @Composable
 private fun HeroSlideNextRace(
@@ -349,12 +406,17 @@ private fun HeroSlideNextRace(
     sessions: List<SessionScheduleItem> = weekend.sessions,
     onClick: () -> Unit
 ) {
-    val countdownText = if (weekend.countdownBadge.isNotBlank()) {
-        weekend.countdownBadge.uppercase()
-    } else {
-        "IN ${weekend.daysToGo} DAY${if (weekend.daysToGo == 1) "" else "S"}"
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+    val isDark = P1TTheme.isDark
+
+    val countdownText = when {
+        weekend.countdownBadge.isNotBlank() -> weekend.countdownBadge.uppercase()
+        weekend.daysToGo <= 0 -> "RACE WEEK"
+        else -> "IN ${weekend.daysToGo} DAY${if (weekend.daysToGo == 1) "" else "S"}"
     }
-    val topBadge = "ROUND ${weekend.round}  ·  $countdownText"
+    val topBadge = "NEXT GRAND PRIX · ROUND ${weekend.round}"
+
     val rawCircuitId = weekend.circuitId.ifBlank { weekend.circuitType }
     val circuitId = when {
         rawCircuitId.isNotBlank() -> rawCircuitId
@@ -364,106 +426,168 @@ private fun HeroSlideNextRace(
         else -> "MADRID"
     }
 
+    val subtitleText = listOf(weekend.circuitName, weekend.location)
+        .filter { it.isNotBlank() }
+        .joinToString(" · ")
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = HERO_MIN_HEIGHT)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
             .clickable { onClick() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp)
+                .heightIn(min = HERO_MIN_HEIGHT)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            val primaryAccent = LocalF1Accent.current.primaryAccent
-            val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Top atmospheric pill + countdown pill
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .clip(RoundedCornerShape(50))
+                            .background(P1TTheme.accentPillBg(primaryAccent))
+                            .border(1.dp, primaryAccent.copy(alpha = 0.35f), RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = topBadge,
+                            color = adaptiveAccent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
 
-            // "ROUND X · IN Y DAYS"
-            Text(
-                text = topBadge,
-                color = adaptiveAccent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp
-            )
+                    Spacer(modifier = Modifier.width(8.dp))
 
-            Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(P1TTheme.pillBg)
+                            .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(50))
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = countdownText,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
 
-            // Grand Prix Name
-            Text(
-                text = weekend.grandPrixName,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Black
-            )
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // Circuit & Location
-            Text(
-                text = weekend.circuitName,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = weekend.location,
-                color = P1TTheme.textMuted,
-                fontSize = 12.sp
-            )
+                // Bold GP Title
+                Text(
+                    text = weekend.grandPrixName.ifBlank { "Upcoming Grand Prix" },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 19.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                if (subtitleText.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitleText,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
 
-            // Left session schedule table beside Circuit Outline Canvas
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Two-column layout: session schedule preview on left + glowing CircuitOutlineCanvas on right
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(IntrinsicSize.Min)
-                    .heightIn(min = 140.dp),
+                    .heightIn(min = 100.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Session Table
                 Column(
-                    modifier = Modifier.weight(1.15f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.weight(1.12f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    sessions.take(5).forEach { session ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = session.shortName,
-                                color = if (session.isRace) adaptiveAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .defaultMinSize(minWidth = 44.dp)
-                                    .padding(end = 8.dp)
-                            )
-                            Text(
-                                text = "${session.dayOfWeek} ${session.localTime}",
-                                color = if (session.isRace) adaptiveAccent else MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                    if (sessions.isEmpty()) {
+                        Text(
+                            text = "Session times pending",
+                            color = P1TTheme.textMuted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    } else {
+                        sessions.take(5).forEach { session ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = session.shortName,
+                                    color = if (session.isRace) adaptiveAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .defaultMinSize(minWidth = 40.dp)
+                                        .padding(end = 6.dp)
+                                )
+                                Text(
+                                    text = "${session.dayOfWeek} ${session.localTime}".trim(),
+                                    color = if (session.isRace) adaptiveAccent else MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (session.isRace) FontWeight.Bold else FontWeight.SemiBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(14.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                // Circuit Outline Canvas on right
                 Box(
                     modifier = Modifier
-                        .weight(1.25f)
-                        .heightIn(min = 130.dp)
-                        .fillMaxHeight(),
+                        .weight(1.18f)
+                        .heightIn(min = 100.dp)
+                        .fillMaxHeight()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    primaryAccent.copy(alpha = if (isDark) 0.22f else 0.12f),
+                                    Color.Transparent
+                                )
+                            )
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     CircuitOutlineCanvas(
@@ -475,29 +599,43 @@ private fun HeroSlideNextRace(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Bottom 4-column stat strip
+            // Bottom 3-column motorsport spec bar separated by hairline dividers
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(P1TTheme.surfaceInnerCard)
                     .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
-                    .padding(vertical = 10.dp, horizontal = 6.dp),
+                    .padding(vertical = 8.dp, horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 StatPillColumn(
-                    label = weekend.daysToGo.toString(),
-                    sub = if (weekend.daysToGo == 1) "DAY TO GO" else "DAYS TO GO"
+                    label = if (weekend.circuitLengthKm.isNotBlank()) "${weekend.circuitLengthKm} KM" else "—",
+                    sub = "LENGTH"
                 )
-                Box(modifier = Modifier.width(1.dp).height(24.dp).background(P1TTheme.dividerSubtle))
-                StatPillColumn(label = weekend.circuitLengthKm, sub = "KM")
-                Box(modifier = Modifier.width(1.dp).height(24.dp).background(P1TTheme.dividerSubtle))
-                StatPillColumn(label = weekend.totalLaps.toString(), sub = "LAPS")
-                Box(modifier = Modifier.width(1.dp).height(24.dp).background(P1TTheme.dividerSubtle))
-                StatPillColumn(label = weekend.totalCorners.toString(), sub = "CORNERS")
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(P1TTheme.dividerSubtle)
+                )
+                StatPillColumn(
+                    label = if (weekend.totalLaps > 0) weekend.totalLaps.toString() else "—",
+                    sub = "LAPS"
+                )
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(P1TTheme.dividerSubtle)
+                )
+                StatPillColumn(
+                    label = if (weekend.totalCorners > 0) weekend.totalCorners.toString() else "—",
+                    sub = "TURNS"
+                )
             }
         }
     }
@@ -510,415 +648,742 @@ private fun StatPillColumn(label: String, sub: String) {
             text = label,
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 13.sp,
-            fontWeight = FontWeight.ExtraBold
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = sub,
             color = P1TTheme.textMuted,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.5.sp
+            letterSpacing = 0.6.sp,
+            maxLines = 1
         )
     }
 }
 
 /**
- * Slide 1 (home-welcome-1080.webp):
- * "FORMULA 1 DATA", bold "ApexGrid" title, red accent bar, description, F1 car graphic, and "Join Community ↗" pill.
+ * Slide 1:
+ * Formula 1 Data welcome showcase with TeamCarShowcaseImage over a subtle radial team spotlight
+ * and an accessible 48.dp min-height "Join Community" pill.
  */
 @Composable
 private fun HeroSlideApexGridWelcome(onClick: () -> Unit) {
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+    val isDark = P1TTheme.isDark
+    val context = LocalContext.current
+
+    val accentTeam = remember(primaryAccent) {
+        F1TeamId.entries.firstOrNull {
+            it != F1TeamId.OTHER && Color(it.colorHex) == primaryAccent
+        } ?: F1TeamId.FERRARI
+    }
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = HERO_MIN_HEIGHT)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
             .clickable { onClick() }
     ) {
-        val primaryAccent = LocalF1Accent.current.primaryAccent
-        val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
-        val context = LocalContext.current
-
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .heightIn(min = HERO_MIN_HEIGHT)
         ) {
-            Text(
-                text = "FORMULA 1 DATA",
-                color = adaptiveAccent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp
+            // Subtle radial team spotlight on the right
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                primaryAccent.copy(alpha = if (isDark) 0.18f else 0.10f),
+                                Color.Transparent
+                            )
+                        )
+                    )
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = HERO_MIN_HEIGHT)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "ApexGrid",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Black
-                    )
-
-                    // Accent Bar
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Box(
                         modifier = Modifier
-                            .padding(top = 4.dp, bottom = 10.dp)
-                            .width(36.dp)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(1.5.dp))
-                            .background(primaryAccent)
-                    )
-
-                    Text(
-                        text = "Dive deep into Formula 1 history with comprehensive race data, statistics, and exclusive insights.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp
-                    )
-                }
-
-                // F1 Car Graphic Icon Representation
-                val carPath = remember { Path() }
-                val wheelColor = if (P1TTheme.isDark) Color(0xFF2A2A34) else Color(0xFF3A3A46)
-                Box(
-                    modifier = Modifier
-                        .size(90.dp)
-                        .padding(start = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val w = size.width
-                        val h = size.height
-                        // Stylized F1 car silhouette path
-                        carPath.reset()
-                        carPath.moveTo(w * 0.1f, h * 0.6f)
-                        carPath.lineTo(w * 0.3f, h * 0.55f)
-                        carPath.lineTo(w * 0.45f, h * 0.35f)
-                        carPath.lineTo(w * 0.7f, h * 0.35f)
-                        carPath.lineTo(w * 0.85f, h * 0.5f)
-                        carPath.lineTo(w * 0.95f, h * 0.52f)
-                        carPath.lineTo(w * 0.95f, h * 0.65f)
-                        carPath.lineTo(w * 0.75f, h * 0.65f)
-                        carPath.lineTo(w * 0.65f, h * 0.7f)
-                        carPath.lineTo(w * 0.35f, h * 0.7f)
-                        carPath.lineTo(w * 0.25f, h * 0.65f)
-                        carPath.close()
-                        drawPath(carPath, color = primaryAccent.copy(alpha = 0.85f))
-                        // Wheels
-                        drawCircle(wheelColor, radius = 10.dp.toPx(), center = Offset(w * 0.3f, h * 0.68f))
-                        drawCircle(wheelColor, radius = 10.dp.toPx(), center = Offset(w * 0.8f, h * 0.68f))
+                            .clip(RoundedCornerShape(50))
+                            .background(P1TTheme.accentPillBg(primaryAccent))
+                            .border(1.dp, primaryAccent.copy(alpha = 0.35f), RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "FORMULA 1 DATA & TELEMETRY",
+                            color = adaptiveAccent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-            // "Join Community ↗" Pill Button
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(P1TTheme.pillBg)
-                    .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(20.dp))
-                    .clickable {
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://reddit.com/r/formula1"))
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                            onClick()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1.1f)) {
+                            Text(
+                                text = "ApexGrid",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 25.sp,
+                                fontWeight = FontWeight.Black
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 5.dp, bottom = 9.dp)
+                                    .width(36.dp)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                    .background(primaryAccent)
+                            )
+
+                            Text(
+                                text = "Explore Formula 1 standings, circuit telemetry, and race history since 1950.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .weight(0.9f)
+                                .height(92.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            primaryAccent.copy(alpha = if (isDark) 0.28f else 0.16f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            TeamCarShowcaseImage(
+                                team = accentTeam,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(64.dp)
+                            )
                         }
                     }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "Join Community",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "↗",
-                    color = adaptiveAccent,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // "Join Community" Pill Button with 48.dp minimum height
+                Row(
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(P1TTheme.pillBg)
+                        .border(1.dp, P1TTheme.pillBorder, RoundedCornerShape(24.dp))
+                        .clickable {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://reddit.com/r/formula1"))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                onClick()
+                            }
+                        }
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Join Community",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                        tint = adaptiveAccent,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Slide 2: WDC Leader (Dynamically bound to driverStandings.firstOrNull())
+ * Slide 2: WDC Leader (Dynamically bound to driverStandings.firstOrNull(); clean pending state if null).
  */
 @Composable
 private fun HeroSlideWdcLeader(
     leader: DriverStanding? = null,
     onClick: () -> Unit = {}
 ) {
-    val teamColor = leader?.team?.let { Color(it.colorHex) } ?: Color(F1TeamId.MERCEDES.colorHex)
+    val isDark = P1TTheme.isDark
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val teamColor = leader?.team?.let { Color(it.colorHex) } ?: primaryAccent
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
-    val driverName = leader?.fullName ?: "Kimi Antonelli"
-    val teamName = leader?.team?.displayName ?: "Mercedes AMG Petronas"
-    val positionText = "P${leader?.position ?: 1}"
-    val pointsText = if (leader != null) "${formatPointsValue(leader.points)} PTS" else "302 PTS"
 
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = HERO_MIN_HEIGHT)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
             .clickable { onClick() }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = HERO_MIN_HEIGHT)
+        ) {
+            // Giant faded #1 watermark on the right behind the portrait
+            val watermarkText = if (leader != null && leader.position > 0) "#${leader.position}" else "#1"
             Text(
-                text = "WORLD DRIVERS' CHAMPIONSHIP",
-                color = adaptiveTeamColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp
+                text = watermarkText,
+                color = if (leader != null) {
+                    teamColor.copy(alpha = if (isDark) 0.14f else 0.12f)
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.06f else 0.07f)
+                },
+                fontSize = 96.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = (-3).sp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 6.dp, end = 16.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+
+            if (leader == null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = HERO_MIN_HEIGHT)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    DriverPortraitAvatar(
-                        driverCodeOrName = leader?.code ?: "ANT",
-                        teamColor = teamColor,
-                        size = 50.dp,
-                        positionBadge = positionText
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = driverName,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            text = "WORLD DRIVERS' CHAMPIONSHIP",
+                            color = adaptiveTeamColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.2.sp
                         )
-                        Text(
-                            text = "$teamName · $positionText",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(teamColor)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Standings Pending",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 21.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "Driver championship updates once official race points are scored.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(P1TTheme.surfaceInnerCard)
+                                .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "— PTS",
+                                color = P1TTheme.textMuted,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        HeroStatPill(
+                            icon = Icons.Default.EmojiEvents,
+                            label = "Open Standings"
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = pointsText,
-                    color = adaptiveTeamColor,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            val showPodiumsAndPoles = leader == null || leader.podiums > 0 || leader.poles > 0
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+            } else {
+                val driverName = leader.fullName.ifBlank { leader.code.ifBlank { "Championship Leader" } }
+                val teamName = leader.team.displayName
+                val positionText = "P${leader.position.coerceAtLeast(1)}"
+                val pointsText = "${formatPointsValue(leader.points)} PTS"
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = HERO_MIN_HEIGHT)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
                     Text(
-                        text = "${leader?.wins ?: 8} Wins",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "WORLD DRIVERS' CHAMPIONSHIP",
+                        color = adaptiveTeamColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (showPodiumsAndPoles) {
+
+                    // Editorial showcase row: team accent bar + driver info on left, large portrait on right
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Leaderboard, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                        Text(
-                            text = "${leader?.podiums ?: 12} Podiums",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.height(IntrinsicSize.Min)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(4.dp)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(teamColor)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = driverName,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 21.sp,
+                                        lineHeight = 24.sp,
+                                        fontWeight = FontWeight.Black,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = teamName,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Points badge
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(P1TTheme.accentPillBg(teamColor))
+                                    .border(1.dp, teamColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = pointsText,
+                                    color = adaptiveTeamColor,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(92.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            teamColor.copy(alpha = if (isDark) 0.30f else 0.18f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            DriverPortraitAvatar(
+                                driverCodeOrName = leader.fullName.ifBlank { leader.code },
+                                driverCode = leader.code.takeIf { it.isNotBlank() },
+                                teamColor = teamColor,
+                                size = 80.dp,
+                                positionBadge = positionText
+                            )
+                        }
                     }
+
+                    // Bottom crisp stats pills (Wins, Podiums, Poles)
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f, fill = false)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.History, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                        Text(
-                            text = if (leader != null) "${leader.poles} Poles" else "+66 Lead",
-                            color = P1TTheme.sectorGreen,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        HeroStatPill(
+                            icon = Icons.Default.EmojiEvents,
+                            label = "${leader.wins} Wins"
                         )
+                        if (leader.podiums > 0 || leader.poles > 0) {
+                            HeroStatPill(
+                                icon = Icons.Default.Leaderboard,
+                                label = "${leader.podiums} Podiums"
+                            )
+                            HeroStatPill(
+                                icon = Icons.Default.Flag,
+                                label = "${leader.poles} Poles",
+                                iconTint = adaptiveTeamColor
+                            )
+                        } else if (leader.racesCount > 0) {
+                            HeroStatPill(
+                                icon = Icons.Default.Flag,
+                                label = "${leader.racesCount} Races"
+                            )
+                        }
                     }
-                } else if (leader.racesCount > 0) {
-                    Text(
-                        text = "${leader.racesCount} Races",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
         }
     }
 }
 
+@Composable
+private fun HeroStatPill(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    iconTint: Color = P1TTheme.textMuted
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(P1TTheme.surfaceInnerCard)
+            .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 /**
- * Slide 3: WCC Leader (Dynamically bound to constructorStandings.firstOrNull())
+ * Slide 3: WCC Leader (Dynamically bound to constructorStandings.firstOrNull(); clean pending state if null).
  */
 @Composable
 private fun HeroSlideWccLeader(
     leader: ConstructorStanding? = null,
     onClick: () -> Unit = {}
 ) {
-    val teamColor = leader?.team?.let { Color(it.colorHex) } ?: Color(F1TeamId.MERCEDES.colorHex)
+    val isDark = P1TTheme.isDark
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val teamColor = leader?.team?.let { Color(it.colorHex) } ?: primaryAccent
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
-    val teamName = leader?.resolvedConstructorName ?: "Mercedes"
-    val driversText = if (leader != null && leader.drivers.isNotEmpty()) {
-        leader.drivers.take(2).joinToString(" & ") { it.fullName.substringAfterLast(" ") }
-    } else {
-        "Antonelli & Russell"
-    }
-    val positionText = "P${leader?.position ?: 1}"
-    val pointsText = if (leader != null) "${formatPointsValue(leader.points)} PTS" else "538 PTS"
-    val rawGap = leader?.gapToP1?.trim()?.takeIf { it.isNotBlank() }
-    val gapText = when {
-        rawGap == null -> "$positionText Leader"
-        rawGap.equals("Leader", ignoreCase = true) ||
-            rawGap.startsWith("-") ||
-            rawGap.startsWith("+") -> rawGap
-        else -> "-$rawGap"
-    }
 
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = HERO_MIN_HEIGHT)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
             .clickable { onClick() }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Text(
-                text = "CONSTRUCTORS' CHAMPIONSHIP",
-                color = adaptiveTeamColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = teamName,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = driversText,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = HERO_MIN_HEIGHT)
+        ) {
+            if (leader == null) {
                 Text(
-                    text = pointsText,
-                    color = adaptiveTeamColor,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black
+                    text = "WCC",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.05f else 0.06f),
+                    fontSize = 72.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 12.dp, end = 16.dp)
                 )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            TeamCarShowcaseImage(
-                team = leader?.team ?: F1TeamId.MERCEDES,
-                modifier = Modifier.fillMaxWidth().height(42.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = HERO_MIN_HEIGHT)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = P1TTheme.textMuted, modifier = Modifier.size(15.dp))
-                    Text(
-                        text = "${leader?.wins ?: 11} Wins",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "CONSTRUCTORS' CHAMPIONSHIP",
+                            color = adaptiveTeamColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.2.sp
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Standings Pending",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Constructor classification and car showcase update after race scoring.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(P1TTheme.surfaceInnerCard)
+                                .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "— PTS",
+                                color = P1TTheme.textMuted,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        HeroStatPill(
+                            icon = Icons.Default.EmojiEvents,
+                            label = "Open Standings"
+                        )
+                    }
                 }
+            } else {
+                val teamName = leader.resolvedConstructorName
+                val watermarkLabel = leader.team.shortCode.takeIf { it.isNotBlank() && leader.team != F1TeamId.OTHER }
+                    ?: teamName.take(3).uppercase()
+                val driversText = if (leader.drivers.isNotEmpty()) {
+                    leader.drivers.take(2).joinToString(" & ") {
+                        it.fullName.substringAfterLast(" ").ifBlank { it.fullName }
+                    }
+                } else {
+                    "Lineup Pending"
+                }
+                val position = leader.position.coerceAtLeast(1)
+                val pointsText = "${formatPointsValue(leader.points)} PTS"
+                val rawGap = leader.gapToP1?.trim()?.takeIf { it.isNotBlank() }
+                val statusLabel = when {
+                    position == 1 && (rawGap == null || rawGap.equals("Leader", ignoreCase = true)) ->
+                        "Championship P1"
+                    rawGap != null -> {
+                        val formattedGap = if (rawGap.startsWith("-") || rawGap.startsWith("+")) rawGap else "-$rawGap"
+                        "P$position · $formattedGap"
+                    }
+                    else -> "Championship P$position"
+                }
+
+                // Giant faded team watermark
                 Text(
-                    text = gapText,
-                    color = P1TTheme.textMuted,
-                    fontSize = 12.sp,
+                    text = watermarkLabel,
+                    color = teamColor.copy(alpha = if (isDark) 0.10f else 0.08f),
+                    fontSize = 84.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 14.dp, bottom = 12.dp)
                 )
-                Text(
-                    text = "Championship $positionText",
-                    color = P1TTheme.sectorGreen,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = HERO_MIN_HEIGHT)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "CONSTRUCTORS' CHAMPIONSHIP",
+                            color = adaptiveTeamColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.2.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = teamName,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 21.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = driversText,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(P1TTheme.accentPillBg(teamColor))
+                                    .border(1.dp, teamColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = pointsText,
+                                    color = adaptiveTeamColor,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    // Prominent TeamCarShowcaseImage(height = 56.dp) over subtle team color glow
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(72.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        teamColor.copy(alpha = if (isDark) 0.24f else 0.14f),
+                                        Color.Transparent
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        TeamCarShowcaseImage(
+                            team = leader.team,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                        )
+                    }
+
+                    // Bottom wins + clean Championship status / gap row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HeroStatPill(
+                            icon = Icons.Default.EmojiEvents,
+                            label = "${leader.wins} Wins"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(P1TTheme.surfaceInnerCard)
+                                .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = statusLabel,
+                                color = if (position == 1) P1TTheme.sectorGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * Slide 4: Last Race Winner (strictly bound to lastCompletedRace / explicit lastRaceResults)
+ * Slide 4: Last Race Winner (strictly bound to lastCompletedRace / explicit lastRaceResults).
+ * Uses Material icons (no raw emojis), displays winner DriverPortraitAvatar + TeamCarShowcaseImage,
+ * and shows the fastest lap badge only when fastestLapPosition == "P1" (or explicitly fastest valid time).
  */
 @Composable
 private fun HeroSlideLastRaceWinner(
@@ -926,6 +1391,7 @@ private fun HeroSlideLastRaceWinner(
     lastRaceResults: List<RaceDriverResult>? = null,
     onClick: () -> Unit = {}
 ) {
+    val isDark = P1TTheme.isDark
     val results = if (lastCompletedRace != null) {
         lastCompletedRace.results
     } else {
@@ -945,61 +1411,81 @@ private fun HeroSlideLastRaceWinner(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = HERO_MIN_HEIGHT)
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
                 .clickable { onClick() }
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-                Text(
-                    text = "LAST GRAND PRIX WINNER",
-                    color = adaptiveAccent,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.2.sp
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Awaiting Race Result",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = pendingSubtitle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Icon(
-                        imageVector = Icons.Default.EmojiEvents,
-                        contentDescription = null,
-                        tint = P1TTheme.textMuted,
-                        modifier = Modifier.size(28.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = HERO_MIN_HEIGHT)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "LAST GRAND PRIX WINNER",
+                        color = adaptiveAccent,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
                     )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Awaiting Race Result",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Black,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = pendingSubtitle,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.5.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(P1TTheme.surfaceInnerCard)
+                                .border(1.dp, P1TTheme.borderInnerCard, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = P1TTheme.textMuted,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+
                 Text(
                     text = "Official podium & fastest lap appear after the chequered flag",
                     color = P1TTheme.textMuted,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
         return
     }
 
-    val winnerName = winner.driverFullName
+    val winnerName = winner.driverFullName.ifBlank { winner.driverCode.ifBlank { "Race Winner" } }
     val winnerTeam = winner.team
     val raceName = lastCompletedRace?.grandPrixName?.takeIf { it.isNotBlank() }.orEmpty()
     val teamSubtitle = if (raceName.isNotBlank()) {
@@ -1008,19 +1494,19 @@ private fun HeroSlideLastRaceWinner(
         winnerTeam.displayName
     }
     val finishTime = winner.finishTimeOrGap.ifBlank { "P${winner.position}" }
-    val fastestLapResult = results.firstOrNull { it.fastestLapPosition.equals("P1", ignoreCase = true) }
-        ?: results.firstOrNull { it.fastestLapTime.isNotBlank() }
-    val fastestLapTime = fastestLapResult?.fastestLapTime?.takeIf { it.isNotBlank() }
-    val fastestLapLabel = if (fastestLapTime != null) {
-        val codeSuffix = fastestLapResult.driverCode.takeIf {
-            it.isNotBlank() && !it.equals(winner.driverCode, ignoreCase = true)
-        }?.let { " ($it)" }.orEmpty()
-        "⚡ Fastest Lap: $fastestLapTime$codeSuffix"
-    } else if (winner.totalLaps > 0) {
-        "${winner.totalLaps} Laps completed"
-    } else {
-        "Race Winner"
+
+    val explicitFastest = results.firstOrNull {
+        (it.fastestLapPosition.equals("P1", ignoreCase = true) ||
+            it.fastestLapPosition.equals("1", ignoreCase = true)) &&
+            it.fastestLapTime.isNotBlank()
     }
+    val fastestLapResult = explicitFastest ?: if (results.none { it.fastestLapPosition.isNotBlank() }) {
+        results.filter { it.fastestLapTime.isNotBlank() }
+            .minByOrNull { parseLapTimeSeconds(it.fastestLapTime) ?: Double.MAX_VALUE }
+    } else {
+        null
+    }
+    val fastestLapTime = fastestLapResult?.fastestLapTime?.takeIf { it.isNotBlank() }
     val pointsText = "${winner.formattedPoints} PTS"
     val teamColor = Color(winnerTeam.colorHex)
     val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
@@ -1030,28 +1516,70 @@ private fun HeroSlideLastRaceWinner(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = HERO_MIN_HEIGHT)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
             .clickable { onClick() }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Text(
-                text = "LAST GRAND PRIX WINNER",
-                color = adaptiveTeamColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = HERO_MIN_HEIGHT)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Header row: label + finish time pill
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    text = "LAST GRAND PRIX WINNER",
+                    color = adaptiveTeamColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.2.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(P1TTheme.surfaceInnerCard)
+                        .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = finishTime,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            // Winner portrait + name/subtitle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                DriverPortraitAvatar(
+                    driverCodeOrName = winner.driverFullName.ifBlank { winner.driverCode },
+                    driverCode = winner.driverCode.takeIf { it.isNotBlank() },
+                    teamColor = teamColor,
+                    size = 54.dp,
+                    positionBadge = "P${winner.position.coerceAtLeast(1)}"
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = winnerName,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 22.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Black,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1059,36 +1587,97 @@ private fun HeroSlideLastRaceWinner(
                     Text(
                         text = teamSubtitle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = finishTime,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
+            }
+
+            // Winning constructor car showcase over subtle glow
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                teamColor.copy(alpha = if (isDark) 0.22f else 0.12f),
+                                Color.Transparent
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                TeamCarShowcaseImage(
+                    team = winnerTeam,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = fastestLapLabel,
-                    color = P1TTheme.sectorPurple,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                Text(
-                    text = pointsText,
-                    color = adaptiveTeamColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black
-                )
+
+            // Bottom row: Fastest Lap (Bolt icon) / Laps completed (EmojiEvents icon) + Points pill
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (fastestLapTime != null) {
+                    val codeSuffix = fastestLapResult.driverCode.takeIf {
+                        it.isNotBlank() && !it.equals(winner.driverCode, ignoreCase = true)
+                    }?.let { " ($it)" }.orEmpty()
+                    Row(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(P1TTheme.sectorPurple.copy(alpha = if (isDark) 0.16f else 0.10f))
+                            .border(1.dp, P1TTheme.sectorPurple.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = "Fastest Lap",
+                            tint = P1TTheme.sectorPurple,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Fastest Lap: $fastestLapTime$codeSuffix",
+                            color = P1TTheme.sectorPurple,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    HeroStatPill(
+                        icon = Icons.Default.EmojiEvents,
+                        label = if (winner.totalLaps > 0) "${winner.totalLaps} Laps completed" else "Race Winner",
+                        iconTint = adaptiveTeamColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(P1TTheme.accentPillBg(teamColor))
+                        .border(1.dp, teamColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = pointsText,
+                        color = adaptiveTeamColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }
@@ -1096,10 +1685,17 @@ private fun HeroSlideLastRaceWinner(
 
 /**
  * 3. "Explore F1 Stats" card (Results, standings and records since 1950)
- * with 3 overlapping circular icons on left and chevron > on right.
+ * Dynamically renders the top 3 drivers from driverStandings, or a clean icon fallback if empty.
  */
 @Composable
-private fun ExploreF1StatsCard(onClick: () -> Unit) {
+private fun ExploreF1StatsCard(
+    driverStandings: List<DriverStanding>? = null,
+    onClick: () -> Unit
+) {
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+    val topThree = driverStandings.orEmpty().take(3)
+
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1115,24 +1711,44 @@ private fun ExploreF1StatsCard(onClick: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 3 Overlapping Driver Avatars
-            Box(
-                modifier = Modifier
-                    .width(62.dp)
-                    .height(32.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                // Driver 1 (VER)
-                Box(modifier = Modifier.size(28.dp)) {
-                    DriverPortraitAvatar("VER", Color(F1TeamId.RED_BULL.colorHex), size = 28.dp)
+            if (topThree.isNotEmpty()) {
+                val stackWidth = (28 + (topThree.size - 1) * 16).dp
+                Box(
+                    modifier = Modifier
+                        .width(stackWidth)
+                        .height(32.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    topThree.forEachIndexed { index, driver ->
+                        Box(
+                            modifier = Modifier
+                                .padding(start = (index * 16).dp)
+                                .size(28.dp)
+                        ) {
+                            DriverPortraitAvatar(
+                                driverCodeOrName = driver.fullName.ifBlank { driver.code },
+                                driverCode = driver.code.takeIf { it.isNotBlank() },
+                                teamColor = Color(driver.team.colorHex),
+                                size = 28.dp
+                            )
+                        }
+                    }
                 }
-                // Driver 2 (HAM)
-                Box(modifier = Modifier.padding(start = 16.dp).size(28.dp)) {
-                    DriverPortraitAvatar("HAM", Color(F1TeamId.FERRARI.colorHex), size = 28.dp)
-                }
-                // Driver 3 (NOR)
-                Box(modifier = Modifier.padding(start = 32.dp).size(28.dp)) {
-                    DriverPortraitAvatar("NOR", Color(F1TeamId.MCLAREN.colorHex), size = 28.dp)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(P1TTheme.accentPillBg(primaryAccent))
+                        .border(1.dp, primaryAccent.copy(alpha = 0.35f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Leaderboard,
+                        contentDescription = null,
+                        tint = adaptiveAccent,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 
@@ -1149,7 +1765,9 @@ private fun ExploreF1StatsCard(onClick: () -> Unit) {
                 Text(
                     text = "Results, standings and records since 1950",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -1166,8 +1784,9 @@ private fun ExploreF1StatsCard(onClick: () -> Unit) {
 
 /**
  * 4. Live Session Track Map card:
- * Red dot LIVE, bold Q1 · 9:56 left, green "Track Clear" pill + >,
- * left column top 3 (1 VER 1:36.477, 2 HAD +0.421, 3 ANT +0.564), right LiveTrackMapCanvas
+ * Uncrowded LIVE / REPLAY / STANDBY header row, compact broadcast status strip,
+ * top-3 live timing rows with vertical team stripe, 3-letter code, tabular monospace gap,
+ * and TyreCompoundBadge beside LiveTrackMapCanvas (heightIn(min = 148.dp)).
  */
 @Composable
 private fun LiveTrackSummaryCard(
@@ -1191,16 +1810,26 @@ private fun LiveTrackSummaryCard(
     } else {
         "Standby"
     }
-    val (statusColor, statusBg, statusBorder) = when {
-        !hasSessionData ->
-            Triple(P1TTheme.textMuted, P1TTheme.pillBg, P1TTheme.pillBorder)
-        trackStatus.contains("Red", ignoreCase = true) ->
-            Triple(P1TTheme.accentRed, P1TTheme.redFlagBg, P1TTheme.redFlagBorder)
-        trackStatus.contains("Clear", ignoreCase = true) ||
-            trackStatus.contains("Green", ignoreCase = true) ->
-            Triple(P1TTheme.sectorGreen, P1TTheme.trackClearBg, P1TTheme.trackClearBorder)
-        else ->
-            Triple(P1TTheme.sectorYellow, P1TTheme.sectorYellowBg, P1TTheme.sectorYellowBorder)
+
+    val flagType = if (hasSessionData) {
+        resolveBroadcastFlagType(trackStatus)
+    } else {
+        BroadcastFlagBannerType.NEUTRAL
+    }
+
+    val (stripBg, stripFg, stripIcon) = when (flagType) {
+        BroadcastFlagBannerType.GREEN_FLAG ->
+            Triple(P1TColors.GreenFlagBg, Color(0xFF07160F), Icons.Default.Flag)
+        BroadcastFlagBannerType.SAFETY_CAR ->
+            Triple(P1TColors.SafetyCarBg, Color(0xFF141104), Icons.Default.DirectionsCar)
+        BroadcastFlagBannerType.VSC ->
+            Triple(P1TColors.SafetyCarBg, Color(0xFF141104), Icons.Default.Warning)
+        BroadcastFlagBannerType.RED_FLAG ->
+            Triple(P1TColors.RedFlagSolidBg, Color.White, Icons.Default.NotInterested)
+        BroadcastFlagBannerType.FASTEST_LAP ->
+            Triple(P1TColors.FastestLapPurple, Color.White, Icons.Default.Bolt)
+        BroadcastFlagBannerType.NEUTRAL ->
+            Triple(P1TTheme.surfaceInnerCard, P1TTheme.textMuted, Icons.Default.Flag)
     }
 
     val liveDotAlpha = if (isActuallyLive) {
@@ -1237,7 +1866,7 @@ private fun LiveTrackSummaryCard(
                 .fillMaxWidth()
                 .padding(18.dp)
         ) {
-            // Live / Replay / Standby Header Row
+            // Uncrowded Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1300,52 +1929,85 @@ private fun LiveTrackSummaryCard(
                     }
                 }
 
-                // Track Status Pill + >
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(statusBg)
-                        .border(1.dp, statusBorder, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(statusColor)
-                    )
-                    Text(
-                        text = trackStatus,
-                        color = statusColor,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Open",
-                        tint = statusColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open Live Timing",
+                    tint = P1TTheme.textMuted,
+                    modifier = Modifier.size(22.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Body: Left top 3 column | Right LiveTrackMapCanvas
+            // Compact Broadcast Status Strip
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(stripBg)
+                    .then(
+                        if (flagType == BroadcastFlagBannerType.NEUTRAL) {
+                            Modifier.border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(10.dp))
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = stripIcon,
+                        contentDescription = null,
+                        tint = stripFg,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = trackStatus.uppercase(),
+                        color = stripFg,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.9.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                val trailingTelemetry = when {
+                    hasSessionData && liveSession.carsOnTrack > 0 ->
+                        "${liveSession.carsOnTrack} ON TRACK"
+                    hasSessionData -> "TELEMETRY"
+                    else -> "STANDBY"
+                }
+                Text(
+                    text = trailingTelemetry,
+                    color = stripFg.copy(alpha = 0.85f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Body: Left top 3 column | Right LiveTrackMapCanvas (expands safely at large font scales)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .heightIn(min = 148.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (drivers.isEmpty()) {
                     Column(
                         modifier = Modifier
-                            .weight(1.1f)
+                            .weight(1.22f)
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -1366,53 +2028,77 @@ private fun LiveTrackSummaryCard(
                         )
                     }
                 } else {
-                    // Top 3 Drivers Column
                     Column(
                         modifier = Modifier
-                            .weight(1.1f)
+                            .weight(1.22f)
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.SpaceEvenly
                     ) {
                         drivers.take(3).forEach { d ->
+                            val gapDisplay = if (d.position == 1) {
+                                "Leader"
+                            } else {
+                                d.gapToLeader.takeIf { it.isNotBlank() } ?: "—"
+                            }
+                            val gapColor = if (d.position == 1) {
+                                P1TTheme.sectorPurple
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Position
                                 Text(
                                     text = "${d.position}",
                                     color = P1TTheme.textMuted,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.width(16.dp)
                                 )
-                                // Team Stripe
+                                // Vertical Team Stripe
                                 Box(
                                     modifier = Modifier
                                         .width(3.dp)
-                                        .height(14.dp)
+                                        .height(16.dp)
                                         .clip(RoundedCornerShape(1.5.dp))
                                         .background(Color(d.team.colorHex))
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                // Code
+                                // 3-letter Driver Code
                                 Text(
                                     text = d.code,
                                     color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 13.sp,
+                                    fontSize = 12.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier.width(36.dp)
+                                    maxLines = 1,
+                                    modifier = Modifier.width(34.dp)
                                 )
-                                // Time / Gap
+                                // Tabular Monospace Gap ("Leader" / "+0.785")
                                 Text(
-                                    text = if (d.position == 1) d.bestLapTime else d.gapToLeader,
-                                    color = if (d.position == 1) P1TTheme.sectorPurple else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                                    text = gapDisplay,
+                                    color = gapColor,
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontFeatureSettings = "tnum",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (d.position == 1) FontWeight.Bold else FontWeight.SemiBold
+                                    ),
                                     textAlign = TextAlign.End,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 6.dp)
+                                )
+                                // Tyre Compound Badge
+                                TyreCompoundBadge(
+                                    compound = d.tyreCompound,
+                                    sizeDp = 18
                                 )
                             }
                         }
@@ -1424,7 +2110,8 @@ private fun LiveTrackSummaryCard(
                 // Right Live Track Map Canvas
                 Box(
                     modifier = Modifier
-                        .weight(1.4f)
+                        .weight(1.18f)
+                        .heightIn(min = 148.dp)
                         .fillMaxHeight()
                 ) {
                     LiveTrackMapCanvas(
@@ -1441,7 +2128,8 @@ private fun LiveTrackSummaryCard(
 
 /**
  * 5. 3-column Bento card:
- * (WEEKEND | TITLE | RACE) + bottom headline & subheadline without cross-GP text splicing.
+ * Aligned WEEKEND | TITLE | RACE tiles (non-overlapping top accent strip) +
+ * bottom headline & Material-icon subheadline (zero raw emojis).
  */
 @Composable
 private fun HomeBentoCard(
@@ -1483,7 +2171,7 @@ private fun HomeBentoCard(
         else -> "Weekend schedule ready"
     }
 
-    // Column 2: TITLE (e.g. P1 leader gap over P2, handling ties cleanly without "+0" or "(0 pts)")
+    // Column 2: TITLE
     val p1 = driverStandings?.getOrNull(0)
     val p2 = driverStandings?.getOrNull(1)
     val titleColText = if (p1 != null && p2 != null) {
@@ -1503,12 +2191,12 @@ private fun HomeBentoCard(
     // Column 3: RACE
     val raceSession = weekend?.sessions?.firstOrNull { it.isRace } ?: weekend?.sessions?.lastOrNull()
     val raceColText = if (raceSession != null) {
-        "${raceSession.localTime} ${raceSession.dayOfWeek}"
+        "${raceSession.localTime} ${raceSession.dayOfWeek}".trim()
     } else {
         "Race TBD"
     }
 
-    // Bottom Headline & Subheadline
+    // Bottom Headline & Subheadline (clean text without raw emojis)
     val gpName = weekendGpName.ifBlank { "Grand Prix" }
     val headline = when {
         fastestLiveDriver != null -> "${fastestLiveDriver.fullName} sets the pace in $sessionName"
@@ -1516,14 +2204,16 @@ private fun HomeBentoCard(
         else -> "$gpName weekend ahead"
     }
 
-    val flag = weekend?.countryFlagEmoji?.takeIf { it.isNotBlank() } ?: "🏁"
     val roundText = if (weekend != null && weekend.round > 0) "Round ${weekend.round}" else "Season"
     val subHeadline = when {
-        isSameWeekendLive && liveSession?.isLive == true -> "$flag $gpName · $roundText · Live"
-        isSameWeekendLive -> "$flag $gpName · $roundText · Session replay"
-        !weekend?.dateRangeText.isNullOrBlank() -> "$flag $gpName · $roundText · ${weekend?.dateRangeText}"
-        else -> "$flag $gpName · $roundText"
+        isSameWeekendLive && liveSession?.isLive == true -> "$gpName · $roundText · Live"
+        isSameWeekendLive -> "$gpName · $roundText · Session replay"
+        !weekend?.dateRangeText.isNullOrBlank() -> "$gpName · $roundText · ${weekend?.dateRangeText}"
+        else -> "$gpName · $roundText"
     }
+
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
 
     Card(
         shape = RoundedCornerShape(22.dp),
@@ -1539,110 +2229,40 @@ private fun HomeBentoCard(
                 .fillMaxWidth()
                 .padding(18.dp)
         ) {
-            // 3 Bento Columns
+            // 3 Aligned Bento Columns
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val primaryAccent = LocalF1Accent.current.primaryAccent
-                val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
-
-                // Column 1: WEEKEND
-                Box(
+                BentoSummaryTile(
+                    title = "WEEKEND",
+                    value = weekendColText,
+                    titleColor = adaptiveAccent,
+                    topStripColor = primaryAccent,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(P1TTheme.surfaceInnerCard)
-                        .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
-                ) {
-                    // Accent top border line
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp)
-                            .background(primaryAccent)
-                    )
-                    Column(
-                        modifier = Modifier.padding(10.dp)
-                    ) {
-                        Text(
-                            text = "WEEKEND",
-                            color = adaptiveAccent,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = weekendColText,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 14.sp
-                        )
-                    }
-                }
-
-                // Column 2: TITLE
-                Box(
+                )
+                BentoSummaryTile(
+                    title = "TITLE",
+                    value = titleColText,
+                    titleColor = P1TTheme.textMuted,
+                    topStripColor = Color.Transparent,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(P1TTheme.surfaceInnerCard)
-                        .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
-                        .padding(10.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = "TITLE",
-                            color = P1TTheme.textMuted,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = titleColText,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 14.sp
-                        )
-                    }
-                }
-
-                // Column 3: RACE
-                Box(
+                )
+                BentoSummaryTile(
+                    title = "RACE",
+                    value = raceColText,
+                    titleColor = P1TTheme.textMuted,
+                    topStripColor = Color.Transparent,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(P1TTheme.surfaceInnerCard)
-                        .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
-                        .padding(10.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = "RACE",
-                            color = P1TTheme.textMuted,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = raceColText,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 14.sp
-                        )
-                    }
-                }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -1652,13 +2272,75 @@ private fun HomeBentoCard(
                 text = headline,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Flag,
+                    contentDescription = null,
+                    tint = adaptiveAccent,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = subHeadline,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BentoSummaryTile(
+    title: String,
+    value: String,
+    titleColor: Color,
+    topStripColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(P1TTheme.surfaceInnerCard)
+            .border(1.dp, P1TTheme.borderInnerCard, RoundedCornerShape(12.dp))
+    ) {
+        // Dedicated non-overlapping top accent bar slot keeps all 3 tiles baseline-aligned
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(topStripColor)
+        )
+        Column(
+            modifier = Modifier.padding(10.dp)
+        ) {
+            Text(
+                text = title,
+                color = titleColor,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = subHeadline,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
+                text = value,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 15.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

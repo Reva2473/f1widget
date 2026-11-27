@@ -1,14 +1,33 @@
 package com.reva2473.f1widget.ui.screens.drivers
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -17,27 +36,56 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.reva2473.f1widget.data.seed.SeedDataProvider
 import com.reva2473.f1widget.domain.model.DriverCareerComparison
 import com.reva2473.f1widget.domain.model.DriverStanding
+import com.reva2473.f1widget.domain.model.F1TeamId
+import com.reva2473.f1widget.ui.components.CircularHeaderButton
 import com.reva2473.f1widget.ui.components.DriverPortraitAvatar
+import com.reva2473.f1widget.ui.components.P1TRadialBackground
+import com.reva2473.f1widget.ui.components.TeamCarShowcaseImage
+import com.reva2473.f1widget.ui.components.getDriverCutoutRes
 import com.reva2473.f1widget.ui.theme.LocalF1Accent
 import com.reva2473.f1widget.ui.theme.P1TColors
 import com.reva2473.f1widget.ui.theme.P1TTheme
@@ -54,11 +102,25 @@ private fun formatPercent(value: Double): String {
     return String.format(Locale.US, "%.1f%%", safe)
 }
 
+private fun resolveDriverFirstAndLastName(driver: DriverStanding): Pair<String, String> {
+    val explicitFirst = driver.firstName.trim()
+    val explicitLast = driver.lastName.trim()
+    if (explicitFirst.isNotEmpty() || explicitLast.isNotEmpty()) {
+        return explicitFirst to explicitLast.ifEmpty { driver.fullName.trim() }
+    }
+    val full = driver.fullName.trim()
+    if (full.isEmpty()) return "" to driver.code
+    val lastSpace = full.lastIndexOf(' ')
+    return if (lastSpace > 0) {
+        full.substring(0, lastSpace).trim() to full.substring(lastSpace + 1).trim()
+    } else {
+        "" to full
+    }
+}
+
 /**
  * Screen 1: DriverProfilesScreen
- * Exact 1:1 replica of driver-profiles-720.webp
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverProfilesScreen(
     drivers: List<DriverStanding>,
@@ -75,6 +137,8 @@ fun DriverProfilesScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showYearDialog by remember { mutableStateOf(false) }
 
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent)
+
     val yearsList = remember(selectedYear) {
         val base = listOf(2026, 2025, 2024, 2023, 2022)
         if (selectedYear in base) base else listOf(selectedYear) + base
@@ -84,302 +148,310 @@ fun DriverProfilesScreen(
         if (searchQuery.isBlank()) {
             drivers
         } else {
-            val q = searchQuery.trim().lowercase()
+            val q = searchQuery.trim().lowercase(Locale.ROOT)
             drivers.filter {
-                it.fullName.lowercase().contains(q) ||
-                        it.code.lowercase().contains(q) ||
-                        it.team.displayName.lowercase().contains(q)
+                it.fullName.lowercase(Locale.ROOT).contains(q) ||
+                    it.code.lowercase(Locale.ROOT).contains(q) ||
+                    it.team.displayName.lowercase(Locale.ROOT).contains(q)
             }
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Driver Profiles",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 19.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToCompare) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.CompareArrows,
-                            contentDescription = "Compare Drivers",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
+    val spotlightLeader = remember(filteredDrivers, searchQuery, isLoading, errorMessage) {
+        if (searchQuery.isBlank() && !isLoading && errorMessage.isNullOrBlank()) {
+            filteredDrivers.firstOrNull { it.position == 1 } ?: filteredDrivers.firstOrNull()
+        } else {
+            null
         }
-    ) { innerPadding ->
-        LazyColumn(
+    }
+
+    val listDrivers = remember(filteredDrivers, spotlightLeader) {
+        if (spotlightLeader == null) {
+            filteredDrivers
+        } else {
+            filteredDrivers.filterNot {
+                it.driverId == spotlightLeader.driverId && it.position == spotlightLeader.position
+            }
+        }
+    }
+
+    P1TRadialBackground(modifier = modifier) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .statusBarsPadding()
         ) {
-            // Search Bar
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            text = "Search all drivers",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Outlined.Search,
-                            contentDescription = "Search",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { searchQuery = "" },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Clear search",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        focusedBorderColor = MaterialTheme.colorScheme.outline,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 4.dp)
-                )
-            }
+            DriverProfilesHeaderBar(
+                onNavigateBack = onNavigateBack,
+                onNavigateToCompare = onNavigateToCompare
+            )
 
-            // Browse by Year Header
-            item {
-                Text(
-                    text = "Browse by Year",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
-                )
-            }
-
-            // Horizontal Year Chips
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    yearsList.forEach { yr ->
-                        val isSelected = yr == selectedYear
-                        val label = if (yr == 2026) "2026 (Current)" else yr.toString()
-                        Box(
-                            modifier = Modifier
-                                .defaultMinSize(minHeight = 48.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .clickable { onYearSelected(yr) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = if (isSelected) P1TTheme.pillSelectedBg else MaterialTheme.colorScheme.surface,
-                                border = if (isSelected) {
-                                    androidx.compose.foundation.BorderStroke(1.dp, P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent))
-                                } else {
-                                    androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Search Bar
+                item {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            Text(
+                                text = "Search all drivers",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = "Search",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { searchQuery = "" },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear search",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
-                                )
                             }
-                        }
-                    }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = adaptiveAccent,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp, bottom = 2.dp)
+                    )
                 }
-            }
 
-            // Red interactive row: "📅 View all years (1950-present)"
-            item {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 48.dp)
-                        .padding(top = 2.dp)
-                        .clickable { showYearDialog = true }
-                ) {
+                // Browse by Year Header
+                item {
+                    Text(
+                        text = "Browse by Year",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                    )
+                }
+
+                // Horizontal Year Chips
+                item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.DateRange,
-                                contentDescription = null,
-                                tint = P1TTheme.accentRed,
+                        yearsList.forEach { yr ->
+                            val isSelected = yr == selectedYear
+                            val label = if (yr == 2026) "2026 (Current)" else yr.toString()
+                            Box(
                                 modifier = Modifier
-                                    .padding(end = 4.dp)
-                                    .size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "View all years (1950-present)",
-                                color = P1TTheme.accentRed,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .clickable { onYearSelected(yr) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = if (isSelected) P1TTheme.pillSelectedBg else MaterialTheme.colorScheme.surface,
+                                    border = if (isSelected) {
+                                        BorderStroke(1.dp, adaptiveAccent)
+                                    } else {
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                    }
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Archive row: "View all years (1950-present)"
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 48.dp)
+                            .padding(top = 2.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showYearDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    tint = adaptiveAccent,
+                                    modifier = Modifier
+                                        .padding(end = 4.dp)
+                                        .size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "View all years (1950-present)",
+                                    color = adaptiveAccent,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Open archive",
+                                tint = adaptiveAccent,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = "Open archive",
-                            tint = P1TTheme.accentRed,
-                            modifier = Modifier.size(18.dp)
+                    }
+                }
+
+                // List Header: "2026 Drivers" and count
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "$selectedYear Drivers",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = when {
+                                isLoading -> "Loading..."
+                                !errorMessage.isNullOrBlank() -> "Unavailable"
+                                else -> "${filteredDrivers.size} drivers"
+                            },
+                            color = P1TTheme.textMuted,
+                            fontSize = 12.sp
                         )
                     }
                 }
-            }
 
-            // List Header: "2026 Drivers" and "23 drivers" count
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "$selectedYear Drivers",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = when {
-                            isLoading -> "Loading..."
-                            !errorMessage.isNullOrBlank() -> "Unavailable"
-                            else -> "${filteredDrivers.size} drivers"
-                        },
-                        color = P1TTheme.textMuted,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            // Drivers List Rows or Loading / Error / Empty States
-            if (isLoading) {
-                item {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                color = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent),
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Text(
-                                text = "Loading $selectedYear drivers...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                // Featured Driver Spotlight Card for P1 Leader when search is empty
+                if (spotlightLeader != null) {
+                    item(key = "spotlight_${selectedYear}_${spotlightLeader.driverId}_${spotlightLeader.position}") {
+                        FeaturedDriverSpotlightCard(
+                            driver = spotlightLeader,
+                            selectedYear = selectedYear,
+                            onClick = { onDriverSelected(spotlightLeader) }
+                        )
                     }
                 }
-            } else if (!errorMessage.isNullOrBlank()) {
-                item {
-                    EmptyDriversStateCard(
-                        title = "Unable to load $selectedYear drivers",
-                        subtitle = errorMessage,
-                        actionLabel = "Retry",
-                        onAction = onRetry
-                    )
-                }
-            } else if (drivers.isEmpty()) {
-                item {
-                    EmptyDriversStateCard(
-                        title = "No driver data for $selectedYear",
-                        subtitle = "Driver standings for $selectedYear are unavailable offline. Connect to the internet or select another season.",
-                        actionLabel = if (selectedYear != 2026) "Switch to 2026" else null,
-                        onAction = { onYearSelected(2026) }
-                    )
-                }
-            } else if (filteredDrivers.isEmpty()) {
-                item {
-                    EmptyDriversStateCard(
-                        title = "No matching drivers",
-                        subtitle = "No drivers matched \"${searchQuery.trim()}\" in the $selectedYear season.",
-                        actionLabel = "Clear search",
-                        onAction = { searchQuery = "" }
-                    )
-                }
-            } else {
-                items(filteredDrivers, key = { "${selectedYear}_${it.driverId}_${it.position}" }) { driver ->
-                    DriverRowCard(
-                        driver = driver,
-                        onClick = { onDriverSelected(driver) }
-                    )
-                }
-            }
 
-            item {
-                Spacer(modifier = Modifier.navigationBarsPadding().height(80.dp))
+                // Drivers List Rows or Loading / Error / Empty States
+                if (isLoading) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 28.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = adaptiveAccent,
+                                    strokeWidth = 3.dp,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Text(
+                                    text = "Loading $selectedYear drivers...",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 13.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                } else if (!errorMessage.isNullOrBlank()) {
+                    item {
+                        EmptyDriversStateCard(
+                            title = "Unable to load $selectedYear drivers",
+                            subtitle = errorMessage,
+                            actionLabel = "Retry",
+                            onAction = onRetry
+                        )
+                    }
+                } else if (drivers.isEmpty()) {
+                    item {
+                        EmptyDriversStateCard(
+                            title = "No driver data for $selectedYear",
+                            subtitle = "Driver standings for $selectedYear are unavailable offline. Connect to the internet or select another season.",
+                            actionLabel = if (selectedYear != 2026) "Switch to 2026" else null,
+                            onAction = { onYearSelected(2026) }
+                        )
+                    }
+                } else if (filteredDrivers.isEmpty()) {
+                    item {
+                        EmptyDriversStateCard(
+                            title = "No matching drivers",
+                            subtitle = "No drivers matched \"${searchQuery.trim()}\" in the $selectedYear season.",
+                            actionLabel = "Clear search",
+                            onAction = { searchQuery = "" }
+                        )
+                    }
+                } else {
+                    items(listDrivers, key = { "${selectedYear}_${it.driverId}_${it.position}" }) { driver ->
+                        DriverRowCard(
+                            driver = driver,
+                            onClick = { onDriverSelected(driver) }
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .height(80.dp)
+                    )
+                }
             }
         }
     }
@@ -398,6 +470,368 @@ fun DriverProfilesScreen(
 }
 
 @Composable
+private fun DriverProfilesHeaderBar(
+    onNavigateBack: () -> Unit,
+    onNavigateToCompare: () -> Unit
+) {
+    val primaryAccent = LocalF1Accent.current.primaryAccent
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(primaryAccent)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CircularHeaderButton(onClick = onNavigateBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Text(
+                text = "Driver Profiles",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Black,
+                fontSize = 19.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // Labeled "Compare" pill button (>= 48.dp touch height)
+        Box(
+            modifier = Modifier
+                .defaultMinSize(minHeight = 48.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(onClick = onNavigateToCompare),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = P1TTheme.accentPillBg(primaryAccent),
+                border = BorderStroke(1.dp, adaptiveAccent.copy(alpha = 0.45f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                        contentDescription = null,
+                        tint = adaptiveAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Compare",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedDriverSpotlightCard(
+    driver: DriverStanding,
+    selectedYear: Int,
+    onClick: () -> Unit
+) {
+    val isDark = P1TTheme.isDark
+    val teamColor = if (driver.team != F1TeamId.OTHER) {
+        Color(driver.team.colorHex)
+    } else {
+        LocalF1Accent.current.primaryAccent
+    }
+    val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+    val (firstName, lastName) = remember(driver.firstName, driver.lastName, driver.fullName, driver.code) {
+        resolveDriverFirstAndLastName(driver)
+    }
+
+    val cutoutRes = remember(driver.fullName, driver.code) {
+        getDriverCutoutRes(driver.fullName.ifBlank { driver.code })
+            ?: driver.code.takeIf { it.isNotBlank() }?.let(::getDriverCutoutRes)
+    }
+
+    val bgBrush = remember(teamColor, isDark) {
+        if (isDark) {
+            Brush.linearGradient(
+                colors = listOf(
+                    teamColor.copy(alpha = 0.40f).compositeOver(Color(0xFF14141B)),
+                    Color(0xFF111117),
+                    Color(0xFF0A0A0F)
+                )
+            )
+        } else {
+            Brush.linearGradient(
+                colors = listOf(
+                    teamColor.copy(alpha = 0.22f).compositeOver(Color.White),
+                    teamColor.copy(alpha = 0.08f).compositeOver(Color.White),
+                    Color(0xFFFFFFFF)
+                )
+            )
+        }
+    }
+
+    val borderColor = if (isDark) {
+        teamColor.copy(alpha = 0.42f)
+    } else {
+        teamColor.copy(alpha = 0.35f)
+    }
+
+    val watermarkText = driver.code.ifBlank { "P${driver.position}" }.uppercase(Locale.ROOT)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(bgBrush)
+            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+    ) {
+        // Giant faded driver rank/code watermark
+        Text(
+            text = watermarkText,
+            color = teamColor.copy(alpha = if (isDark) 0.14f else 0.11f),
+            fontSize = 84.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-3).sp,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 4.dp, end = 14.dp)
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(174.dp)
+            ) {
+                // Left Driver Identity Column
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth(0.58f)
+                        .align(Alignment.CenterStart)
+                        .padding(start = 18.dp, top = 16.dp, bottom = 12.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = teamColor.copy(alpha = if (isDark) 0.22f else 0.14f),
+                        border = BorderStroke(1.dp, adaptiveTeamColor.copy(alpha = 0.45f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = P1TColors.GoldTrophy,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "P${driver.position} · $selectedYear LEADER",
+                                color = adaptiveTeamColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.8.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (firstName.isNotBlank()) {
+                        Text(
+                            text = firstName,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Text(
+                        text = lastName,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = (-0.5).sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(13.dp)
+                                .clip(RoundedCornerShape(1.5.dp))
+                                .background(teamColor)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = driver.team.displayName,
+                            color = adaptiveTeamColor,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Right Driver Cutout + Overlapping TeamCarShowcaseImage
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .width(164.dp)
+                        .fillMaxHeight()
+                        .padding(end = 6.dp)
+                ) {
+                    if (cutoutRes != null) {
+                        Image(
+                            painter = painterResource(id = cutoutRes),
+                            contentDescription = driver.fullName,
+                            contentScale = ContentScale.Fit,
+                            alignment = Alignment.BottomCenter,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .height(152.dp)
+                                .width(126.dp)
+                        )
+                    } else {
+                        DriverPortraitAvatar(
+                            driverCodeOrName = driver.fullName.ifBlank { driver.code },
+                            teamColor = teamColor,
+                            size = 86.dp,
+                            useFullCutout = true,
+                            driverCode = driver.code.takeIf { it.isNotBlank() },
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(bottom = 22.dp)
+                        )
+                    }
+
+                    TeamCarShowcaseImage(
+                        team = driver.team,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .width(148.dp)
+                            .height(50.dp)
+                            .padding(end = 4.dp)
+                    )
+                }
+            }
+
+            // Bottom 3-stat Pro Racing Stats bar (Points, Wins, Podiums)
+            val statsBg = if (isDark) Color(0xCC111117) else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+            val statsBorder = if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.outline
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(statsBg)
+                    .border(1.dp, statsBorder, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SpotlightStatItem(
+                    value = formatCleanNumber(driver.points),
+                    label = "POINTS",
+                    valueColor = adaptiveTeamColor,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(26.dp)
+                        .background(P1TTheme.dividerSubtle)
+                )
+                SpotlightStatItem(
+                    value = driver.wins.toString(),
+                    label = "WINS",
+                    valueColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(26.dp)
+                        .background(P1TTheme.dividerSubtle)
+                )
+                SpotlightStatItem(
+                    value = driver.podiums.toString(),
+                    label = "PODIUMS",
+                    valueColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpotlightStatItem(
+    value: String,
+    label: String,
+    valueColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            color = valueColor,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            softWrap = false
+        )
+        Spacer(modifier = Modifier.height(1.dp))
+        Text(
+            text = label,
+            color = P1TTheme.textMuted,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
 private fun EmptyDriversStateCard(
     title: String,
     subtitle: String,
@@ -407,7 +841,7 @@ private fun EmptyDriversStateCard(
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
@@ -456,24 +890,89 @@ private fun EmptyDriversStateCard(
 }
 
 /**
- * Individual Driver Row Card matching driver-profiles-720.webp:
- * Circular portrait with initials in team color,
- * Top small label (e.g. "8 wins" or "3 wins · 66 pts to P1"),
- * Bold full name,
- * Vertical team color bar + team name,
- * Right side trophy icon (gold/silver/bronze) + P# and points.
+ * Team-colored Driver Row Card:
+ * Subtle team-color horizontal gradient wash, clean light-weight first name + bold black last name,
+ * team name + rank/pts pill, and crisp 52.dp driver portrait on the right.
  */
 @Composable
 private fun DriverRowCard(
     driver: DriverStanding,
     onClick: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    val isDark = P1TTheme.isDark
+    val teamColor = if (driver.team != F1TeamId.OTHER) {
+        Color(driver.team.colorHex)
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    val adaptiveTeamColor = if (driver.team != F1TeamId.OTHER) {
+        P1TTheme.adaptiveTeamText(teamColor)
+    } else {
+        P1TTheme.textMuted
+    }
+
+    val (firstName, lastName) = remember(driver.firstName, driver.lastName, driver.fullName, driver.code) {
+        resolveDriverFirstAndLastName(driver)
+    }
+
+    val surfaceBase = P1TTheme.surfaceStandingCard
+    val cardGradient = remember(teamColor, surfaceBase, isDark) {
+        val washAlpha = if (driver.team != F1TeamId.OTHER) {
+            if (isDark) 0.16f else 0.11f
+        } else {
+            0.04f
+        }
+        Brush.horizontalGradient(
+            colors = listOf(
+                surfaceBase,
+                teamColor.copy(alpha = washAlpha).compositeOver(surfaceBase)
+            )
+        )
+    }
+
+    val winsLabel = if (driver.wins == 1) "1 win" else "${driver.wins} wins"
+    val rawGap = driver.gapToLeader?.trim().orEmpty()
+    val subtitle = when {
+        driver.position == 1 ->
+            "$winsLabel · Championship Leader"
+        rawGap.isBlank() || rawGap.equals("Leader", ignoreCase = true) ->
+            winsLabel
+        rawGap.contains("to leader", ignoreCase = true) || rawGap.contains("to P1", ignoreCase = true) ->
+            "$winsLabel · $rawGap"
+        else -> {
+            val signedGap = if (rawGap.startsWith("-") || rawGap.startsWith("+")) rawGap else "-$rawGap"
+            "$winsLabel · $signedGap to P1"
+        }
+    }
+
+    val displayName = buildAnnotatedString {
+        if (firstName.isNotBlank()) {
+            withStyle(
+                SpanStyle(
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                append(firstName)
+                append(" ")
+            }
+        }
+        withStyle(
+            SpanStyle(
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        ) {
+            append(lastName)
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(cardGradient)
+            .border(1.dp, P1TTheme.borderStandingCard, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
     ) {
         Row(
@@ -482,114 +981,101 @@ private fun DriverRowCard(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Real Driver Portrait Avatar (pass fullName to avoid code collisions with historical drivers)
-            DriverPortraitAvatar(
-                driverCodeOrName = driver.fullName.ifBlank { driver.code },
-                teamColor = Color(driver.team.colorHex),
-                size = 46.dp
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Main Info Column
+            // Left Info Column
             Column(modifier = Modifier.weight(1f)) {
-                // Top subtitle / wins
-                val winsLabel = if (driver.wins == 1) "1 win" else "${driver.wins} wins"
-                val rawGap = driver.gapToLeader?.trim().orEmpty()
-                val subtitle = when {
-                    driver.position == 1 ->
-                        "$winsLabel · Championship Leader"
-                    rawGap.isBlank() || rawGap.equals("Leader", ignoreCase = true) ->
-                        "$winsLabel · —"
-                    rawGap.contains("to leader", ignoreCase = true) || rawGap.contains("to P1", ignoreCase = true) ->
-                        "$winsLabel · $rawGap"
-                    else -> {
-                        val signedGap = if (rawGap.startsWith("-") || rawGap.startsWith("+")) rawGap else "-$rawGap"
-                        "$winsLabel · $signedGap to P1"
-                    }
-                }
-
                 Text(
                     text = subtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Full Name
-                Text(
-                    text = driver.fullName,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Team line with vertical team color bar
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(11.dp)
-                            .clip(RoundedCornerShape(1.5.dp))
-                            .background(Color(driver.team.colorHex))
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = driver.team.displayName,
-                        color = P1TTheme.textMuted,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Normal
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Right side: Trophy (P1/P2/P3) + Position & Points
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (driver.position <= 3) {
-                        val trophyTint = when (driver.position) {
-                            1 -> P1TColors.GoldTrophy
-                            2 -> P1TColors.SilverTrophy
-                            else -> P1TColors.BronzeTrophy
-                        }
-                        Icon(
-                            imageVector = Icons.Default.EmojiEvents,
-                            contentDescription = "Podium",
-                            tint = trophyTint,
-                            modifier = Modifier
-                                .padding(end = 3.dp)
-                                .size(16.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "P${driver.position}",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = "${formatCleanNumber(driver.points)} points",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                    text = displayName,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(11.dp)
+                                .clip(RoundedCornerShape(1.5.dp))
+                                .background(teamColor)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = driver.team.displayName,
+                            color = adaptiveTeamColor,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Rank / Points pill
+                    Surface(
+                        shape = RoundedCornerShape(7.dp),
+                        color = P1TTheme.pillBg,
+                        border = BorderStroke(0.8.dp, P1TTheme.pillBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            if (driver.position <= 3) {
+                                val trophyTint = when (driver.position) {
+                                    1 -> P1TColors.GoldTrophy
+                                    2 -> P1TColors.SilverTrophy
+                                    else -> P1TColors.BronzeTrophy
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = null,
+                                    tint = trophyTint,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                            }
+                            Text(
+                                text = "P${driver.position} · ${formatCleanNumber(driver.points)} pts",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Right side: Crisp 52.dp Driver Portrait Avatar
+            DriverPortraitAvatar(
+                driverCodeOrName = driver.fullName.ifBlank { driver.code },
+                teamColor = teamColor,
+                size = 52.dp,
+                positionBadge = "P${driver.position}",
+                driverCode = driver.code.takeIf { it.isNotBlank() }
+            )
         }
     }
 }
@@ -603,15 +1089,23 @@ private fun YearSelectionDialog(
     onSelectYear: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val allYears = (2026 downTo 1950).toList()
+    val allYears = remember { (2026 downTo 1950).toList() }
+    val gridState = rememberLazyGridState()
     val accentColor = LocalF1Accent.current.primaryAccent
     val selectedTextColor = P1TTheme.onColor(accentColor)
+
+    LaunchedEffect(currentYear) {
+        val targetIndex = allYears.indexOf(currentYear)
+        if (targetIndex >= 0) {
+            gridState.scrollToItem(targetIndex)
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.75f)
@@ -644,6 +1138,7 @@ private fun YearSelectionDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Fixed(4),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -684,17 +1179,24 @@ private fun isCareerComparisonDriver(
     careerDrivers: List<DriverCareerComparison>
 ): Boolean {
     return careerDrivers.any { career ->
-        career.driverId.equals(driver.driverId, ignoreCase = true) ||
+        (driver.driverId.isNotBlank() && career.driverId.equals(driver.driverId, ignoreCase = true)) ||
             (career.firstName.equals(driver.firstName, ignoreCase = true) &&
                 career.lastName.equals(driver.lastName, ignoreCase = true))
     }
 }
 
+private fun isSameDriverRecord(a: DriverCareerComparison, b: DriverCareerComparison): Boolean {
+    if (a.driverId.isNotBlank() && b.driverId.isNotBlank()) {
+        return a.driverId.equals(b.driverId, ignoreCase = true)
+    }
+    return a.firstName.equals(b.firstName, ignoreCase = true) &&
+        a.lastName.equals(b.lastName, ignoreCase = true) &&
+        a.code.equals(b.code, ignoreCase = true)
+}
+
 /**
  * Screen 2: CompareDriversScreen
- * Exact 1:1 replica of compare-drivers-1080.webp
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompareDriversScreen(
     driver1: DriverCareerComparison,
@@ -710,23 +1212,20 @@ fun CompareDriversScreen(
     var showDriverPickerForSlot by remember { mutableStateOf<Int?>(null) }
 
     val seedCareerDrivers = remember { SeedDataProvider.getDriverComparisons() }
-    val careerDriversReference = remember(availableDrivers, seedCareerDrivers) {
-        (availableDrivers + seedCareerDrivers).distinctBy { it.driverId.lowercase() }
+    val isD1Career = remember(driver1, seedCareerDrivers) {
+        isCareerComparisonDriver(driver1, seedCareerDrivers)
     }
-    val isD1Career = remember(driver1, careerDriversReference) {
-        isCareerComparisonDriver(driver1, careerDriversReference)
-    }
-    val isD2Career = remember(driver2, careerDriversReference) {
-        isCareerComparisonDriver(driver2, careerDriversReference)
+    val isD2Career = remember(driver2, seedCareerDrivers) {
+        isCareerComparisonDriver(driver2, seedCareerDrivers)
     }
 
     val allAvailableDrivers = remember(availableDrivers) {
-        val existingCodes = availableDrivers.map { it.code.uppercase() }.toSet()
-        val existingIds = availableDrivers.map { it.driverId.lowercase() }.toSet()
+        val existingCodes = availableDrivers.map { it.code.uppercase(Locale.ROOT) }.toSet()
+        val existingIds = availableDrivers.map { it.driverId.lowercase(Locale.ROOT) }.toSet()
         val grid2026Extras = SeedDataProvider.getDriverStandings2026()
             .filter { standing ->
-                standing.code.uppercase() !in existingCodes &&
-                    standing.driverId.lowercase() !in existingIds
+                standing.code.uppercase(Locale.ROOT) !in existingCodes &&
+                    standing.driverId.lowercase(Locale.ROOT) !in existingIds
             }
             .map { standing ->
                 val raceStarts = standing.racesCount.coerceAtLeast(0)
@@ -754,78 +1253,57 @@ fun CompareDriversScreen(
         availableDrivers + grid2026Extras
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Compare Drivers",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 19.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onSwapDrivers) {
-                        Icon(
-                            imageVector = Icons.Default.SwapHoriz,
-                            contentDescription = "Swap Drivers",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
+    P1TRadialBackground(modifier = modifier) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .statusBarsPadding()
         ) {
-            // Split Two-Color Hero Banner
-            item {
-                SplitHeroBanner(
-                    driver1 = driver1,
-                    driver2 = driver2,
-                    onPickDriver1 = { showDriverPickerForSlot = 1 },
-                    onPickDriver2 = { showDriverPickerForSlot = 2 }
-                )
-            }
+            CompareDriversHeaderBar(
+                onNavigateBack = onNavigateBack,
+                onSwapDrivers = onSwapDrivers
+            )
 
-            // CAREER / SEASON STATISTICS Card
-            item {
-                CareerStatisticsCard(
-                    driver1 = driver1,
-                    driver2 = driver2,
-                    isD1Career = isD1Career,
-                    isD2Career = isD2Career,
-                    selectedYear = selectedYear
-                )
-            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Split Two-Card Hero Banner
+                item {
+                    SplitHeroBanner(
+                        driver1 = driver1,
+                        driver2 = driver2,
+                        onPickDriver1 = { showDriverPickerForSlot = 1 },
+                        onPickDriver2 = { showDriverPickerForSlot = 2 }
+                    )
+                }
 
-            // SUCCESS RATES Card
-            item {
-                SuccessRatesCard(driver1 = driver1, driver2 = driver2)
-            }
+                // CAREER / SEASON STATISTICS Card
+                item {
+                    CareerStatisticsCard(
+                        driver1 = driver1,
+                        driver2 = driver2,
+                        isD1Career = isD1Career,
+                        isD2Career = isD2Career,
+                        selectedYear = selectedYear
+                    )
+                }
 
-            item {
-                Spacer(modifier = Modifier.navigationBarsPadding().height(72.dp))
+                // SUCCESS RATES Card
+                item {
+                    SuccessRatesCard(driver1 = driver1, driver2 = driver2)
+                }
+
+                item {
+                    Spacer(
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .height(72.dp)
+                    )
+                }
             }
         }
     }
@@ -834,8 +1312,8 @@ fun CompareDriversScreen(
     showDriverPickerForSlot?.let { slot ->
         DriverPickerDialog(
             availableDrivers = allAvailableDrivers,
-            currentSelectedCode = if (slot == 1) driver1.code else driver2.code,
-            oppositeSelectedCode = if (slot == 1) driver2.code else driver1.code,
+            currentSelectedDriver = if (slot == 1) driver1 else driver2,
+            oppositeSelectedDriver = if (slot == 1) driver2 else driver1,
             onSelect = { selected ->
                 if (slot == 1) onSelectDriver1(selected) else onSelectDriver2(selected)
                 showDriverPickerForSlot = null
@@ -845,10 +1323,54 @@ fun CompareDriversScreen(
     }
 }
 
+@Composable
+private fun CompareDriversHeaderBar(
+    onNavigateBack: () -> Unit,
+    onSwapDrivers: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularHeaderButton(onClick = onNavigateBack) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Text(
+            text = "Compare Drivers",
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.Black,
+            fontSize = 19.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+        )
+
+        CircularHeaderButton(onClick = onSwapDrivers) {
+            Icon(
+                imageVector = Icons.Default.SwapHoriz,
+                contentDescription = "Swap",
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
 /**
- * Split Two-Color Hero Banner
- * Left half in Driver 1's team color, Right half in Driver 2's team color.
- * Centered dark circle with "VS".
+ * Split Two-Card Hero Banner:
+ * Two generous side-by-side team-colored vertical gradient cards with a centered floating "VS" badge.
  */
 @Composable
 private fun SplitHeroBanner(
@@ -857,175 +1379,173 @@ private fun SplitHeroBanner(
     onPickDriver1: () -> Unit,
     onPickDriver2: () -> Unit
 ) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
     val isDark = P1TTheme.isDark
 
-    val d1TeamColor = Color(driver1.team.colorHex)
-    val d1BgOuter = d1TeamColor.copy(alpha = if (isDark) 0.42f else 0.85f).compositeOver(surfaceColor)
-    val d1BgInner = d1TeamColor.copy(alpha = if (isDark) 0.26f else 0.68f).compositeOver(surfaceColor)
-    val d1TextColor = P1TTheme.onColor(d1BgOuter)
-
-    val d2TeamColor = Color(driver2.team.colorHex)
-    val d2BgOuter = d2TeamColor.copy(alpha = if (isDark) 0.42f else 0.85f).compositeOver(surfaceColor)
-    val d2BgInner = d2TeamColor.copy(alpha = if (isDark) 0.26f else 0.68f).compositeOver(surfaceColor)
-    val d2TextColor = P1TTheme.onColor(d2BgOuter)
-
-    val d1FullName = "${driver1.firstName} ${driver1.lastName}".trim().ifBlank { driver1.code }
-    val d2FullName = "${driver2.firstName} ${driver2.lastName}".trim().ifBlank { driver2.code }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 130.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(surfaceColor)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-    ) {
+    Box(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Left half: Driver 1
-            Box(
+            DriverCompareHeroCard(
+                driver = driver1,
+                onClick = onPickDriver1,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .background(Brush.horizontalGradient(listOf(d1BgOuter, d1BgInner)))
-                    .clickable(onClick = onPickDriver1)
-                    .padding(start = 10.dp, end = 22.dp, top = 12.dp, bottom = 12.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    DriverPortraitAvatar(
-                        driverCodeOrName = d1FullName,
-                        teamColor = d1TeamColor,
-                        size = 46.dp,
-                        useFullCutout = true
-                    )
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = driver1.code,
-                            color = d1TextColor,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${driver1.firstName} ${driver1.lastName.uppercase()}",
-                            color = d1TextColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = driver1.nationality,
-                            color = d1TextColor.copy(alpha = 0.85f),
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Tap to change ▾",
-                            color = d1TextColor.copy(alpha = 0.82f),
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            // Right half: Driver 2
-            Box(
+            )
+            DriverCompareHeroCard(
+                driver = driver2,
+                onClick = onPickDriver2,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .background(Brush.horizontalGradient(listOf(d2BgInner, d2BgOuter)))
-                    .clickable(onClick = onPickDriver2)
-                    .padding(start = 22.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = driver2.code,
-                            color = d2TextColor,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${driver2.firstName} ${driver2.lastName.uppercase()}",
-                            color = d2TextColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.End
-                        )
-                        Text(
-                            text = driver2.nationality,
-                            color = d2TextColor.copy(alpha = 0.85f),
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "▾ Tap to change",
-                            color = d2TextColor.copy(alpha = 0.82f),
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    DriverPortraitAvatar(
-                        driverCodeOrName = d2FullName,
-                        teamColor = d2TeamColor,
-                        size = 46.dp,
-                        useFullCutout = true
-                    )
-                }
-            }
+            )
         }
 
-        // Center VS circle badge
+        // Centered floating VS badge
+        val vsBg = if (isDark) Color(0xFF14141B) else MaterialTheme.colorScheme.surface
+        val vsBorder = if (isDark) Color.White.copy(alpha = 0.22f) else MaterialTheme.colorScheme.outline
         Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(38.dp)
                 .align(Alignment.Center)
+                .shadow(elevation = 8.dp, shape = CircleShape)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                .background(vsBg)
+                .border(1.5.dp, vsBorder, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "VS",
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriverCompareHeroCard(
+    driver: DriverCareerComparison,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isDark = P1TTheme.isDark
+    val teamColor = Color(driver.team.colorHex)
+    val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+
+    val cardBrush = remember(teamColor, isDark) {
+        if (isDark) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    teamColor.copy(alpha = 0.62f).compositeOver(Color(0xFF15151D)),
+                    teamColor.copy(alpha = 0.22f).compositeOver(Color(0xFF0E0E14)),
+                    Color(0xFF09090D)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    teamColor.copy(alpha = 0.26f).compositeOver(Color.White),
+                    teamColor.copy(alpha = 0.08f).compositeOver(Color.White),
+                    Color(0xFFF6F6FA)
+                )
+            )
+        }
+    }
+
+    val borderColor = if (isDark) {
+        teamColor.copy(alpha = 0.48f)
+    } else {
+        teamColor.copy(alpha = 0.36f)
+    }
+
+    val primaryTextColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = if (isDark) Color.White.copy(alpha = 0.88f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val hintTextColor = if (isDark) Color.White.copy(alpha = 0.68f) else P1TTheme.textMuted
+    val pillBg = if (isDark) Color.White.copy(alpha = 0.10f) else teamColor.copy(alpha = 0.12f)
+    val pillBorder = if (isDark) Color.White.copy(alpha = 0.18f) else adaptiveTeamColor.copy(alpha = 0.32f)
+
+    val fullName = "${driver.firstName} ${driver.lastName}".trim().ifBlank { driver.code }
+    val displayLastName = driver.lastName.trim().ifBlank { driver.firstName.trim().ifBlank { driver.code } }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(cardBrush)
+            .border(1.dp, borderColor, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            DriverPortraitAvatar(
+                driverCodeOrName = fullName,
+                teamColor = teamColor,
+                size = 74.dp,
+                useFullCutout = true,
+                driverCode = driver.code.takeIf { it.isNotBlank() }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = driver.code.ifBlank { "---" },
+                color = primaryTextColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = displayLastName.uppercase(Locale.ROOT),
+                color = secondaryTextColor,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = pillBg,
+                border = BorderStroke(0.8.dp, pillBorder)
+            ) {
+                Text(
+                    text = driver.team.displayName,
+                    color = if (isDark) Color.White else adaptiveTeamColor,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Tap to change ▾",
+                color = hintTextColor,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1054,9 +1574,9 @@ private fun CareerStatisticsCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1157,7 +1677,6 @@ private fun CareerStatisticsCard(
             )
 
             if (isD1Career || isD2Career) {
-                // For DNFs: lower value is better!
                 ComparisonStatRow(
                     label = "DNFs",
                     val1 = if (isD1Career) driver1.dnfs.toDouble() else 0.0,
@@ -1182,9 +1701,9 @@ private fun SuccessRatesCard(
     driver2: DriverCareerComparison
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1253,16 +1772,31 @@ private fun ComparisonStatRow(
     val clean2 = if (val2.isNaN() || val2.isInfinite()) 0.0 else val2.coerceAtLeast(0.0)
     val hasMissing = text1 == "—" || text2 == "—"
 
-    // Always render actual relative magnitude so 0 DNFs renders 0 width rather than a misleading 100% bar
     val (ratio1, ratio2) = when {
-        clean1 == 0.0 && clean2 == 0.0 -> 0f to 0f
+        hasMissing -> {
+            val r1 = if (text1 == "—" || clean1 == 0.0) 0f else 0.5f
+            val r2 = if (text2 == "—" || clean2 == 0.0) 0f else 0.5f
+            r1 to r2
+        }
+        clean1 == 0.0 && clean2 == 0.0 -> if (lowerIsBetter) 0.5f to 0.5f else 0f to 0f
         clean1 == clean2 -> 0.5f to 0.5f
-        clean1 == 0.0 -> 0f to 1f
-        clean2 == 0.0 -> 1f to 0f
-        else -> {
-            val total = clean1 + clean2
-            (clean1 / total).toFloat().coerceIn(0.08f, 0.92f) to
-                (clean2 / total).toFloat().coerceIn(0.08f, 0.92f)
+        lowerIsBetter -> when {
+            clean1 == 0.0 -> 1f to 0f
+            clean2 == 0.0 -> 0f to 1f
+            else -> {
+                val total = clean1 + clean2
+                (clean2 / total).toFloat().coerceIn(0.08f, 0.92f) to
+                    (clean1 / total).toFloat().coerceIn(0.08f, 0.92f)
+            }
+        }
+        else -> when {
+            clean1 == 0.0 -> 0f to 1f
+            clean2 == 0.0 -> 1f to 0f
+            else -> {
+                val total = clean1 + clean2
+                (clean1 / total).toFloat().coerceIn(0.08f, 0.92f) to
+                    (clean2 / total).toFloat().coerceIn(0.08f, 0.92f)
+            }
         }
     }
 
@@ -1271,7 +1805,7 @@ private fun ComparisonStatRow(
     val adaptiveColor1 = P1TTheme.adaptiveTeamText(color1)
     val adaptiveColor2 = P1TTheme.adaptiveTeamText(color2)
 
-    Column(modifier = Modifier.padding(vertical = 5.dp)) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
         // Values and Label Row
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1284,12 +1818,13 @@ private fun ComparisonStatRow(
                 fontSize = 13.5.sp,
                 fontWeight = if (is1Better) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Start,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.weight(1f)
             )
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
                 Text(
@@ -1297,21 +1832,18 @@ private fun ComparisonStatRow(
                     color = P1TTheme.textMuted,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
                 )
                 if (lowerIsBetter) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = P1TTheme.pillBg
-                    ) {
-                        Text(
-                            text = "Lower better",
-                            color = P1TTheme.textMuted,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                        )
-                    }
+                    Text(
+                        text = "Lower is better",
+                        color = P1TTheme.textMuted.copy(alpha = 0.78f),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Normal,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
                 }
             }
 
@@ -1321,11 +1853,13 @@ private fun ComparisonStatRow(
                 fontSize = 13.5.sp,
                 fontWeight = if (is2Better) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.End,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.weight(1f)
             )
         }
 
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // Dual center facing bars
         Row(
@@ -1380,24 +1914,40 @@ private fun ComparisonStatRow(
 }
 
 /**
- * Driver picker modal list
+ * Driver picker modal list with search, portrait avatars, and driverId-safe opposite exclusion.
  */
 @Composable
 private fun DriverPickerDialog(
     availableDrivers: List<DriverCareerComparison>,
-    currentSelectedCode: String,
-    oppositeSelectedCode: String? = null,
+    currentSelectedDriver: DriverCareerComparison,
+    oppositeSelectedDriver: DriverCareerComparison? = null,
     onSelect: (DriverCareerComparison) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    val adaptiveAccent = P1TTheme.adaptiveTeamText(LocalF1Accent.current.primaryAccent)
+
+    val filteredDrivers = remember(availableDrivers, searchQuery) {
+        if (searchQuery.isBlank()) {
+            availableDrivers
+        } else {
+            val q = searchQuery.trim().lowercase(Locale.ROOT)
+            availableDrivers.filter { drv ->
+                "${drv.firstName} ${drv.lastName}".lowercase(Locale.ROOT).contains(q) ||
+                    drv.code.lowercase(Locale.ROOT).contains(q) ||
+                    drv.team.displayName.lowercase(Locale.ROOT).contains(q)
+            }
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.7f)
+                .fillMaxHeight(0.75f)
         ) {
             Column(
                 modifier = Modifier
@@ -1424,67 +1974,151 @@ private fun DriverPickerDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(
+                            text = "Search driver or team",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.5.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear search",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = P1TTheme.surfaceInnerCard,
+                        unfocusedContainerColor = P1TTheme.surfaceInnerCard,
+                        focusedBorderColor = adaptiveAccent,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Spacer(modifier = Modifier.height(10.dp))
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    itemsIndexed(
-                        items = availableDrivers,
-                        key = { index, it -> "${it.driverId}_${it.code}_$index" }
-                    ) { _, drv ->
-                        val isCurrent = drv.code == currentSelectedCode
-                        val isOpposite = drv.code == oppositeSelectedCode
-                        val isEnabled = !isOpposite
+                if (filteredDrivers.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No matching drivers",
+                            color = P1TTheme.textMuted,
+                            fontSize = 13.5.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(
+                            items = filteredDrivers,
+                            key = { index, it -> "${it.driverId}_${it.code}_$index" }
+                        ) { _, drv ->
+                            val isCurrent = isSameDriverRecord(drv, currentSelectedDriver)
+                            val isOpposite = oppositeSelectedDriver != null &&
+                                isSameDriverRecord(drv, oppositeSelectedDriver)
+                            val isEnabled = !isOpposite
+                            val teamColor = Color(drv.team.colorHex)
+                            val adaptiveTeamColor = P1TTheme.adaptiveTeamText(teamColor)
+                            val fullName = "${drv.firstName} ${drv.lastName}".trim().ifBlank { drv.code }
 
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = when {
-                                isCurrent -> P1TTheme.pillSelectedBg
-                                isOpposite -> P1TTheme.surfaceInnerCard
-                                else -> MaterialTheme.colorScheme.surfaceVariant
-                            },
-                            border = when {
-                                isCurrent -> androidx.compose.foundation.BorderStroke(1.dp, P1TTheme.adaptiveTeamText(Color(drv.team.colorHex)))
-                                else -> null
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .defaultMinSize(minHeight = 48.dp)
-                                .clickable(enabled = isEnabled) { onSelect(drv) }
-                        ) {
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = when {
+                                    isCurrent -> P1TTheme.pillSelectedBg
+                                    isOpposite -> P1TTheme.surfaceInnerCard
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                border = when {
+                                    isCurrent -> BorderStroke(1.dp, adaptiveTeamColor)
+                                    else -> null
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(enabled = isEnabled) { onSelect(drv) }
                             ) {
-                                Box(
+                                Row(
                                     modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isOpposite) Color(drv.team.colorHex).copy(alpha = 0.35f) else Color(drv.team.colorHex))
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = drv.code,
-                                    color = if (isOpposite) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (isOpposite) "${drv.firstName} ${drv.lastName} (Opposite slot)" else "${drv.firstName} ${drv.lastName}",
-                                    color = if (isOpposite) P1TTheme.textMuted else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 13.sp,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = drv.team.shortCode,
-                                    color = if (isOpposite) P1TTheme.textMuted.copy(alpha = 0.5f) else P1TTheme.textMuted,
-                                    fontSize = 11.sp
-                                )
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    DriverPortraitAvatar(
+                                        driverCodeOrName = fullName,
+                                        teamColor = teamColor,
+                                        size = 36.dp,
+                                        driverCode = drv.code.takeIf { it.isNotBlank() },
+                                        modifier = Modifier.alpha(if (isOpposite) 0.45f else 1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = drv.code,
+                                        color = if (isOpposite) {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isOpposite) "$fullName (Opposite slot)" else fullName,
+                                        color = if (isOpposite) {
+                                            P1TTheme.textMuted
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = drv.team.shortCode,
+                                        color = if (isOpposite) {
+                                            P1TTheme.textMuted.copy(alpha = 0.5f)
+                                        } else {
+                                            adaptiveTeamColor
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }

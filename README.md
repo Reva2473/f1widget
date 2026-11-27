@@ -2,6 +2,11 @@
 
 A native Android application and Jetpack Glance home-screen widget suite built with **Kotlin**, **Jetpack Compose (Material 3)**, and **Jetpack Glance**.
 
+## Download APK
+
+- **Latest Installable Android APK (`v2.1.0`)**: [Download `ApexGrid-v2.1.0.apk`](releases/ApexGrid-v2.1.0.apk) (or via [Direct Download](https://github.com/Reva2473/f1widget/raw/main/releases/ApexGrid-v2.1.0.apk))
+- Requires Android 8.0 (API 26) or newer. Enable "Install unknown apps" on your device to sideload.
+
 ## Key Features
 
 ### 1. Home ("Race Week at a Glance")
